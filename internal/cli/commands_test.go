@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -904,4 +906,121 @@ func TestSplitRunArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAutoOnce(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*harness)
+		wantCode int
+		wantSaid string
+	}{
+		{
+			name: "nothing to do",
+			setup: func(h *harness) {
+				h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
+				h.login("1", "one@example.com")
+				h.measuring(map[string]*usage.Result{"1": measured(50), "2": measured(10)})
+			},
+			wantCode: 2,
+			wantSaid: "below-threshold",
+		},
+		{
+			name: "a switch",
+			setup: func(h *harness) {
+				h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
+				h.login("1", "one@example.com")
+				h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
+			},
+			wantCode: 0,
+			wantSaid: "account 2",
+		},
+		{
+			name: "nowhere to go",
+			setup: func(h *harness) {
+				h.seed(map[string]string{"1": "one@example.com"})
+				h.login("1", "one@example.com")
+				h.measuring(map[string]*usage.Result{"1": measured(95)})
+			},
+			wantCode: 3,
+			wantSaid: "no-candidates",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			tt.setup(h)
+
+			if code := h.run("auto", "--once"); code != tt.wantCode {
+				t.Fatalf("exit = %d, want %d: %s%s", code, tt.wantCode, h.stdout(), h.stderr())
+			}
+			wantContains(t, h.stdout(), tt.wantSaid)
+		})
+	}
+}
+
+// The event stream is one JSON object per line, so a consumer can tail it.
+func TestAutoJSONIsOneEventPerLine(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
+	h.login("1", "one@example.com")
+	h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
+
+	if code := h.run("auto", "--once", "--json"); code != 0 {
+		t.Fatalf("exit = %d: %s%s", code, h.stdout(), h.stderr())
+	}
+
+	var kinds []string
+	for line := range strings.SplitSeq(strings.TrimSpace(h.stdout()), "\n") {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("a line is not one JSON object: %v\n%s", err, line)
+		}
+		if event["schemaVersion"] != float64(jsonout.SchemaVersion) {
+			t.Errorf("schemaVersion = %v", event["schemaVersion"])
+		}
+		if event["ts"] == "" {
+			t.Errorf("an event carries no timestamp: %v", event)
+		}
+		kinds = append(kinds, event["event"].(string))
+	}
+	if !slices.Contains(kinds, "poll") || !slices.Contains(kinds, "switch") {
+		t.Errorf("events = %v, want a poll and a switch", kinds)
+	}
+}
+
+// A dry run reports the decision and changes nothing.
+func TestAutoDryRun(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
+	h.login("1", "one@example.com")
+	h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
+
+	if code := h.run("auto", "--once", "--dry-run"); code != 0 {
+		t.Fatalf("exit = %d: %s%s", code, h.stdout(), h.stderr())
+	}
+	wantContains(t, h.stdout(), "would switch")
+	if live := h.switcher.Creds.ReadActive().Value; !strings.Contains(live, "tok-1") {
+		t.Errorf("a dry run moved the live login: %q", live)
+	}
+}
+
+// A flag overrides the stored policy for one run only.
+func TestAutoThresholdFlagOverridesTheSetting(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
+	h.login("1", "one@example.com")
+	h.measuring(map[string]*usage.Result{"1": measured(60), "2": measured(10)})
+
+	// At the default threshold, 60% is fine.
+	if code := h.run("auto", "--once"); code != 2 {
+		t.Fatalf("exit = %d, want no action: %s", code, h.stdout())
+	}
+
+	// Lowered, it is not.
+	if code := h.run("auto", "--once", "--threshold", "50"); code != 0 {
+		t.Fatalf("exit = %d, want a switch: %s%s", code, h.stdout(), h.stderr())
+	}
+	wantContains(t, h.stdout(), "account 2")
 }

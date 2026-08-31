@@ -76,10 +76,11 @@ func newHarness(t *testing.T) *harness {
 
 	h := &harness{t: t, now: testNow}
 	h.switcher = &swap.Switcher{
-		Paths:    resolver,
-		Creds:    credstore.New(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
-		Usage:    usagestore.New(resolver.CacheDir()),
-		Settings: settings.Defaults(),
+		FetchStagger: time.Millisecond,
+		Paths:        resolver,
+		Creds:        credstore.New(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
+		Usage:        usagestore.New(resolver.CacheDir()),
+		Settings:     settings.Defaults(),
 	}
 	h.switcher.SetClock(func() time.Time { return h.now })
 

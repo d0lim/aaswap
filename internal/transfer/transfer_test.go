@@ -55,10 +55,11 @@ func newFixture(t *testing.T) *fixture {
 
 	f := &fixture{t: t, home: home, now: testNow}
 	f.Switcher = &swap.Switcher{
-		Paths:    resolver,
-		Creds:    credstore.New(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
-		Usage:    usagestore.New(resolver.CacheDir()),
-		Settings: settings.Defaults(),
+		FetchStagger: time.Millisecond,
+		Paths:        resolver,
+		Creds:        credstore.New(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
+		Usage:        usagestore.New(resolver.CacheDir()),
+		Settings:     settings.Defaults(),
 	}
 	f.SetClock(func() time.Time { return f.now })
 	return f

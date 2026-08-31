@@ -41,13 +41,10 @@ const (
 	SentinelForeignCredential = "foreign credential"
 )
 
-// fetchStagger spaces request starts so N accounts never hit the endpoint in
-// the same instant. The budget is a rolling window, and a simultaneous burst is
-// the shape that saturates it.
-//
-// A var so tests can collapse it: the staggering is the behavior, not the wall
-// clock it costs.
-var fetchStagger = 250 * time.Millisecond
+// DefaultFetchStagger spaces request starts so N accounts never hit the
+// endpoint in the same instant. The budget is a rolling window, and a
+// simultaneous burst is the shape that saturates it.
+const DefaultFetchStagger = 250 * time.Millisecond
 
 // AccountView is what a collect pass needs about one slot: its record, its
 // stored credential, and whether it is the live one.
@@ -301,14 +298,18 @@ func (s *Switcher) entryTokenDead(entry usagestore.Entry, view AccountView) bool
 // runFetches measures the given accounts in parallel, staggering request starts.
 func (s *Switcher) runFetches(ctx context.Context, views []AccountView) map[string]usagestore.FetchRecord {
 	records := make(map[string]usagestore.FetchRecord, len(views))
+	stagger := s.FetchStagger
+	if stagger == 0 {
+		stagger = DefaultFetchStagger
+	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
 	for i, view := range views {
 		wg.Go(func() {
-			if i > 0 {
+			if i > 0 && stagger > 0 {
 				select {
-				case <-time.After(time.Duration(i) * fetchStagger):
+				case <-time.After(time.Duration(i) * stagger):
 				case <-ctx.Done():
 					return
 				}
