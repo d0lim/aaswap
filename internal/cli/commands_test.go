@@ -11,6 +11,7 @@ import (
 
 	"github.com/realiti4/claude-swap/internal/claudeapi"
 	"github.com/realiti4/claude-swap/internal/jsonout"
+	"github.com/realiti4/claude-swap/internal/swap"
 	"github.com/realiti4/claude-swap/internal/usage"
 	"github.com/spf13/cobra"
 )
@@ -1023,4 +1024,157 @@ func TestAutoThresholdFlagOverridesTheSetting(t *testing.T) {
 		t.Fatalf("exit = %d, want a switch: %s%s", code, h.stdout(), h.stderr())
 	}
 	wantContains(t, h.stdout(), "account 2")
+}
+
+func TestAddToken(t *testing.T) {
+	tests := []struct {
+		name      string
+		token     string
+		flags     []string
+		wantKind  swap.Kind
+		wantEmail string
+	}{
+		{
+			// A synthesized label, because these tokens carry no address and
+			// making the user invent one is noise.
+			name: "a setup token", token: "sk-ant-oat01-abcdef",
+			wantKind: swap.KindOAuth, wantEmail: "setup-token-1@token.local",
+		},
+		{
+			name: "a managed API key", token: "sk-ant-api03-abcdef",
+			wantKind: swap.KindAPIKey, wantEmail: "api-key-1@token.local",
+		},
+		{
+			name: "with an address", token: "sk-ant-oat01-abcdef",
+			flags:    []string{"--email", "me@example.com"},
+			wantKind: swap.KindOAuth, wantEmail: "me@example.com",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			args := append([]string{"add-token", tt.token}, tt.flags...)
+			if code := h.run(args...); code != ExitOK {
+				t.Fatalf("exit = %d: %s", code, h.stderr())
+			}
+			wantContains(t, h.stdout(), "Added", tt.wantEmail)
+
+			roster, err := h.switcher.RosterOrEmpty()
+			if err != nil {
+				t.Fatal(err)
+			}
+			account := roster.Accounts["1"]
+			if account == nil || account.Email != tt.wantEmail {
+				t.Fatalf("roster = %+v", roster.Accounts)
+			}
+			if account.AuthKind() != tt.wantKind {
+				t.Errorf("kind = %q, want %q", account.AuthKind(), tt.wantKind)
+			}
+
+			stored, _ := h.switcher.Creds.ReadAccount("1", tt.wantEmail)
+			if tt.wantKind == swap.KindAPIKey {
+				// Stored raw: that is what Claude Code's API-key axis reads.
+				if stored != tt.token {
+					t.Errorf("the stored key is %q", stored)
+				}
+			} else if !strings.Contains(stored, tt.token) {
+				t.Errorf("the stored credential does not carry the token: %q", stored)
+			}
+		})
+	}
+}
+
+// A token on the command line lands in the shell history, so piping it is worth
+// having.
+func TestAddTokenFromStdin(t *testing.T) {
+	h := newHarness(t)
+	h.app.In = strings.NewReader("sk-ant-oat01-piped\n")
+
+	if code := h.run("add-token", "-"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	stored, _ := h.switcher.Creds.ReadAccount("1", "setup-token-1@token.local")
+	if !strings.Contains(stored, "sk-ant-oat01-piped") {
+		t.Errorf("the stored credential is %q", stored)
+	}
+}
+
+// Identity is the address alone here, so two kinds sharing one could not be
+// told apart at switch time.
+func TestAddTokenRefusesACrossKindCollision(t *testing.T) {
+	h := newHarness(t)
+	if code := h.run("add-token", "sk-ant-oat01-abc", "--email", "me@example.com"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("add-token", "sk-ant-api03-abc", "--email", "me@example.com"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal", code)
+	}
+	wantContains(t, h.stderr(), "already exists as an OAuth account", "distinct --email")
+}
+
+// A new token for an account already here refreshes it in place rather than
+// making a second slot.
+func TestAddTokenRefreshesInPlace(t *testing.T) {
+	h := newHarness(t)
+	if code := h.run("add-token", "sk-ant-oat01-first", "--email", "me@example.com"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("add-token", "sk-ant-oat01-second", "--email", "me@example.com"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "Updated the token")
+
+	roster, err := h.switcher.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Accounts) != 1 {
+		t.Errorf("the account was duplicated: %+v", roster.Accounts)
+	}
+	stored, _ := h.switcher.Creds.ReadAccount("1", "me@example.com")
+	if !strings.Contains(stored, "second") {
+		t.Errorf("the stored credential is %q", stored)
+	}
+}
+
+func TestAddTokenRejections(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{"an empty token", []string{"add-token", "   "}, "cannot be empty"},
+		{"a bad address", []string{"add-token", "tok", "--email", "not an email"}, "not a valid email"},
+		{"a slot of zero", []string{"add-token", "tok", "--slot", "0"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			code := h.run(tt.args...)
+			if tt.wantErr == "" {
+				// A zero slot is the same as not naming one.
+				if code != ExitOK {
+					t.Fatalf("exit = %d: %s", code, h.stderr())
+				}
+				return
+			}
+			if code != ExitError {
+				t.Fatalf("exit = %d, want a rejection", code)
+			}
+			wantContains(t, h.stderr(), tt.wantErr)
+		})
+	}
+}
+
+// A token account has no quota to fetch, so it says so rather than showing a
+// blank.
+func TestATokenAccountReportsNoQuota(t *testing.T) {
+	h := newHarness(t)
+	if code := h.run("add-token", "sk-ant-api03-abc"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("list"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "API key", "no quota")
 }

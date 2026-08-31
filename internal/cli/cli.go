@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/realiti4/claude-swap/internal/apperr"
 	"github.com/realiti4/claude-swap/internal/jsonout"
@@ -108,7 +109,9 @@ func (a *App) Execute(ctx context.Context, args []string) int {
 	}
 
 	root := a.rootCommand()
-	root.SetArgs(translateLegacyFlags(args))
+	args = translateLegacyFlags(args)
+	a.configureLogging(hasFlag(args, "--debug"), hasFlag(args, "--json"))
+	root.SetArgs(args)
 	root.SetOut(a.Out)
 	root.SetErr(a.Err)
 
@@ -216,6 +219,23 @@ func (a *App) confirm(prompt string) bool {
 		return false
 	}
 	return answer == "y" || answer == "Y" || answer == "yes"
+}
+
+// hasFlag reports whether a flag appears in the argument list.
+//
+// Read before cobra parses, because logging has to be configured before the
+// first command runs — and a command that logs during setup would otherwise
+// write through whatever the previous invocation left behind.
+func hasFlag(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == name || strings.HasPrefix(arg, name+"=") {
+			return true
+		}
+		if arg == "--" {
+			return false
+		}
+	}
+	return false
 }
 
 // silenceUsage stops cobra printing its usage block for a runtime failure. A

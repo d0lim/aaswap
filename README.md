@@ -1,38 +1,52 @@
 # claude-swap
 
-Multi-account switcher for Claude Code. Easily switch between multiple Claude accounts without logging out, or let it switch for you before you hit a rate limit. Track usage for every account in a live dashboard, and run accounts in parallel. Works with both the Claude Code CLI and the VS Code extension.
+Multi-account switcher for Claude Code. Switch between Claude accounts without
+logging out, or let it switch for you before you hit a rate limit. See every
+account's remaining quota at a glance, and run several accounts in parallel.
+Works with both the Claude Code CLI and the VS Code extension.
+
+A single static binary — no runtime to install, on macOS, Linux or Windows.
 
 ## Installation
 
-### Using uv (recommended)
+cswap is a single static binary. It needs no runtime, no interpreter, and no
+package index.
+
+### Homebrew
 
 ```bash
-uv tool install claude-swap
+brew install realiti4/tap/claude-swap
 ```
 
-### Using pipx
+### Go
 
 ```bash
-pipx install claude-swap
+go install github.com/realiti4/claude-swap/cmd/cswap@latest
 ```
+
+### Download a binary
+
+Grab the build for your platform from the [releases page](https://github.com/realiti4/claude-swap/releases),
+unpack it, and put `cswap` somewhere on your `PATH`.
 
 ### From source
 
 ```bash
 git clone https://github.com/realiti4/claude-swap.git
 cd claude-swap
-uv sync
-uv run cswap help
+make build          # produces ./cswap
 ```
 
 ### Updating
 
 ```bash
-cswap upgrade          # uv/pipx installs on macOS/Linux: auto-detects and upgrades
-# or run your installer directly:
-uv tool upgrade claude-swap
-pipx upgrade claude-swap
+cswap upgrade       # reports the latest release and the command for your install
 ```
+
+`cswap upgrade` does not replace the binary in place. A binary installed by a
+package manager belongs to that package manager, and swapping it out from
+underneath would leave its records wrong — so cswap tells you the command
+instead of guessing.
 
 ## Usage
 
@@ -70,7 +84,7 @@ cswap switch user@example.com
 cswap switch dev                # or by alias, once set with `cswap alias 2 dev`
 ```
 
-Not sure which one? `cswap list` is the dashboard — every account's 5-hour and 7-day usage and reset times at a glance:
+Not sure which one? `cswap list` shows every account's 5-hour and 7-day usage and reset times at a glance:
 
 ```bash
 cswap list
@@ -102,7 +116,7 @@ cswap auto --strategy consume-first   # burn the soonest-resetting account first
 - Usage polling is adaptive — a couple of accounts per check, busy alternates watched more closely, and exhausted ones checked about every ten minutes (or slower after 429s) — so API traffic stays flat no matter how many accounts you manage.
 - It fails safe: if a usage check errors it keeps trusting the last-known numbers while retries back off, and an expired token on an idle machine makes it hold rather than fail over (Claude Code refreshes the token on your next message).
 - An account whose refresh token has died is quarantined and reported until you either log in with it and re-run `cswap add --slot N`, or replace its stored credentials from a known-good export — a plain `cswap import backup.cswap` replaces dead-token slots on its own (`--force` is still required to replace other existing accounts; note a stale export can carry an already-superseded token). API-key accounts are never rotated onto unless you pass `--include-api-key-accounts`.
-- To hold an account out of rotation yourself — a work account you don't want touched, one you're resting — run `cswap disable <num|email>`; `cswap enable <num|email>` puts it back. Disabled accounts are skipped by auto-switch, bare `cswap switch`, and the `best` / `next-available` strategies, but stay fully managed and remain a valid explicit `cswap switch <num|email>` target. They show a `(disabled)` marker in `cswap list`, in the [TUI](#interactive-dashboard-tui), and in the [menu bar](#menu-bar-macos) — both of which also let you toggle the state in place (TUI: menu → *Disable / enable account…*; menu bar: *Disable / enable account*).
+- To hold an account out of rotation yourself — a work account you don't want touched, one you're resting — run `cswap disable <num|email>`; `cswap enable <num|email>` puts it back. Disabled accounts are skipped by auto-switch, bare `cswap switch`, and the `best` / `next-available` strategies, but stay fully managed and remain a valid explicit `cswap switch <num|email>` target. They show an `(out of rotation)` marker in `cswap list`.
 - By default only the account-wide 5h/7d windows drive switching. If you work on one model and hit its **weekly per-model limit** first (e.g. Fable), add `--model Fable` (or `cswap config set autoswitch.model Fable`) to fold that model's window into the decision, so it switches off an account whose model quota is spent even while its 5h/7d windows still have room.
   - **Model names** are Anthropic's own per-model `display_name`s, matched case-insensitively. The exact strings for your accounts are the per-model rows in `cswap list` (e.g. a line reading `Fable: 100%`).
 
@@ -157,12 +171,6 @@ Subfolders inherit the nearest mapped ancestor. In an unmapped directory, `cswap
 
 </details>
 
-### Interactive dashboard (TUI)
-
-Run `cswap` on its own (or `cswap tui`) for the full-screen dashboard: live usage for every account, switching, and the auto-switcher, all keyboard-driven. `cswap watch` opens it straight to the live monitor. Works on macOS, Linux, and Windows.
-
-<img src="assets/tui-watch.png" width="760" alt="cswap watch — live 5h/7d usage bars for every account, with reset times and the active account marked">
-
 ### Refresh expired tokens
 
 If an account's token expires, log back into Claude Code with that account and re-run:
@@ -193,8 +201,6 @@ cswap alias                     # List all aliases
 cswap move 2 1                  # Assign an account to a slot (relocates to an empty slot, swaps if taken)
 cswap unclaimed                 # List stashed credential entries (slot + why they were stashed)
 cswap unclaimed --purge ID      # Drop one (deletes its bytes; recover with /login + `cswap add`)
-cswap tui                       # Interactive dashboard (also: bare `cswap`)
-cswap watch                     # Dashboard, opened on the live watch page
 cswap upgrade                   # Upgrade claude-swap to the latest version
 cswap purge                     # Remove all claude-swap data
 ```
@@ -221,29 +227,26 @@ The original flag spellings (`cswap --switch`, `cswap --list`, ...) keep working
 
 | Platform | Credentials | Config backups |
 |----------|-------------|----------------|
-| Windows | File-based (inside the backup directory, under `credentials/`) | `~/.claude-swap-backup/` |
 | macOS | macOS Keychain | `~/.claude-swap-backup/` |
 | Linux / WSL | File-based (inside the backup directory, under `credentials/`) | `${XDG_DATA_HOME:-~/.local/share}/claude-swap/` |
+| Windows | File-based (inside the backup directory, under `credentials/`) | `~/.claude-swap-backup/` |
 
 Session-mode profiles (`cswap run`) live under the backup directory in `sessions/`. Tool preferences (`settings.json`) and auto-switch state (`autoswitch_state.json` — cooldown and quarantined accounts; delete it to reset) live in the backup directory root.
 
 On Linux/WSL, set `XDG_DATA_HOME` to override the default location.
 
-## Menu bar (macOS)
-
-<details>
-<summary>Optional macOS menu bar app — usage at a glance, click to switch</summary>
-
-Needs the `menubar` extra (macOS only):
+## Building
 
 ```bash
-uv tool install 'claude-swap[menubar]'   # or: pipx install 'claude-swap[menubar]'
-cswap menubar
+mise install        # provisions the pinned Go and golangci-lint
+make build          # ./cswap
+make check          # vet, modern-Go check, lint, tests
+make race           # tests under the race detector
 ```
 
-Shows every account's 5h / 7d / spend usage and switches with a click (specific / rotate / best / next-available), plus the TUI's add / disable-enable / remove / refresh actions. Enable *Settings → Auto-switch accounts* to run the same engine as [`cswap auto`](#automatic-switching) in the background; it shares the `autoswitch.*` settings, so the menu bar and CLI stay in sync. Off until you turn it on.
-
-</details>
+The `make check` target is what CI runs. `go fix -diff ./...` is part of it:
+Go 1.27 carries the modernizers inside `go fix`, so the tree cannot drift into
+pre-1.27 idioms without failing the build.
 
 ## Advanced
 
@@ -319,7 +322,7 @@ Weekly windows (`sevenDay` and per-model `scoped` entries — never `fiveHour`) 
 
 </details>
 
-`cswap auto --json` emits an event *stream* instead — one JSON object per line (`{"schemaVersion":1,"event":"switch","ts":…, …}` with kinds like `poll`, `switch`, `no-switch`, `account-quarantined`, `all-exhausted`, `error`). The contract is additive: new kinds and fields may appear, so scripts should ignore unknown ones.
+`cswap auto --json` emits an event *stream* instead — one JSON object per line (`{"schemaVersion":1,"event":"switch","ts":…, …}` with kinds like `poll`, `switch`, `no-switch`, `quarantine`, `unquarantine`, `all-exhausted`, `sleep`, `error`). The contract is additive: new kinds and fields may appear, so scripts should ignore unknown ones.
 
 ### Add an account from a raw token or API key
 
@@ -353,18 +356,22 @@ Remove all data:
 cswap purge
 ```
 
-Then uninstall the tool:
+Then remove the binary:
 
 ```bash
-uv tool uninstall claude-swap
-# or
-pipx uninstall claude-swap
+brew uninstall claude-swap    # if installed from the tap
+rm "$(command -v cswap)"      # if installed any other way
 ```
 
 ## Requirements
 
-- Python 3.12+
-- Claude Code installed and logged in
+- Claude Code, installed and logged in
+
+That is the whole list. cswap is a static binary with no runtime dependency —
+on macOS it shells out to the system `security` command for Keychain access,
+which is deliberate: Claude Code only trusts a Keychain item whose creator
+matches the reader, so linking the framework directly would make macOS prompt
+for permission every time the binary changed.
 
 ## License
 
