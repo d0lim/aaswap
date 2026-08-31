@@ -14,8 +14,8 @@ body:
     id: version
     attributes:
       label: cswap version and install method
-      description: Output of `cswap --version`, and whether you installed with uv, pipx, or from source.
-      placeholder: cswap 0.20.0, installed with uv
+      description: Output of `cswap --version`, and whether you installed with Homebrew, `go install`, a downloaded binary, or from source.
+      placeholder: cswap version v1.0.0, installed with Homebrew
     validations:
       required: true
   - type: dropdown

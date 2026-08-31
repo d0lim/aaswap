@@ -424,7 +424,7 @@ func (e *Engine) reportBlocked(snapshot *swap.Snapshot, headroom map[string]*flo
 
 	// Everything measurable is at its limit — including where the user already
 	// is. Say so, with when the soonest quota returns, and wait for it.
-	if anyKnown && e.everyKnownExhausted(headroom, current) {
+	if anyKnown && everyKnownExhausted(headroom) {
 		reset, known := e.earliestReset(snapshot, models)
 		event := e.event(KindAllExhausted)
 		if known {
@@ -458,7 +458,10 @@ func (e *Engine) reportBlocked(snapshot *swap.Snapshot, headroom map[string]*flo
 
 // everyKnownExhausted reports whether every measurable account, the active one
 // included, is at or over its limit.
-func (e *Engine) everyKnownExhausted(headroom map[string]*float64, current string) bool {
+//
+// Unreadable rows are skipped rather than counted as spent: one of them counted
+// either way would decide this on noise.
+func everyKnownExhausted(headroom map[string]*float64) bool {
 	anyKnown := false
 	for _, value := range headroom {
 		if value == nil {
