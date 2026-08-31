@@ -1,28 +1,29 @@
-// Command cswap is the claude-swap CLI: a multi-account switcher for Claude Code.
+// Command cswap manages several Claude Code logins on one machine.
 //
-// The Go implementation is being ported from the Python original one layer at a
-// time (see the migration plan). Until the CLI layer lands, this entry point
-// only reports the build version.
+// The entry point is deliberately thin: it wires signals to a context and hands
+// everything else to internal/cli, which returns an exit code rather than
+// calling os.Exit — so the whole command surface stays testable.
 package main
 
 import (
-	"fmt"
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/realiti4/claude-swap/internal/buildinfo"
+	"github.com/realiti4/claude-swap/internal/cli"
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
-	}
-}
-
-func run(args []string) error {
-	if len(args) == 1 && (args[0] == "--version" || args[0] == "-v") {
-		fmt.Println(buildinfo.Version())
-		return nil
-	}
-	return fmt.Errorf("the Go CLI is not wired up yet; use the Python `cswap` for now")
+	// A first interrupt cancels the context so an in-flight operation can
+	// unwind — releasing locks, completing a rollback. A second one is handled
+	// by the runtime's default, which kills the process outright: someone
+	// pressing it twice means now.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := cli.New().Execute(ctx, os.Args[1:])
+	// Released before the exit rather than deferred: os.Exit does not run
+	// deferred functions, and the signal handler must be torn down explicitly
+	// or it outlives the work it was guarding.
+	stop()
+	os.Exit(code)
 }

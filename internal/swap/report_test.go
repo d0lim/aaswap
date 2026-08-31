@@ -5,6 +5,7 @@ import (
 	json "encoding/json/v2"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,18 +16,23 @@ import (
 )
 
 // fakeFetcher answers usage fetches without a network.
+//
+// The counter is atomic because a collect pass fetches in parallel — the same
+// concurrency the real fetcher meets.
 type fakeFetcher struct {
-	calls    int
-	byNumber map[string]claudeapi.UsageOutcome
+	callCount atomic.Int64
+	byNumber  map[string]claudeapi.UsageOutcome
 }
 
 func (f *fakeFetcher) FetchUsageForAccount(_ context.Context, req claudeapi.FetchRequest) claudeapi.UsageOutcome {
-	f.calls++
+	f.callCount.Add(1)
 	if outcome, ok := f.byNumber[req.AccountNum]; ok {
 		return outcome
 	}
 	return claudeapi.UsageOutcome{Error: claudeapi.KindTimeout}
 }
+
+func (f *fakeFetcher) calls() int { return int(f.callCount.Load()) }
 
 func measured(pct float64, resetsAt string) *usage.Result {
 	return &usage.Result{
@@ -70,8 +76,8 @@ func TestCollectMeasuresEveryDueAccount(t *testing.T) {
 	})
 
 	snapshot := f.snapshot()
-	if fetcher.calls != 2 {
-		t.Errorf("fetches = %d, want one per account", fetcher.calls)
+	if fetcher.calls() != 2 {
+		t.Errorf("fetches = %d, want one per account", fetcher.calls())
 	}
 	for num, want := range map[string]float64{"1": 40, "2": 10} {
 		decision, known := snapshot.Entries[num].DecisionValue()
@@ -92,10 +98,10 @@ func TestASecondCollectServesFromTheStore(t *testing.T) {
 	})
 
 	f.snapshot()
-	before := fetcher.calls
+	before := fetcher.calls()
 	f.snapshot()
-	if fetcher.calls != before {
-		t.Errorf("a repeat collect spent %d more requests", fetcher.calls-before)
+	if fetcher.calls() != before {
+		t.Errorf("a repeat collect spent %d more requests", fetcher.calls()-before)
 	}
 }
 
@@ -185,8 +191,8 @@ func TestASentinelAccountSpendsNoRequest(t *testing.T) {
 	fetcher := f.measuring(map[string]*usage.Result{})
 
 	snapshot := f.snapshot()
-	if fetcher.calls != 0 {
-		t.Errorf("an API-key slot spent %d requests", fetcher.calls)
+	if fetcher.calls() != 0 {
+		t.Errorf("an API-key slot spent %d requests", fetcher.calls())
 	}
 	if got := snapshot.Entries["1"].Sentinel; got != SentinelAPIKey {
 		t.Errorf("sentinel = %q, want %q", got, SentinelAPIKey)
@@ -213,8 +219,8 @@ func TestAQuarantinedAccountIsNotFetched(t *testing.T) {
 		t.Errorf("sentinel = %q, want %q", got, SentinelReloginRequired)
 	}
 	// Only slot 1 was asked about.
-	if fetcher.calls != 1 {
-		t.Errorf("fetches = %d, want only the healthy account", fetcher.calls)
+	if fetcher.calls() != 1 {
+		t.Errorf("fetches = %d, want only the healthy account", fetcher.calls())
 	}
 }
 
