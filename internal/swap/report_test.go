@@ -3,6 +3,8 @@ package swap
 import (
 	"context"
 	json "encoding/json/v2"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -239,6 +241,63 @@ func TestAHealedStrikeIsClearedFromTheStore(t *testing.T) {
 	}
 	if f.Usage.Entries(ids, nil)["2"].AuthDeadStrikes != 0 {
 		t.Error("the stale strike row survived, so fetch eligibility still disagrees with the display")
+	}
+}
+
+// unreadableBackup makes a slot's stored backup exist-but-fail-to-read, which
+// is the shape a locked Keychain or a momentary lock takes on a file store.
+func (f *fixture) unreadableBackup(num, email string) {
+	f.t.Helper()
+	if os.Geteuid() == 0 {
+		f.t.Skip("running as root, where a mode cannot make a file unreadable")
+	}
+	path := filepath.Join(f.Creds.CredentialsDir(), ".creds-"+num+"-"+email+".enc")
+	if err := os.Chmod(path, 0o000); err != nil {
+		f.t.Fatal(err)
+	}
+	f.t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+}
+
+// The active slot's dead verdict consults a second source, and an unreadable
+// one leaves the question unproven. Unproven may only PRESERVE a strike, never
+// invent one: a row that was never struck has nothing to hold, and answering
+// dead for it turns one momentary lock into "re-login needed" on a healthy
+// account.
+func TestAnUnreadableBackupInventsNoStrike(t *testing.T) {
+	f := newFixture(t)
+	f.twoAccounts()
+	ids := map[string]usagestore.Identity{"1": {Email: "one@example.com"}}
+	if got := f.Usage.Entries(ids, nil)["1"].AuthDeadStrikes; got != 0 {
+		t.Fatalf("the row starts with %d strikes, so the test proves nothing", got)
+	}
+	f.unreadableBackup("1", "one@example.com")
+
+	f.measuring(map[string]*usage.Result{"1": measured(40, ""), "2": measured(10, "")})
+	if got := f.snapshot().Entries["1"].Sentinel; got == SentinelReloginRequired {
+		t.Error("an unreadable backup reported a dead token on a never-struck account")
+	}
+}
+
+// The other half of the same rule: a strike that DOES exist survives an
+// unreadable second source. Clearing it there would un-quarantine a genuinely
+// dead account permanently, which costs far more than one pass of "re-login
+// needed".
+func TestAnUnreadableBackupHoldsARealStrike(t *testing.T) {
+	f := newFixture(t)
+	f.twoAccounts()
+	ids := map[string]usagestore.Identity{"1": {Email: "one@example.com"}}
+	// A generation the LIVE credential does not carry, so the first check
+	// cannot answer and the second source is what the verdict turns on.
+	if _, err := f.Usage.Record(map[string]usagestore.FetchRecord{
+		"1": {Error: claudeapi.KindInvalidGrant, StruckFP: "sha256:a-generation-only-the-backup-had"},
+	}, ids, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	f.unreadableBackup("1", "one@example.com")
+
+	f.measuring(map[string]*usage.Result{"2": measured(10, "")})
+	if got := f.snapshot().Entries["1"].Sentinel; got != SentinelReloginRequired {
+		t.Errorf("sentinel = %q, want the strike held at %q", got, SentinelReloginRequired)
 	}
 }
 
