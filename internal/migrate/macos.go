@@ -10,7 +10,7 @@ import (
 )
 
 // LegacyKeyringService is the service name the third-party keyring library used
-// for per-account backups before cswap moved to security(1) directly.
+// for per-account backups before ccswap moved to security(1) directly.
 const LegacyKeyringService = "claude-code"
 
 // LegacyReader reads items out of the legacy keyring service.
@@ -50,7 +50,7 @@ type KeychainBackups interface {
 // deliberately LEAVES the legacy item in place when reading through security(1),
 // because deleting an item another app created can raise a second Keychain
 // prompt, and the data is by then already safely in the new service. The orphan
-// is harmless cruft that `cswap purge` mops up. This implementation keeps that
+// is harmless cruft that `ccswap purge` mops up. This implementation keeps that
 // choice, so the migration costs the user at most one prompt.
 func MacOSKeyringToSecurity(legacy LegacyReader, backups KeychainBackups, p platform.Platform) Migration {
 	return Migration{

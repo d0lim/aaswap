@@ -169,7 +169,7 @@ func TestAnUncreatedDirectoryStillNormalizes(t *testing.T) {
 	}
 }
 
-// A mapping to an account that no longer exists would silently send `cswap run`
+// A mapping to an account that no longer exists would silently send `ccswap run`
 // looking for it.
 func TestPruneAccount(t *testing.T) {
 	s, root := newStore(t)

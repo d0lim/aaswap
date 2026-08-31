@@ -197,7 +197,7 @@ func UsageFields(decision Decision, fetchedAt, now time.Time) (string, *Usage) {
 // AccountRef is a minimal reference, used for a switch's two sides.
 //
 // Number is a pointer because null is meaningful: the live login was not one
-// cswap manages, so there is no slot to name.
+// ccswap manages, so there is no slot to name.
 type AccountRef struct {
 	Number *int   `json:"number"`
 	Email  string `json:"email"`
@@ -250,7 +250,7 @@ func (r *AccountRow) SetFreshness(lastGood *usage.Result, fetchedAt time.Time, a
 	r.LastGoodAgeSeconds = &seconds
 }
 
-// ListPayload is `cswap list --json`.
+// ListPayload is `ccswap list --json`.
 type ListPayload struct {
 	SchemaVersion       int          `json:"schemaVersion"`
 	ActiveAccountNumber *int         `json:"activeAccountNumber"`
@@ -284,7 +284,7 @@ type ActiveStatus struct {
 	LastGoodAgeSeconds *float64 `json:"lastGoodAgeSeconds,omitzero"`
 }
 
-// StatusPayload is `cswap status --json`.
+// StatusPayload is `ccswap status --json`.
 //
 // Active is a pointer because null is the answer on a machine with no live
 // login at all — distinct from an unmanaged one, which reports an address with
@@ -295,7 +295,7 @@ type StatusPayload struct {
 	TotalManagedAccounts *int          `json:"totalManagedAccounts,omitzero"`
 }
 
-// SwitchPayload is `cswap switch --json`.
+// SwitchPayload is `ccswap switch --json`.
 type SwitchPayload struct {
 	SchemaVersion int         `json:"schemaVersion"`
 	Switched      bool        `json:"switched"`

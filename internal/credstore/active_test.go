@@ -367,7 +367,7 @@ func TestDeleteActiveKeychainEntry(t *testing.T) {
 	})
 }
 
-// ~/.claude belongs to Claude Code; narrowing its mode is not cswap's call, and
+// ~/.claude belongs to Claude Code; narrowing its mode is not ccswap's call, and
 // the parent of ~/.claude.json is the user's home directory.
 func TestActiveCredentialsFileDoesNotHardenItsDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {

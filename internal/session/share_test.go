@@ -121,7 +121,7 @@ func TestSharingIsIdempotent(t *testing.T) {
 	}
 }
 
-// Turning a flag off removes the links cswap made for it — and only those.
+// Turning a flag off removes the links ccswap made for it — and only those.
 func TestTurningSharingOffRemovesOnlyManagedLinks(t *testing.T) {
 	f := newFixture(t)
 	source := f.defaultProfile()
@@ -182,7 +182,7 @@ func TestPreExistingProfileDataIsNotReplaced(t *testing.T) {
 	// And it is not claimed in the manifest, so turning sharing off cannot
 	// remove it later.
 	if slices.Contains(readManifest(filepath.Join(profile, ShareManifest)), "settings.json") {
-		t.Error("a file cswap did not create was claimed in the manifest")
+		t.Error("a file ccswap did not create was claimed in the manifest")
 	}
 }
 

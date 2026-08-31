@@ -156,7 +156,7 @@ func TestEntryLines(t *testing.T) {
 		{
 			name:  "a sentinel explains itself",
 			entry: usagestore.Entry{Sentinel: "re-login needed"},
-			want:  []string{"re-login needed", "cswap add"},
+			want:  []string{"re-login needed", "ccswap add"},
 		},
 		{
 			// The state says why there is no number; the older number is still
@@ -186,7 +186,7 @@ func TestEntryLines(t *testing.T) {
 		{
 			name:  "an error with a remedy shows it",
 			entry: usagestore.Entry{LastError: claudeapi.KindConsumeBusy},
-			want:  []string{"usage unavailable", "another cswap surface"},
+			want:  []string{"usage unavailable", "another ccswap surface"},
 		},
 	}
 

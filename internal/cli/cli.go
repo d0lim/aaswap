@@ -1,4 +1,4 @@
-// Package cli is cswap's command surface.
+// Package cli is ccswap's command surface.
 //
 // It is a package rather than living in main so it can be tested: every command
 // writes through an [App]'s streams and returns an error, and nothing calls
@@ -6,8 +6,8 @@
 //
 // # Two spellings of one interface
 //
-// Commands are verbs — `cswap list`, `cswap switch 2` — and every one of them
-// also answers to the flag spelling it replaced (`cswap --list`, `cswap
+// Commands are verbs — `ccswap list`, `ccswap switch 2` — and every one of them
+// also answers to the flag spelling it replaced (`ccswap --list`, `ccswap
 // --switch-to 2`). The flags are hidden from help so the verbs are the one
 // documented interface, but they keep working: they are in people's shell
 // history and their scripts.

@@ -71,7 +71,7 @@ func TestLockDirectoriesHonorConfigDir(t *testing.T) {
 	}
 }
 
-// Claude Code's refresh path takes both credential locks, so cswap must hold
+// Claude Code's refresh path takes both credential locks, so ccswap must hold
 // both for the exclusion to actually cover the refresh window.
 func TestCredentialsLockTakesBothLocks(t *testing.T) {
 	r := testResolver(t)

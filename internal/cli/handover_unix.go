@@ -13,7 +13,7 @@ import (
 // handOver replaces this process with Claude Code, and does not return.
 //
 // Replaced rather than wrapped, for two reasons. An exec'd Claude Code must
-// never inherit a held lock — and by this point cswap holds none, which is what
+// never inherit a held lock — and by this point ccswap holds none, which is what
 // makes the exec safe. And a wrapper would sit in the process tree for the
 // whole session, taking the signals and job-control events that belong to the
 // program the user is actually talking to.

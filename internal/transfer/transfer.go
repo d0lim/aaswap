@@ -8,8 +8,8 @@
 // have to invent key management, and users already have tools that do it
 // properly —
 //
-//	cswap export - | gpg -c > accounts.gpg
-//	gpg -d accounts.gpg | cswap import -
+//	ccswap export - | gpg -c > accounts.gpg
+//	gpg -d accounts.gpg | ccswap import -
 //
 // The envelope records that it is unencrypted, and import refuses one that
 // claims otherwise rather than handing ciphertext to a JSON parser.
@@ -159,7 +159,7 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 	}
 	if len(roster.Accounts) == 0 {
 		return ExportResult{}, fmt.Errorf("%w: there are no accounts to export — run "+
-			"`cswap add` first", apperr.ErrTransfer)
+			"`ccswap add` first", apperr.ErrTransfer)
 	}
 
 	explicit := req.Account != ""
@@ -214,7 +214,7 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 	if len(result.Envelope.Accounts) == 0 {
 		return ExportResult{}, fmt.Errorf("%w: no account could be exported — every "+
 			"managed slot is missing its stored credential or config. Re-add one with: "+
-			"cswap add --slot <number>", apperr.ErrTransfer)
+			"ccswap add --slot <number>", apperr.ErrTransfer)
 	}
 
 	// Carried only when that slot is actually in the payload: pointing at an
@@ -265,7 +265,7 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 			// backup.
 			return ExportedAccount{}, fmt.Sprintf(
 				"account %s (%s): no stored credential or config — re-add with: "+
-					"cswap add --slot %s", num, account.Email, num), nil
+					"ccswap add --slot %s", num, account.Email, num), nil
 		}
 	}
 

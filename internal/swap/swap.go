@@ -151,7 +151,7 @@ func (s *Switcher) now() time.Time {
 	return s.Now()
 }
 
-// BackupRoot is where cswap keeps everything it owns.
+// BackupRoot is where ccswap keeps everything it owns.
 func (s *Switcher) BackupRoot() string { return s.Paths.BackupRoot() }
 
 // RosterPath is sequence.json's location.

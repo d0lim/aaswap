@@ -291,7 +291,7 @@ func TestMacOSMigrationRelocatesCredentials(t *testing.T) {
 // Reading the legacy items through security(1) means deleting them could raise
 // a second Keychain prompt, since another app created them. The data is already
 // safely in the new service by then, so the orphan is left as harmless cruft
-// that `cswap purge` mops up.
+// that `ccswap purge` mops up.
 func TestMacOSMigrationLeavesTheLegacyItemInPlace(t *testing.T) {
 	backups := newFakeBackups()
 	legacy := fakeLegacy{items: map[string]string{

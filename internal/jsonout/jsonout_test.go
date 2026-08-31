@@ -214,7 +214,7 @@ func TestNullIsDistinctFromAbsent(t *testing.T) {
 }
 
 // A switch's departing side is null on a machine that had no live login, and
-// numberless for one cswap did not manage.
+// numberless for one ccswap did not manage.
 func TestSwitchPayloadSides(t *testing.T) {
 	got := decode(t, SwitchPayload{
 		SchemaVersion: SchemaVersion, Switched: true,

@@ -252,7 +252,7 @@ func stampSchemaVersion(raw map[string]any) {
 	}
 }
 
-// Row is one line of `cswap config`'s listing.
+// Row is one line of `ccswap config`'s listing.
 type Row struct {
 	Spec  Spec
 	Value any
@@ -282,11 +282,11 @@ var boolWords = map[string]bool{
 	"false": false, "0": false, "no": false,
 }
 
-// ParseValue strictly parses a CLI-provided string for `cswap config set`.
+// ParseValue strictly parses a CLI-provided string for `ccswap config set`.
 //
 // Unlike the forgiving clamp on load, an out-of-range or mistyped value is an
 // error, so the user learns about the problem when setting the value rather
-// than through silently degraded behaviour at `cswap auto` time.
+// than through silently degraded behaviour at `ccswap auto` time.
 func ParseValue(spec Spec, raw string) (any, error) {
 	switch spec.Kind {
 	case KindBool:
@@ -312,7 +312,7 @@ func ParseValue(spec Spec, raw string) (any, error) {
 		value := strings.TrimSpace(raw)
 		if value == "" {
 			return nil, fmt.Errorf(
-				"%s expects a non-empty value; use 'cswap config unset %s' to clear it: %w",
+				"%s expects a non-empty value; use 'ccswap config unset %s' to clear it: %w",
 				spec.Dotted(), spec.Dotted(), apperr.ErrConfig)
 		}
 		return value, nil

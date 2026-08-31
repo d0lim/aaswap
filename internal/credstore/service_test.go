@@ -11,7 +11,7 @@ import (
 	"github.com/realiti4/claude-swap/internal/platform"
 )
 
-// The derivation is pinned against Claude Code's own: cswap and Claude Code must
+// The derivation is pinned against Claude Code's own: ccswap and Claude Code must
 // name the same Keychain item, or neither can see the other's credential.
 func TestKeychainServiceName(t *testing.T) {
 	t.Run("is a stable 8-hex-digit suffix", func(t *testing.T) {

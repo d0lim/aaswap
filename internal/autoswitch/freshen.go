@@ -24,7 +24,7 @@ const (
 	// DIFFERENT account. Activating it would put the user on the wrong account
 	// with every gauge reading normal.
 	freshenIdentityConflict
-	// freshenSkipLiveSession: a `cswap run` session owns this account's token in
+	// freshenSkipLiveSession: a `ccswap run` session owns this account's token in
 	// its own profile.
 	freshenSkipLiveSession
 	// freshenSystemic: a deterministic refusal every candidate hits identically.

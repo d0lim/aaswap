@@ -59,7 +59,7 @@ var demotingStashReasons = []string{
 // reentrant.
 func (s *Switcher) ConsumeBackupGrant(ctx context.Context, accountNum, email, snapshot string) claudeapi.RefreshOutcome {
 	// Claude Code honors a secure-storage override for its credential store;
-	// cswap mirrors that when CAPTURING a credential but not when consuming
+	// ccswap mirrors that when CAPTURING a credential but not when consuming
 	// one. Consuming a grant read from the default store while Claude Code
 	// reads and writes a redirected one is the stale-copy failure by
 	// construction — refuse rather than operate on a store it left behind.
@@ -68,7 +68,7 @@ func (s *Switcher) ConsumeBackupGrant(ctx context.Context, accountNum, email, sn
 	// transient would fall through to a guaranteed 401 every pass and read as
 	// generic network trouble forever.
 	if s.Paths.SecureStorageConfigDir != "" {
-		slog.Warn("CLAUDE_SECURESTORAGE_CONFIG_DIR is set; cswap mirrors it when "+
+		slog.Warn("CLAUDE_SECURESTORAGE_CONFIG_DIR is set; ccswap mirrors it when "+
 			"capturing a credential but not when consuming one, so it refuses to "+
 			"consume this account's refresh token", "account", accountNum)
 		return claudeapi.RefreshOutcome{Error: claudeapi.KindStoreUnmirrored}
@@ -215,7 +215,7 @@ func (s *Switcher) persistSuccessor(accountNum, email, consumedFP string, result
 			stashedReason = "consume-gate-unpersisted"
 			slog.Error("the consumed successor could not be persisted or stashed — it "+
 				"survives only for this pass. Fix the storage failure, then re-login and "+
-				"run `cswap add` if the slot strikes",
+				"run `ccswap add` if the slot strikes",
 				"account", accountNum, "error", err)
 			return
 		}
@@ -311,7 +311,7 @@ func (s *Switcher) adoptStashedSuccessor(accountNum, email, current string) (str
 		// account is quarantined while its successor sits orphaned on disk.
 		return "", fmt.Errorf("%w: the unclaimed manifest is %s and stashed entry files "+
 			"exist; deferring adoption rather than POSTing a generation a stashed "+
-			"successor may already have superseded (`cswap unclaimed` lists them, "+
+			"successor may already have superseded (`ccswap unclaimed` lists them, "+
 			"`--purge` drops one)", apperr.ErrCredentialRead, verdict)
 	}
 

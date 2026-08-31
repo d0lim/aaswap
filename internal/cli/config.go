@@ -16,7 +16,7 @@ import (
 func (a *App) configCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Show or change cswap's settings",
+		Short: "Show or change ccswap's settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runConfigList()

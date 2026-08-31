@@ -1,6 +1,6 @@
 // Package lockfile provides the two kinds of exclusion claude-swap needs.
 //
-// [FileLock] is cswap's own cross-process lock over its account store: a
+// [FileLock] is ccswap's own cross-process lock over its account store: a
 // conventional advisory lock on a file, held while the roster and credentials
 // are mutated.
 //
@@ -18,7 +18,7 @@ import (
 	"github.com/realiti4/claude-swap/internal/apperr"
 )
 
-// DefaultTimeout bounds how long a caller waits for cswap's own lock.
+// DefaultTimeout bounds how long a caller waits for ccswap's own lock.
 const DefaultTimeout = 10 * time.Second
 
 // pollInterval is how often a waiter re-tries the lock. Advisory locks give no
@@ -29,7 +29,7 @@ const pollInterval = 100 * time.Millisecond
 // FileLock is an exclusive, cross-process lock over a single file.
 //
 // The lock is advisory and tied to the open file description, so the operating
-// system drops it if the process dies — a crashed cswap cannot leave the
+// system drops it if the process dies — a crashed ccswap cannot leave the
 // account store permanently locked.
 type FileLock struct {
 	path    string
@@ -120,7 +120,7 @@ func With(path string, timeout time.Duration, fn func() error) (err error) {
 	}
 	if !acquired {
 		return fmt.Errorf(
-			"could not acquire %s within %s — another cswap may be running: %w",
+			"could not acquire %s within %s — another ccswap may be running: %w",
 			filepath.Base(path), l.timeout, apperr.ErrLock)
 	}
 	defer func() {

@@ -36,7 +36,7 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 	}
 
 	if len(snapshot.Views) == 0 {
-		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: cswap add"))
+		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: ccswap add"))
 		return nil
 	}
 
@@ -109,7 +109,7 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 	if !managed {
 		a.printer.Println(a.printer.Bold("Status: "), live.Email,
 			a.printer.Muted(" ["+live.DisplayTag()+"]"))
-		a.printer.Println(a.printer.Dimmed("  Not managed by cswap. Run `cswap add` to store it."))
+		a.printer.Println(a.printer.Dimmed("  Not managed by ccswap. Run `ccswap add` to store it."))
 		return nil
 	}
 
@@ -133,7 +133,7 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 		return err
 	}
 	if len(roster.Accounts) == 0 {
-		return fmt.Errorf("no accounts are managed yet. Log in with Claude Code, then run: cswap add")
+		return fmt.Errorf("no accounts are managed yet. Log in with Claude Code, then run: ccswap add")
 	}
 
 	if target == "" {
@@ -187,7 +187,7 @@ func (a *App) chooseTarget(cmd *cobra.Command, s *swap.Switcher, roster *swap.Ro
 	switchable := s.SwitchableNumbers(roster)
 	if len(switchable) == 0 {
 		return "", fmt.Errorf("no account has both a stored credential and a stored config; " +
-			"re-add one with: cswap add --slot N")
+			"re-add one with: ccswap add --slot N")
 	}
 
 	current, _ := s.CurrentNumber(roster)
@@ -343,7 +343,7 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 	}
 	if outcome.WasActive {
 		a.printer.Warning(fmt.Sprintf("Account %s (%s) was the active login. "+
-			"You are still logged in; cswap simply no longer has a copy.",
+			"You are still logged in; ccswap simply no longer has a copy.",
 			outcome.Number, outcome.Email))
 	}
 	a.printer.Println(a.printer.Accent("Removed"), " ",
@@ -413,7 +413,7 @@ func (a *App) runSetDisabled(cmd *cobra.Command, identifier string, disabled boo
 	}
 	if len(s.SwitchableNumbers(roster)) == 0 {
 		a.printer.Warning("No accounts remain in rotation — auto-switch and a bare " +
-			"switch have nothing to pick. Re-enable one with: cswap enable <num|email>")
+			"switch have nothing to pick. Re-enable one with: ccswap enable <num|email>")
 	}
 	return nil
 }
@@ -557,7 +557,7 @@ func (a *App) runUnclaimed(cmd *cobra.Command, purge string) error {
 	}
 	a.printer.Blank()
 	a.printer.Println(a.printer.Dimmed(
-		"Drop one with: cswap unclaimed --purge <id>, or all of them with --purge all"))
+		"Drop one with: ccswap unclaimed --purge <id>, or all of them with --purge all"))
 	return nil
 }
 

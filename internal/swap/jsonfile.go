@@ -102,7 +102,7 @@ func writeJSON(path string, value any) error {
 //
 //   - The copy is made WITHOUT the source's mode and then chmod'ed to 0600. A
 //     world-readable ~/.claude.json holding an API key would otherwise be
-//     salvaged into a world-readable copy cswap itself created.
+//     salvaged into a world-readable copy ccswap itself created.
 //   - The name is disambiguated with a counter. The stamp is second-resolution,
 //     and two failed switches inside one second would otherwise leave one file —
 //     losing the first user's data exactly when the retry, which is what a user

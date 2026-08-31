@@ -118,7 +118,7 @@ func (s *Switcher) SetDisabled(identifier string, disabled bool) (num, email str
 //
 // Deliberately NO fallback to the roster's recorded active slot. An unmanaged
 // live login must report nothing rather than a guessed slot, or the auto-switch
-// engine would evaluate the wrong account's usage and overwrite a login cswap
+// engine would evaluate the wrong account's usage and overwrite a login ccswap
 // does not own. Use [Switcher.HasLiveLogin] to tell the two negative cases
 // apart.
 func (s *Switcher) CurrentNumber(roster *Roster) (string, bool) {

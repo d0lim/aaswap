@@ -1,4 +1,4 @@
-// Package updatecheck tells the user when a newer cswap exists, and how to get
+// Package updatecheck tells the user when a newer ccswap exists, and how to get
 // it.
 //
 // It does NOT upgrade in place. A Go binary installed by a package manager, a
@@ -58,7 +58,7 @@ func (m Method) UpgradeCommand() string {
 	case Homebrew:
 		return "brew upgrade claude-swap"
 	case GoInstall:
-		return "go install github.com/realiti4/claude-swap/cmd/cswap@latest"
+		return "go install github.com/realiti4/claude-swap/cmd/ccswap@latest"
 	}
 	return ""
 }

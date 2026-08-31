@@ -12,7 +12,7 @@ import (
 //
 // flock locks are owned by the open file description, so they are released
 // automatically when the process exits — including on a crash, which is what
-// keeps a killed cswap from wedging the account store.
+// keeps a killed ccswap from wedging the account store.
 func tryLock(f *os.File) error {
 	return syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 }

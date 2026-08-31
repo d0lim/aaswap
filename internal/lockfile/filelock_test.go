@@ -173,7 +173,7 @@ func TestZeroTimeoutUsesDefault(t *testing.T) {
 }
 
 // The operating system drops an advisory lock when its holder dies, so a
-// crashed cswap cannot leave the account store permanently locked. Verified
+// crashed ccswap cannot leave the account store permanently locked. Verified
 // with a real second process, since that is the only way the guarantee is
 // actually exercised.
 func TestLockIsReleasedWhenTheHolderProcessExits(t *testing.T) {

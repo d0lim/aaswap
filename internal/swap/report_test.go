@@ -400,7 +400,7 @@ func TestStatusPayload(t *testing.T) {
 		}
 	})
 
-	t.Run("a live login cswap does not manage", func(t *testing.T) {
+	t.Run("a live login ccswap does not manage", func(t *testing.T) {
 		f := newFixture(t)
 		f.twoAccounts()
 		f.setLiveIdentity("stranger@example.com", "", "", "")
