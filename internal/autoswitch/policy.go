@@ -108,14 +108,14 @@ var systemicRefusals = []struct {
 	Message string
 }{
 	{claudeapi.KindStoreUnmirrored,
-		"CLAUDE_SECURESTORAGE_CONFIG_DIR is set — unset it or run cswap from a normal shell"},
+		"CLAUDE_SECURESTORAGE_CONFIG_DIR is set — unset it or run ccswap from a normal shell"},
 	{claudeapi.KindInvalidClient,
-		"cswap's OAuth client was rejected — systemic, not this account"},
+		"ccswap's OAuth client was rejected — systemic, not this account"},
 	{claudeapi.KindStashUnreadable,
 		"a stashed successor is unreadable — unlock the keychain or fix the file, then " +
-			"retry; `cswap unclaimed` inspects it"},
+			"retry; `ccswap unclaimed` inspects it"},
 	{claudeapi.KindConsumeBusy,
-		"another cswap surface holds the slot — retries next pass"},
+		"another ccswap surface holds the slot — retries next pass"},
 }
 
 // systemicMessage explains a systemic refusal, reporting false for anything

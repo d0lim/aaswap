@@ -147,7 +147,7 @@ func TestNumbersSkipStaleSequenceEntries(t *testing.T) {
 }
 
 // Reusing a number a user just removed would make "account 3" mean a different
-// account than it did a minute ago, in a shell history full of `cswap switch 3`.
+// account than it did a minute ago, in a shell history full of `ccswap switch 3`.
 func TestNextNumberDoesNotReuseAFreedSlot(t *testing.T) {
 	f := newFixture(t)
 	roster := newRoster(f.now)

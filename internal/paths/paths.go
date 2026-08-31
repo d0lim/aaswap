@@ -1,7 +1,7 @@
 // Package paths resolves where Claude Code keeps its config and credentials,
 // and where claude-swap keeps its backups.
 //
-// The resolution rules mirror Claude Code's own so cswap reads and writes the
+// The resolution rules mirror Claude Code's own so ccswap reads and writes the
 // very same files (from the claude-code source):
 //
 //   - Config home: CLAUDE_CONFIG_DIR if set, else ~/.claude.
@@ -172,7 +172,7 @@ func (r *Resolver) BackupRoot() string {
 	return r.LegacyBackupRoot()
 }
 
-// CacheDir is where cswap keeps regenerable state: the usage table and the
+// CacheDir is where ccswap keeps regenerable state: the usage table and the
 // update-check stamp.
 //
 // Everything under it is throwaway by construction. Deleting it costs at most

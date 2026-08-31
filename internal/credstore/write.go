@@ -243,7 +243,7 @@ func (s *Store) clearOAuthCredential() {
 }
 
 // updateGlobalConfig atomically applies a mutator to ~/.claude.json, scoped to
-// the keys cswap owns.
+// the keys ccswap owns.
 //
 // It reads the current config, lets the mutator change only primaryApiKey and
 // customApiKeyResponses, and writes it back atomically — preserving every other
@@ -275,7 +275,7 @@ func (s *Store) updateGlobalConfig(mutate func(map[string]any)) error {
 		return fmt.Errorf("encode global config: %w: %w", apperr.ErrCredentialWrite, err)
 	}
 	// The foreign writer: the parent of ~/.claude.json is the user's home
-	// directory, and hardening it to 0700 is not cswap's call to make.
+	// directory, and hardening it to 0700 is not ccswap's call to make.
 	if err := fsutil.WriteForeignFileAtomic(path, encoded); err != nil {
 		return fmt.Errorf("write global config: %w: %w", apperr.ErrCredentialWrite, err)
 	}

@@ -55,7 +55,7 @@ var (
 	ErrTransfer        = derive("account transfer error", Err)
 )
 
-// Locking. ErrClaudeCodeLockTimeout is distinct because it is not a cswap
+// Locking. ErrClaudeCodeLockTimeout is distinct because it is not a ccswap
 // defect: Claude Code legitimately holds the lock during a token refresh, and
 // the right response is to tell the user to retry rather than to fail hard.
 var (

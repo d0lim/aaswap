@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "cswap --list",
+            "name": "ccswap --list",
             "type": "debugpy",
             "request": "launch",
             "module": "claude_swap.cli",
@@ -14,7 +14,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "cswap --switch",
+            "name": "ccswap --switch",
             "type": "debugpy",
             "request": "launch",
             "module": "claude_swap.cli",
@@ -26,7 +26,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "cswap --purge",
+            "name": "ccswap --purge",
             "type": "debugpy",
             "request": "launch",
             "module": "claude_swap.cli",
@@ -38,7 +38,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "cswap (custom args)",
+            "name": "ccswap (custom args)",
             "type": "debugpy",
             "request": "launch",
             "module": "claude_swap.cli",

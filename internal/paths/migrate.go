@@ -14,7 +14,7 @@ import (
 	"github.com/realiti4/claude-swap/internal/apperr"
 )
 
-// throwawayNames and throwawayPrefixes are entries any prior cswap run may have
+// throwawayNames and throwawayPrefixes are entries any prior ccswap run may have
 // left in the backup root without user data being present: logger output and
 // the update-check / usage cache. A target holding only these counts as empty,
 // because wiping them loses no real state.
@@ -36,7 +36,7 @@ var (
 //     cleaning up. Just unlink the flag.
 //   - No flag, both paths exist — a real collision. Refuse, unless the target
 //     holds nothing but throwaway artifacts, which happens when a fresh box ran
-//     cswap once (laying down cache/ and a log) and the legacy directory then
+//     ccswap once (laying down cache/ and a log) and the legacy directory then
 //     arrived from another machine via file sync. In that case wipe and migrate.
 //
 // It reports whether a move actually ran.

@@ -338,7 +338,7 @@ func TestRemoveForgetsAnAccount(t *testing.T) {
 	}
 }
 
-// Removing a slot forgets cswap's copy; it does not log the user out.
+// Removing a slot forgets ccswap's copy; it does not log the user out.
 func TestRemovingTheActiveAccountLeavesTheLiveLoginAlone(t *testing.T) {
 	f := newFixture(t)
 	f.threeAccounts()
@@ -502,7 +502,7 @@ func TestPurgeForgetsEverything(t *testing.T) {
 	}
 }
 
-// The live login is Claude Code's, not cswap's.
+// The live login is Claude Code's, not ccswap's.
 func TestPurgeLeavesTheLiveLoginAlone(t *testing.T) {
 	f := newFixture(t)
 	f.threeAccounts()

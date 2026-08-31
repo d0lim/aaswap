@@ -14,7 +14,7 @@ type AddRequest struct {
 	// Slot pins the destination. Zero auto-assigns the next number.
 	Slot int
 	// Alias names the slot. Empty leaves any existing alias alone — which is
-	// what makes re-running `cswap add` on a registered account a credential
+	// what makes re-running `ccswap add` on a registered account a credential
 	// refresh rather than a rename.
 	Alias string
 	// AssumeYes skips the confirmation for overwriting an occupied slot.

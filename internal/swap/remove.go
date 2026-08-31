@@ -13,7 +13,7 @@ type RemoveOutcome struct {
 	Number string
 	Email  string
 	// WasActive marks removing the account currently logged in. The live login
-	// is left alone — removing a slot forgets cswap's copy, it does not log the
+	// is left alone — removing a slot forgets ccswap's copy, it does not log the
 	// user out — but they should know.
 	WasActive bool
 	// Cancelled marks a confirmation the user declined.
@@ -43,7 +43,7 @@ type AmbiguousMatch struct {
 // stored config, and its roster record.
 //
 // It does NOT log the user out. The live credential is Claude Code's, and a
-// user removing a slot is discarding cswap's copy, not ending their session.
+// user removing a slot is discarding ccswap's copy, not ending their session.
 func (s *Switcher) Remove(req RemoveRequest) (RemoveOutcome, error) {
 	var outcome RemoveOutcome
 	err := s.withLock(func() error {
@@ -133,10 +133,10 @@ type PurgeOutcome struct {
 	Cancelled bool
 }
 
-// Purge forgets every managed account and removes cswap's whole store.
+// Purge forgets every managed account and removes ccswap's whole store.
 //
 // The live login survives, for the same reason a single removal leaves it: it
-// is Claude Code's, not cswap's.
+// is Claude Code's, not ccswap's.
 func (s *Switcher) Purge(confirm func(prompt string) bool, assumeYes bool) (PurgeOutcome, error) {
 	var outcome PurgeOutcome
 	err := s.withLock(func() error {

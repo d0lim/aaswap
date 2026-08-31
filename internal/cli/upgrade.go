@@ -56,7 +56,7 @@ func (a *App) runUpgrade(cmd *cobra.Command) error {
 		a.printer.Println("  ", a.printer.Bold(command))
 	} else {
 		a.printer.Println(a.printer.Dimmed(
-			"  cswap could not tell how it was installed. Install the build for your " +
+			"  ccswap could not tell how it was installed. Install the build for your " +
 				"platform from:"))
 		a.printer.Println("  ", url)
 	}

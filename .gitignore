@@ -13,5 +13,5 @@ wheels/
 docs/superpowers/
 
 # Go build artifacts
-/cswap
+/ccswap
 /dist/

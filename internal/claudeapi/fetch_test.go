@@ -458,7 +458,7 @@ func TestAPersistFailureWarnsTheUserWithARecoveryHint(t *testing.T) {
 	if len(warnings) != 1 {
 		t.Fatalf("warnings = %v, want exactly one", warnings)
 	}
-	for _, want := range []string{"account 2", "user@example.com", "cswap add"} {
+	for _, want := range []string{"account 2", "user@example.com", "ccswap add"} {
 		if !strings.Contains(warnings[0], want) {
 			t.Errorf("the warning does not mention %q: %s", want, warnings[0])
 		}

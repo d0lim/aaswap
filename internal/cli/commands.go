@@ -14,17 +14,17 @@ import (
 // rootCommand assembles the whole command surface.
 func (a *App) rootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "cswap",
+		Use:   "ccswap",
 		Short: "Switch between multiple Claude Code accounts",
-		Long: "cswap manages several Claude Code logins on one machine: it stores each\n" +
+		Long: "ccswap manages several Claude Code logins on one machine: it stores each\n" +
 			"account's credential, swaps the live login between them, and reports how\n" +
 			"much rate-limit headroom each one has left.",
 		Example: strings.Join([]string{
-			"  cswap add                       # capture the account you are logged in as",
-			"  cswap list                      # show every account and its usage",
-			"  cswap switch 2                  # activate account 2",
-			"  cswap switch --strategy best    # activate whichever has the most headroom",
-			"  cswap list --json               # the same listing, for a script",
+			"  ccswap add                       # capture the account you are logged in as",
+			"  ccswap list                      # show every account and its usage",
+			"  ccswap switch 2                  # activate account 2",
+			"  ccswap switch --strategy best    # activate whichever has the most headroom",
+			"  ccswap list --json               # the same listing, for a script",
 		}, "\n"),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -150,9 +150,9 @@ func (a *App) removeCommand() *cobra.Command {
 		Use:     "remove NUM|EMAIL|ALIAS",
 		Aliases: []string{"rm"},
 		Short:   "Forget a managed account",
-		Long: "Removes cswap's copy of the account: its stored credential, its stored\n" +
+		Long: "Removes ccswap's copy of the account: its stored credential, its stored\n" +
 			"config, and its roster entry. It does NOT log you out — the live login is\n" +
-			"Claude Code's, not cswap's.",
+			"Claude Code's, not ccswap's.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.runRemove(cmd, args[0])
@@ -236,7 +236,7 @@ func (a *App) purgeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "purge",
 		Short: "Forget every managed account",
-		Long:  "Removes cswap's whole store. Your live login survives.",
+		Long:  "Removes ccswap's whole store. Your live login survives.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runPurge(cmd)
@@ -250,7 +250,7 @@ func (a *App) unclaimedCommand() *cobra.Command {
 	var purge string
 	cmd := &cobra.Command{
 		Use:   "unclaimed",
-		Short: "Inspect credentials cswap preserved but could not file",
+		Short: "Inspect credentials ccswap preserved but could not file",
 		Long: "A switch that finds a live credential belonging to no managed slot keeps\n" +
 			"it here rather than destroying it. These are the copies it kept.",
 		Args: cobra.NoArgs,

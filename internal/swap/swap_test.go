@@ -107,7 +107,7 @@ func (f *fixture) setLiveIdentity(email, orgUUID, orgName, accountUUID string) {
 			"organizationName": orgName,
 			"accountUuid":      accountUUID,
 		},
-		// A key cswap does not own, present in every real config.
+		// A key ccswap does not own, present in every real config.
 		"projects": map[string]any{"/home/u/work": map[string]any{"allowedTools": []string{}}},
 	}
 	data, err := json.Marshal(config)

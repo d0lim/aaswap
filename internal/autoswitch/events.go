@@ -91,7 +91,7 @@ func (e Event) Human() string {
 		return "no switch: " + e.Reason
 	case KindQuarantine:
 		return fmt.Sprintf("account %s (%s) quarantined: %s. Log in with it and run "+
-			"`cswap add --slot %s` to bring it back", e.Number, e.Email, e.Reason, e.Number)
+			"`ccswap add --slot %s` to bring it back", e.Number, e.Email, e.Reason, e.Number)
 	case KindUnquarantine:
 		return fmt.Sprintf("account %s (%s) is back in rotation (%s)", e.Number, e.Email, e.Reason)
 	case KindAllExhausted:

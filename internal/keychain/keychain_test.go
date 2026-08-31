@@ -410,7 +410,7 @@ func TestAccountName(t *testing.T) {
 
 // ---------------------------------------------------------------- Safety net
 
-// The Keychain half of the safety net: cswap's items are live Claude Code
+// The Keychain half of the safety net: ccswap's items are live Claude Code
 // logins, so a test must not be able to reach the real binary by accident.
 func TestRealBinaryIsUnreachableFromTests(t *testing.T) {
 	defer func() {

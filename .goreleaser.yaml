@@ -1,8 +1,8 @@
-# Release configuration for cswap.
+# Release configuration for ccswap.
 #
 # Builds a static binary per platform, publishes them to a GitHub release, and
 # updates the Homebrew tap. The version comes from the git tag and is stamped
-# into the binary, so `cswap --version` and `cswap upgrade` agree with what was
+# into the binary, so `ccswap --version` and `ccswap upgrade` agree with what was
 # actually released.
 version: 2
 
@@ -13,9 +13,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: cswap
-    main: ./cmd/cswap
-    binary: cswap
+  - id: ccswap
+    main: ./cmd/ccswap
+    binary: ccswap
     env:
       # No cgo: the whole point of the Go port is one file a user can copy onto
       # a machine that has no toolchain. Every dependency here is pure Go —
@@ -31,7 +31,7 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: cswap
+  - id: ccswap
     # Reproducible names a script can construct without consulting the release
     # page.
     name_template: >-
@@ -67,6 +67,6 @@ brews:
     description: Switch between multiple Claude Code accounts
     license: MIT
     test: |
-      system "#{bin}/cswap", "--version"
+      system "#{bin}/ccswap", "--version"
     install: |
-      bin.install "cswap"
+      bin.install "ccswap"

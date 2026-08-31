@@ -127,7 +127,7 @@ func TestMigrateCollisionRefuses(t *testing.T) {
 	}
 }
 
-// Regression: any prior cswap run lays down cache/ and a log in the XDG path
+// Regression: any prior ccswap run lays down cache/ and a log in the XDG path
 // even with no real data, so a legacy directory arriving later (file sync from
 // another machine) used to be reported as a collision.
 func TestMigrateWipesThrowawayOnlyTarget(t *testing.T) {

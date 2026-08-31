@@ -33,7 +33,7 @@ func TestListOnAnEmptyStoreExplainsWhatToDo(t *testing.T) {
 	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts are managed yet", "cswap add")
+	wantContains(t, h.stdout(), "No accounts are managed yet", "ccswap add")
 }
 
 // The JSON surface is what scripts consume, so it must be exactly one object
@@ -93,7 +93,7 @@ func TestStatus(t *testing.T) {
 		if code := h.run("status"); code != ExitOK {
 			t.Fatalf("exit = %d: %s", code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "cswap add")
+		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "ccswap add")
 	})
 
 	t.Run("as JSON, an absent login is null", func(t *testing.T) {
@@ -393,7 +393,7 @@ func TestDisablingTheLastAccountWarns(t *testing.T) {
 	if code := h.run("disable", "1"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts remain in rotation", "cswap enable")
+	wantContains(t, h.stdout(), "No accounts remain in rotation", "ccswap enable")
 }
 
 func TestAliasCommands(t *testing.T) {
@@ -858,7 +858,7 @@ func TestMappings(t *testing.T) {
 	if code := h.run("mappings"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No directories are mapped", "cswap map")
+	wantContains(t, h.stdout(), "No directories are mapped", "ccswap map")
 }
 
 func TestMappingAnUnknownAccount(t *testing.T) {

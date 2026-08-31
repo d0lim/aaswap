@@ -244,7 +244,7 @@ func TestBootstrapRefusals(t *testing.T) {
 		{
 			name:    "no stored credential",
 			setup:   func(f *fixture) {},
-			wantErr: []string{"no stored credentials", "cswap add --slot 1"},
+			wantErr: []string{"no stored credentials", "ccswap add --slot 1"},
 		},
 		{
 			name: "no stored config",
@@ -552,7 +552,7 @@ func TestHasRefreshToken(t *testing.T) {
 	}
 }
 
-// Passing an auth override through would make `cswap run 2` silently run as
+// Passing an auth override through would make `ccswap run 2` silently run as
 // something else.
 func TestEnvironmentDropsAuthOverrides(t *testing.T) {
 	base := []string{

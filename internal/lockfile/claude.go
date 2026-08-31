@@ -61,7 +61,7 @@ func ConfigLockDir(r *paths.Resolver) string {
 // WithClaudeCredentials runs fn while holding Claude Code's credential-refresh
 // locks, in Claude Code's own order.
 //
-// Mirroring both the pair and the order means a waiting cswap and a waiting
+// Mirroring both the pair and the order means a waiting ccswap and a waiting
 // Claude Code can never deadlock against each other, and exclusion still holds
 // after Claude Code drops the legacy lock. Both use Claude Code's 60s
 // staleness: never steal a lock a live Claude Code may still hold.

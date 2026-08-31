@@ -4,8 +4,8 @@
 # Every target here assumes go/golangci-lint resolve on PATH (mise shims or
 # `mise exec --`).
 
-BINARY := cswap
-PKG    := ./cmd/cswap
+BINARY := ccswap
+PKG    := ./cmd/ccswap
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X github.com/realiti4/claude-swap/internal/buildinfo.version=$(VERSION)
 

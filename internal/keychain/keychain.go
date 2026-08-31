@@ -6,7 +6,7 @@
 // Keychain items are created and read by the same stable /usr/bin/security
 // binary, so reads stay silent across upgrades. An in-process Security.framework
 // call — which is what a keyring library does — anchors the item's access
-// control to the *calling binary*. Every `cswap upgrade` would then produce a
+// control to the *calling binary*. Every `ccswap upgrade` would then produce a
 // new binary that macOS does not recognize as the item's creator, and the user
 // gets a "claude-swap wants to use your keychain" prompt. security(1) never
 // changes, so creator == reader and there is no prompt.

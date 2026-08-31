@@ -28,13 +28,13 @@ type BackupProbe interface {
 	ReadAccount(accountNum, email string) (value string, unreadable bool)
 }
 
-// WindowsKeyringNotice tells a Windows user whose backups predate cswap 0.11
+// WindowsKeyringNotice tells a Windows user whose backups predate ccswap 0.11
 // how to recover them.
 //
 // # Why this is a notice and not a migration
 //
 // Before 0.11 the Windows backend was the Windows Credential Manager, reached
-// through Python's keyring library; cswap then moved to base64 .enc files
+// through Python's keyring library; ccswap then moved to base64 .enc files
 // because the Credential Manager rejects entries over roughly 2,500 bytes
 // (#45). The Python implementation carried a one-time migration that relocated
 // those entries.
@@ -48,7 +48,7 @@ type BackupProbe interface {
 // garbage and write the garbage over a working slot.
 //
 // So the Go build does not migrate; it explains. A user in that position runs
-// the Python cswap once, which performs the real migration, and then returns to
+// the Python ccswap once, which performs the real migration, and then returns to
 // the Go binary with everything in .enc files where both implementations read
 // it.
 //
@@ -98,7 +98,7 @@ func runWindowsKeyringNotice(backups BackupProbe, p platform.Platform, roster Ro
 			"  If these accounts were added with claude-swap 0.10 or earlier, their\n"+
 			"  credentials are still in the Windows Credential Manager, which no\n"+
 			"  current build reads. Log in with each account and re-add it:\n"+
-			"      cswap add --slot N\n"+
+			"      ccswap add --slot N\n"+
 			"  The Credential Manager entries are left untouched, so nothing is lost\n"+
 			"  by doing this.\n",
 		len(stranded), strings.Join(stranded, ", "))

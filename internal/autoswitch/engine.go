@@ -157,12 +157,12 @@ func (e *Engine) tick(ctx context.Context) (Outcome, error) {
 	current, managed := e.Switcher.CurrentNumber(roster)
 	if !managed {
 		e.emit(e.event(KindPoll))
-		reason, detail := "no-active-account", "log in and run `cswap add` first"
+		reason, detail := "no-active-account", "log in and run `ccswap add` first"
 		if e.Switcher.HasLiveLogin() {
-			// A live login cswap does not manage: NEVER act. A switch would
+			// A live login ccswap does not manage: NEVER act. A switch would
 			// overwrite it with no backup anywhere.
 			reason = "unmanaged-active-account"
-			detail = "run `cswap add` to include it in rotation"
+			detail = "run `ccswap add` to include it in rotation"
 		}
 		event := e.event(KindNoSwitch)
 		event.Reason, event.Detail = reason, detail
@@ -409,7 +409,7 @@ func (e *Engine) activateFirstUsable(ctx context.Context, roster *swap.Roster, s
 		event.Detail = message
 	case skippedLive:
 		event.Reason = "candidates-in-session"
-		event.Detail = "every candidate is running as a `cswap run` session"
+		event.Detail = "every candidate is running as a `ccswap run` session"
 	default:
 		event.Reason = "no-viable-candidate"
 		event.Detail = "no candidate's stored token could be refreshed (network?)"

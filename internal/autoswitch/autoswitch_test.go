@@ -439,7 +439,7 @@ func TestAnExpiredActiveTokenHoldsBeforeFailingOver(t *testing.T) {
 	}
 }
 
-// A live login cswap does not manage must never be switched away from: there is
+// A live login ccswap does not manage must never be switched away from: there is
 // no backup of it anywhere.
 func TestAnUnmanagedLoginIsNeverTouched(t *testing.T) {
 	f := newFixture(t)

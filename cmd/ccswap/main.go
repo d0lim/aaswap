@@ -1,4 +1,4 @@
-// Command cswap manages several Claude Code logins on one machine.
+// Command ccswap manages several Claude Code logins on one machine.
 //
 // The entry point is deliberately thin: it wires signals to a context and hands
 // everything else to internal/cli, which returns an exit code rather than

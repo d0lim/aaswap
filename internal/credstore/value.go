@@ -18,14 +18,14 @@ import (
 
 // Keychain service names.
 const (
-	// BackupService holds cswap's own per-account backup credentials.
+	// BackupService holds ccswap's own per-account backup credentials.
 	// Deliberately distinct from the legacy keyring service so old keyring
 	// items and new security(1) items can coexist during migration
 	// (safe write, verify, then delete).
 	BackupService = "claude-swap"
 
 	// ClaudeOAuthService is Claude Code's *active* OAuth credential. Claude
-	// Code reads it; cswap reads and writes it when switching accounts.
+	// Code reads it; ccswap reads and writes it when switching accounts.
 	ClaudeOAuthService = "Claude Code-credentials"
 
 	// ClaudeManagedKeyService is Claude Code's *active* managed API key — the
@@ -52,7 +52,7 @@ var sharedCredentialKeys = []string{
 	"pluginSecrets",
 }
 
-// accountCredentialKeys are the account-scoped siblings cswap knows about,
+// accountCredentialKeys are the account-scoped siblings ccswap knows about,
 // named so the unrecognized-key probe below does not flag them. claudeAiOauth
 // is the login itself; trustedDeviceToken is enrolled per (device, account) at
 // /login.
@@ -104,7 +104,7 @@ func SharedCredentialFields(credentials string) (map[string]any, bool) {
 		return nil, false
 	}
 	if _, hasLogin := data["claudeAiOauth"]; hasLogin {
-		// A sibling key cswap does not know defaults to slot-owned, which fails
+		// A sibling key ccswap does not know defaults to slot-owned, which fails
 		// safe — but silently. If Claude Code grows a new *shared* key, that
 		// default quietly reintroduces the stale-restore papercut for it, so
 		// leave a trace that gets noticed.
@@ -116,7 +116,7 @@ func SharedCredentialFields(credentials string) (map[string]any, bool) {
 		}
 		if len(unrecognized) > 0 {
 			slices.Sort(unrecognized)
-			slog.Debug("live credential has sibling keys cswap does not recognize "+
+			slog.Debug("live credential has sibling keys ccswap does not recognize "+
 				"(a newer Claude Code?); treating them as slot-owned",
 				"keys", unrecognized)
 		}

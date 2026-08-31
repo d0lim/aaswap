@@ -309,7 +309,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The slot numbers are kept, so a shell history full of `cswap switch 3`
+	// The slot numbers are kept, so a shell history full of `ccswap switch 3`
 	// keeps working on the new machine.
 	if roster.Accounts["1"].Email != "one@example.com" || roster.Accounts["3"].Email != "three@example.com" {
 		t.Errorf("roster = %+v", roster.Accounts)

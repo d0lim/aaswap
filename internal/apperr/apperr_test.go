@@ -30,7 +30,7 @@ func TestHierarchy(t *testing.T) {
 		},
 		{
 			// The one the CLI treats specially: Claude Code holding its own
-			// lock is not a cswap defect, but it is still a lock error.
+			// lock is not a ccswap defect, but it is still a lock error.
 			name:      "Claude Code lock timeout",
 			err:       ErrClaudeCodeLockTimeout,
 			ancestors: []error{ErrLock, Err},

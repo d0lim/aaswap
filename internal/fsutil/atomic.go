@@ -22,7 +22,7 @@ const jsonIndent = "  "
 // directory's 0600/0700 modes.
 //
 // Shared by settings.json, the auto-switch state file, the stash manifest, the
-// usage store and session config — every machine-local JSON artifact cswap
+// usage store and session config — every machine-local JSON artifact ccswap
 // owns.
 //
 // # It writes THROUGH a symlink, never over it
@@ -38,7 +38,7 @@ const jsonIndent = "  "
 //   - The temp file is created beside the *resolved* target, so the rename stays
 //     on one filesystem and remains atomic. Beside the link it would hit EXDEV
 //     whenever the target lives on another mount.
-//   - The 0700 hardening stays on the directory cswap owns — the link's parent,
+//   - The 0700 hardening stays on the directory ccswap owns — the link's parent,
 //     not the resolved one. Applying it to the resolved parent would narrow a
 //     directory belonging to something else, and fail outright when that parent
 //     is not ours to chmod. The written file still gets 0600, and the temp file
