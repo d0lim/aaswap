@@ -80,6 +80,10 @@ type StashEntry struct {
 	// CredentialsMtime is when the live credentials file was last written.
 	// Evidence for identifying what rewrote it.
 	CredentialsMtime string `json:"credentialsMtime,omitzero"`
+	// ConsumedFP is the generation this entry's credential SUPERSEDED, and is
+	// the adoption key: a later pass that finds the slot still holding exactly
+	// that generation knows this entry is the persist that never completed.
+	ConsumedFP string `json:"consumedFp,omitzero"`
 
 	Extra map[string]jsontext.Value `json:",embed"`
 }
@@ -267,6 +271,30 @@ func (s *Store) mutateStashManifest(apply func(entries map[string]*StashEntry)) 
 			apperr.ErrCredentialWrite, err)
 	}
 	return nil
+}
+
+// StashEntryFilesExist reports whether any stashed credential's bytes are on
+// disk.
+//
+// Consulted when the manifest is CORRUPT: with no entry files, an empty scan is
+// not a guess about a pending successor — there provably is none — and
+// proceeding lets the next write set the bad manifest aside, which is the only
+// repair. With entry files present, an empty scan would make a caller spend a
+// generation some pass already superseded.
+func (s *Store) StashEntryFilesExist() bool {
+	names, err := os.ReadDir(s.CredentialsDir())
+	if err != nil {
+		// Unreadable: assume the worst, because the alternative discards
+		// evidence of a spent generation.
+		return true
+	}
+	for _, name := range names {
+		base := name.Name()
+		if strings.HasPrefix(base, stashPrefix) && strings.HasSuffix(base, stashSuffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // SortedStashIDs orders entry ids, which sorts them chronologically because the
