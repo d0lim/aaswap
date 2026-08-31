@@ -1,0 +1,397 @@
+package cli
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"slices"
+	"strings"
+
+	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/realiti4/claude-swap/internal/mappings"
+	"github.com/realiti4/claude-swap/internal/session"
+	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/spf13/cobra"
+)
+
+// runCommand launches Claude Code as a chosen account without disturbing the
+// machine's default login.
+func (a *App) runCommand() *cobra.Command {
+	var share, shareHistory bool
+	cmd := &cobra.Command{
+		Use:   "run [NUM|EMAIL|ALIAS] [-- CLAUDE ARGS...]",
+		Short: "Launch Claude Code as one account, leaving the default login alone",
+		Long: "With no account, the working directory decides: `cswap map` remembers which\n" +
+			"account a directory belongs to, and the nearest mapped ancestor wins.\n" +
+			"An unmapped directory launches Claude Code exactly as typing `claude` would.\n\n" +
+			"Everything after `--` is passed through to Claude Code.",
+		Example: "  cswap run 2\n" +
+			"  cswap run work -- --resume\n" +
+			"  cswap run                      # whichever account this directory maps to",
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			identifier, claudeArgs := splitRunArgs(cmd, args)
+			return a.runSession(cmd, identifier, claudeArgs, session.ShareOptions{
+				Customizations: share, History: shareHistory,
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&share, "share", true,
+		"mirror the default profile's settings, skills, commands and agents")
+	cmd.Flags().BoolVar(&shareHistory, "share-history", false,
+		"also share conversation history with the default profile")
+	silenceUsage(cmd)
+	return cmd
+}
+
+// splitRunArgs separates the account from the arguments meant for Claude Code.
+//
+// Cobra records where `--` appeared, so `cswap run -- --resume` passes the flag
+// through instead of reading it as an account.
+func splitRunArgs(cmd *cobra.Command, args []string) (identifier string, claudeArgs []string) {
+	return splitRunArgsAt(args, cmd.ArgsLenAtDash())
+}
+
+// splitRunArgsAt is the split itself, given where cobra saw the dash.
+func splitRunArgsAt(args []string, at int) (identifier string, claudeArgs []string) {
+	if at < 0 {
+		// No `--`: a single leading token is the account, and anything else is
+		// a mistake cobra's argument check will not catch, so it goes to Claude
+		// Code where the user can see it.
+		if len(args) > 0 {
+			return args[0], args[1:]
+		}
+		return "", nil
+	}
+	if at > 0 {
+		return args[0], args[at:]
+	}
+	return "", args
+}
+
+func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []string, share session.ShareOptions) error {
+	s, err := a.switcher()
+	if err != nil {
+		return err
+	}
+
+	if identifier == "" {
+		resolved, found, err := a.resolveFromDirectory(s)
+		if err != nil {
+			return err
+		}
+		if !found {
+			// No mapping: exactly what typing `claude` would do, with the
+			// environment untouched.
+			a.printer.Println(a.printer.Dimmed(
+				"This directory maps to no account — launching Claude Code as the default login."))
+			return a.execClaude(claudeArgs, os.Environ())
+		}
+		identifier = resolved
+	}
+
+	num, account, err := s.ResolveAccount(identifier)
+	if err != nil {
+		return err
+	}
+	if account.AuthKind() == swap.KindAPIKey {
+		return fmt.Errorf("%w: account %s is an API-key account, which Claude Code cannot "+
+			"run in session mode", apperr.ErrSession, num)
+	}
+
+	manager := a.sessionManager(s)
+	sessionDir := manager.Dir(num, account.Email)
+	identity := session.Identity{Email: account.Email, OrganizationUUID: account.OrganizationUUID}
+
+	// The same-account fast path: never make a second credential copy for the
+	// account that IS the default login. Two copies of one account drift apart
+	// the moment the server rotates the refresh token.
+	if os.Getenv("CLAUDE_CONFIG_DIR") == "" {
+		if live, ok := s.LiveIdentity(); ok && live.Identity() == account.Identity() {
+			a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+				"Account %s (%s) is already the default login — launching Claude Code directly.",
+				num, account.Email)))
+			return a.execClaude(claudeArgs, os.Environ())
+		}
+	} else {
+		a.printer.Warning("CLAUDE_CONFIG_DIR is already set; overriding it for this launch.")
+	}
+
+	if err := a.prepareSession(manager, s, sessionDir, num, account, identity); err != nil {
+		return err
+	}
+	if err := manager.SyncSharing(sessionDir, defaultProfileDir(s), share); err != nil {
+		return err
+	}
+	if err := manager.SyncMCPServers(sessionDir, s.Paths.DefaultGlobalConfigPath(),
+		share.Customizations); err != nil {
+		return err
+	}
+
+	env, scrubbed := session.Environment(os.Environ(), sessionDir)
+	if len(scrubbed) > 0 {
+		a.printer.Warning(fmt.Sprintf("Ignoring %s for this session — it would override "+
+			"the account inside Claude Code.", strings.Join(scrubbed, ", ")))
+	}
+	a.printer.Println(a.printer.Accent("Launching"), " ",
+		fmt.Sprintf("Account %s (%s)", num, account.Email),
+		a.printer.Muted(" [session mode]"))
+	return a.execClaude(claudeArgs, env)
+}
+
+// prepareSession makes sure the profile is usable, seeding it when it is not.
+func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, sessionDir, num string, account *swap.Account, identity session.Identity) error {
+	// A deferred invalidation is honored only when nothing is running: a second
+	// launch joining a live session must not re-seed under it. The marker
+	// survives for a later launch.
+	stale := session.IsStale(sessionDir) && manager.Quiescent(num, account.Email)
+	if !stale && manager.Usable(sessionDir, identity) {
+		return nil
+	}
+
+	if stale {
+		session.ClearStale(sessionDir)
+	}
+	if err := manager.Bootstrap(sessionDir, num, account.Email); err != nil {
+		return err
+	}
+
+	switch manager.Validity(sessionDir, identity) {
+	case session.Valid:
+		return nil
+	case session.Unknown:
+		// A probe that did not answer must not fail a launch that is fine: the
+		// profile was just seeded from the stored credential, so the same local
+		// artifacts that answer the reuse path answer this one.
+		if manager.ArtifactsSayUsable(sessionDir, identity) {
+			return nil
+		}
+		return fmt.Errorf("%w: the session profile for account %s (%s) could not be "+
+			"verified — `claude auth status` did not answer. The profile is left in "+
+			"place; check that `claude` is on your PATH, then retry",
+			apperr.ErrSession, num, account.Email)
+	case session.Unreachable:
+		return fmt.Errorf("%w: `claude` could not be run, so the session profile for "+
+			"account %s could not be verified. Check that Claude Code is installed and "+
+			"on your PATH", apperr.ErrSession, num)
+	}
+
+	// Only a definite Invalid licenses destroying the profile.
+	if err := manager.Remove(sessionDir); err != nil {
+		return err
+	}
+	return fmt.Errorf("%w: the session profile for account %s (%s) failed validation. Log "+
+		"in with that account and re-add it: cswap add --slot %s",
+		apperr.ErrSession, num, account.Email, num)
+}
+
+// resolveFromDirectory maps the working directory to an account.
+func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false, fmt.Errorf("%w: reading the working directory: %w", apperr.ErrConfig, err)
+	}
+	store := mappings.New(s.BackupRoot())
+	_, entry, found := store.Resolve(cwd)
+	if !found {
+		return "", false, nil
+	}
+
+	roster, err := s.RosterOrEmpty()
+	if err != nil {
+		return "", false, err
+	}
+	num, exists := roster.FindSlot(swap.Identity{
+		Email:            entry.Email,
+		OrganizationUUID: entry.OrganizationUUID,
+	})
+	if !exists {
+		// The mapping outlived its account. Say so rather than failing: the
+		// user asked to run Claude Code, and the default login still can.
+		a.printer.Warning(fmt.Sprintf(
+			"This directory maps to %s, which is no longer managed. Remove the mapping "+
+				"with `cswap unmap`, or re-add the account.", entry.Email))
+		return "", false, nil
+	}
+	return num, true, nil
+}
+
+func (a *App) sessionManager(s *swap.Switcher) *session.Manager {
+	return &session.Manager{
+		BackupRoot: s.BackupRoot(),
+		Platform:   s.Paths.Platform,
+		Creds:      s.Creds,
+		Probe:      session.ExecProber{},
+		Now:        s.Now,
+	}
+}
+
+// defaultProfileDir is the default ~/.claude, which sharing always mirrors —
+// even when the invoking shell is itself inside a session.
+func defaultProfileDir(s *swap.Switcher) string {
+	return s.Paths.DefaultClaudeConfigHome()
+}
+
+// execClaude hands the terminal over to Claude Code.
+//
+// On POSIX it does not return: see handOver.
+func (a *App) execClaude(claudeArgs []string, env []string) error {
+	binary, err := lookClaude()
+	if err != nil {
+		return err
+	}
+	return handOver(binary, claudeArgs, env, a.Out, a.Err, a.In)
+}
+
+func lookClaude() (string, error) {
+	binary, err := exec.LookPath(session.ClaudeBinary)
+	if err != nil {
+		return "", fmt.Errorf("%w: `claude` was not found on your PATH. Install Claude "+
+			"Code first", apperr.ErrSession)
+	}
+	return binary, nil
+}
+
+// mapCommand remembers which account a directory belongs to.
+func (a *App) mapCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "map NUM|EMAIL|ALIAS [DIRECTORY]",
+		Short: "Remember which account a directory belongs to",
+		Long: "`cswap run` with no account resolves the working directory to its nearest\n" +
+			"mapped ancestor, so a project always gets the same login.",
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 2 {
+				dir = args[1]
+			}
+			return a.runMap(args[0], dir)
+		},
+	}
+	silenceUsage(cmd)
+	return cmd
+}
+
+func (a *App) unmapCommand() *cobra.Command {
+	var list bool
+	cmd := &cobra.Command{
+		Use:   "unmap [DIRECTORY]",
+		Short: "Forget a directory's account",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if list {
+				return a.runMappings()
+			}
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			return a.runUnmap(dir)
+		},
+	}
+	cmd.Flags().BoolVar(&list, "list", false, "show every mapping instead")
+	silenceUsage(cmd)
+	return cmd
+}
+
+func (a *App) mappingsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "mappings",
+		Short: "Show every directory mapping",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return a.runMappings()
+		},
+	}
+	silenceUsage(cmd)
+	return cmd
+}
+
+func (a *App) runMap(identifier, dir string) error {
+	s, err := a.switcher()
+	if err != nil {
+		return err
+	}
+	num, account, err := s.ResolveAccount(identifier)
+	if err != nil {
+		return err
+	}
+
+	store := mappings.New(s.BackupRoot())
+	store.Now = s.Now
+	key, err := store.Set(dir, mappings.Identity{
+		Email:            account.Email,
+		OrganizationUUID: account.OrganizationUUID,
+	})
+	if err != nil {
+		return err
+	}
+	a.printer.Println(a.printer.Accent("Mapped"), " ", key, " → ",
+		fmt.Sprintf("Account %s (%s)", num, account.Email))
+	return nil
+}
+
+func (a *App) runUnmap(dir string) error {
+	s, err := a.switcher()
+	if err != nil {
+		return err
+	}
+	store := mappings.New(s.BackupRoot())
+	removed, err := store.Remove(dir)
+	if err != nil {
+		return err
+	}
+	if !removed {
+		a.printer.Println(a.printer.Dimmed("That directory has no mapping."))
+		return nil
+	}
+	a.printer.Println(a.printer.Accent("Unmapped"), " ", dir)
+	return nil
+}
+
+func (a *App) runMappings() error {
+	s, err := a.switcher()
+	if err != nil {
+		return err
+	}
+	store := mappings.New(s.BackupRoot())
+	table := store.Load()
+
+	if a.json {
+		type row struct {
+			Directory        string `json:"directory"`
+			Email            string `json:"email"`
+			OrganizationUUID string `json:"organizationUuid"`
+			Added            string `json:"added,omitzero"`
+		}
+		rows := make([]row, 0, len(table))
+		for _, dir := range sortedMapKeys(table) {
+			entry := table[dir]
+			rows = append(rows, row{
+				Directory: dir, Email: entry.Email,
+				OrganizationUUID: entry.OrganizationUUID, Added: entry.Added,
+			})
+		}
+		a.emitJSON(rows)
+		return nil
+	}
+
+	if len(table) == 0 {
+		a.printer.Println(a.printer.Dimmed(
+			"No directories are mapped. Map one with: cswap map <account> [directory]"))
+		return nil
+	}
+	for _, dir := range sortedMapKeys(table) {
+		a.printer.Println("  ", a.printer.Accent(dir), " → ", table[dir].Email)
+	}
+	return nil
+}
+
+func sortedMapKeys(table map[string]*mappings.Entry) []string {
+	keys := make([]string, 0, len(table))
+	for key := range table {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
