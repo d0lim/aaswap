@@ -172,6 +172,16 @@ func (r *Resolver) BackupRoot() string {
 	return r.LegacyBackupRoot()
 }
 
+// CacheDir is where cswap keeps regenerable state: the usage table and the
+// update-check stamp.
+//
+// Everything under it is throwaway by construction. Deleting it costs at most
+// one round of re-fetching, which is why the backup-root migration treats a
+// target holding only this directory as empty.
+func (r *Resolver) CacheDir() string {
+	return filepath.Join(r.BackupRoot(), "cache")
+}
+
 // expandTilde resolves a leading ~ against this Resolver's home directory.
 // An empty or plain-"~"-less value is returned unchanged.
 func (r *Resolver) expandTilde(p string) string {
