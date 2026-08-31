@@ -84,8 +84,8 @@ func runWindowsKeyringNotice(backups BackupProbe, p platform.Platform, roster Ro
 		value, unreadable := backups.ReadAccount(account.Num, account.Email)
 		if value == "" && !unreadable {
 			// Genuinely absent, not merely unreachable. An unreadable backup is
-			// a transient problem with its own message elsewhere; advising a
-			// Python round trip for it would send the user somewhere useless.
+			// a transient problem with its own message elsewhere, and advising
+			// a re-add for it would send the user to redo work that is fine.
 			stranded = append(stranded, fmt.Sprintf("%s (%s)", account.Num, account.Email))
 		}
 	}
@@ -96,11 +96,11 @@ func runWindowsKeyringNotice(backups BackupProbe, p platform.Platform, roster Ro
 	fmt.Fprintf(os.Stderr,
 		"claude-swap: %d account(s) have no stored credentials on this machine: %s\n"+
 			"  If these accounts were added with claude-swap 0.10 or earlier, their\n"+
-			"  credentials are still in the Windows Credential Manager, which this\n"+
-			"  build cannot read. Run the Python claude-swap once to move them:\n"+
-			"      uv tool install claude-swap && cswap list\n"+
-			"  then switch back to this build. Otherwise re-add each account with\n"+
-			"  `cswap add --slot N` after logging in with it.\n",
+			"  credentials are still in the Windows Credential Manager, which no\n"+
+			"  current build reads. Log in with each account and re-add it:\n"+
+			"      cswap add --slot N\n"+
+			"  The Credential Manager entries are left untouched, so nothing is lost\n"+
+			"  by doing this.\n",
 		len(stranded), strings.Join(stranded, ", "))
 
 	// Deliberately unrecorded: the advice must keep appearing until the
