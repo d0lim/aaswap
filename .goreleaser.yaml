@@ -1,0 +1,72 @@
+# Release configuration for cswap.
+#
+# Builds a static binary per platform, publishes them to a GitHub release, and
+# updates the Homebrew tap. The version comes from the git tag and is stamped
+# into the binary, so `cswap --version` and `cswap upgrade` agree with what was
+# actually released.
+version: 2
+
+project_name: claude-swap
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cswap
+    main: ./cmd/cswap
+    binary: cswap
+    env:
+      # No cgo: the whole point of the Go port is one file a user can copy onto
+      # a machine that has no toolchain. Every dependency here is pure Go —
+      # macOS Keychain access shells out to security(1) rather than linking
+      # Security.framework, deliberately, so that Claude Code keeps seeing the
+      # same item creator.
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/realiti4/claude-swap/internal/buildinfo.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: cswap
+    # Reproducible names a script can construct without consulting the release
+    # page.
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksums:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: claude-swap
+    repository:
+      owner: realiti4
+      name: homebrew-tap
+    directory: Formula
+    homepage: https://github.com/realiti4/claude-swap
+    description: Switch between multiple Claude Code accounts
+    license: MIT
+    test: |
+      system "#{bin}/cswap", "--version"
+    install: |
+      bin.install "cswap"
