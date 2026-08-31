@@ -7,6 +7,57 @@ on:
     branches: [main]
 
 jobs:
+  # ---------------------------------------------------------------- Go (port)
+  # The Go rewrite is landing layer by layer; these jobs gate it from the first
+  # commit so no phase can be merged unbuilt, unlinted, or written in pre-1.27
+  # idioms. The Python jobs below stay until the port reaches parity.
+  go-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads the version from go.mod so CI and mise.toml can never drift.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...
+
+  go-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Go 1.27 ships the modernizers inside `go fix`; -diff makes it a check
+      # that fails when the tree isn't already written in modern Go
+      # (slices/maps, min/max, range-over-int, errors.AsType, wg.Go, ...).
+      - name: Modern Go idioms
+        run: go fix -diff ./...
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2
+
+  # ------------------------------------------------------------ Python (orig)
   test:
     runs-on: ubuntu-latest
 
