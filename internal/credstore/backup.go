@@ -153,6 +153,10 @@ func (s *Store) readBackupKeychain(accountNum, email string) (string, error) {
 // away; when the Keychain is unusable, or the write fails, it falls back to the
 // .enc file. Every other platform writes the file.
 func (s *Store) WriteAccount(accountNum, email, credentials string) error {
+	// Best effort, and never a precondition: the displaced generation is a
+	// recovery cushion for a write that must happen either way.
+	s.retainPreviousBackup(accountNum, email, credentials)
+
 	if !s.usesFileBackupBackend() {
 		_, err := s.cap.observe(func() (struct{}, error) {
 			return struct{}{}, s.kc.Set(BackupService, backupUsername(accountNum, email), credentials)
@@ -214,6 +218,9 @@ func (s *Store) DeleteAccount(accountNum, email string) error {
 	if err := os.Remove(s.backupEncPath(accountNum, email)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		errs = append(errs, fmt.Errorf("remove backup file: %w", err))
 	}
+	// The retained generation goes with the slot: leaving it would let a future
+	// account landing on this number recover a credential that was never its.
+	s.DeletePreviousBackup(accountNum, email)
 	if s.platform == platform.MacOS {
 		if _, err := s.cap.observe(func() (struct{}, error) {
 			return struct{}{}, s.kc.Delete(BackupService, backupUsername(accountNum, email))
