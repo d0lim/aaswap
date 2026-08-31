@@ -290,7 +290,15 @@ func (s *Switcher) entryTokenDead(entry usagestore.Entry, view AccountView) bool
 		// store. One momentary lock would un-quarantine a genuinely dead
 		// account permanently. Holding the strike costs one pass of "re-login
 		// needed"; erasing it costs the quarantine itself.
-		return true
+		//
+		// Only a strike that EXISTS can be held. The empty fingerprint asks
+		// the count alone, because an unreadable source cannot be
+		// fingerprint-matched; the check above already proved the live
+		// credential does not carry the condemned generation, so a row that
+		// was never struck has nothing here to preserve, and answering true
+		// for it would manufacture "re-login needed" for a healthy account
+		// out of one momentary lock.
+		return entry.TokenDead("")
 	}
 	return backup != "" && entry.TokenDead(claudeapi.Fingerprint(backup))
 }
