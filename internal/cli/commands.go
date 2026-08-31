@@ -55,6 +55,12 @@ func (a *App) rootCommand() *cobra.Command {
 		a.purgeCommand(),
 		a.configCommand(),
 		a.unclaimedCommand(),
+		a.runCommand(),
+		a.mapCommand(),
+		a.unmapCommand(),
+		a.mappingsCommand(),
+		a.exportCommand(),
+		a.importCommand(),
 	)
 	return root
 }

@@ -2,12 +2,15 @@ package cli
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/realiti4/claude-swap/internal/claudeapi"
 	"github.com/realiti4/claude-swap/internal/jsonout"
 	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/spf13/cobra"
 )
 
 func TestListShowsEveryAccount(t *testing.T) {
@@ -727,4 +730,178 @@ type staticOracle struct{ uuid, email string }
 
 func (o staticOracle) Profile(context.Context, string) *claudeapi.Identity {
 	return &claudeapi.Identity{UUID: o.uuid, Email: o.email}
+}
+
+func TestExportAndImportRoundTripThroughTheCLI(t *testing.T) {
+	from := newHarness(t)
+	from.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
+	from.login("1", "one@example.com")
+
+	path := filepath.Join(t.TempDir(), "accounts.json")
+	if code := from.run("export", path); code != ExitOK {
+		t.Fatalf("export: exit = %d: %s", code, from.stderr())
+	}
+	// The summary is on stderr, so a piped export yields nothing but the file.
+	wantContains(t, from.stderr(), "Exported", "2 account(s)")
+	if from.stdout() != "" {
+		t.Errorf("export to a file wrote to stdout: %q", from.stdout())
+	}
+
+	// The file carries live refresh tokens.
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("the export's mode is %o, want 0600", perm)
+	}
+
+	to := newHarness(t)
+	if code := to.run("import", path); code != ExitOK {
+		t.Fatalf("import: exit = %d: %s", code, to.stderr())
+	}
+	wantContains(t, to.stdout(), "Imported", "one@example.com", "two@example.com")
+
+	roster, err := to.switcher.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Accounts) != 2 {
+		t.Errorf("the roster holds %v", roster.Accounts)
+	}
+}
+
+// "-" is how a user adds their own encryption, so stdout must be nothing but
+// the envelope.
+func TestExportToStdoutIsPureJSON(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+
+	if code := h.run("export", "-"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	payload := h.decodeJSON()
+	if payload["version"] != float64(1) {
+		t.Errorf("version = %v", payload["version"])
+	}
+	if payload["encrypted"] != false {
+		t.Errorf("encrypted = %v", payload["encrypted"])
+	}
+	accounts := payload["accounts"].([]any)
+	if len(accounts) != 1 {
+		t.Errorf("accounts = %v", accounts)
+	}
+}
+
+func TestImportFromStdin(t *testing.T) {
+	from := newHarness(t)
+	from.seed(map[string]string{"1": "one@example.com"})
+	if code := from.run("export", "-"); code != ExitOK {
+		t.Fatalf("export: exit = %d: %s", code, from.stderr())
+	}
+	envelope := from.stdout()
+
+	to := newHarness(t)
+	to.app.In = strings.NewReader(envelope)
+	if code := to.run("import", "-"); code != ExitOK {
+		t.Fatalf("import: exit = %d: %s", code, to.stderr())
+	}
+	wantContains(t, to.stdout(), "Imported", "one@example.com")
+}
+
+func TestImportRefusesAnEncryptedEnvelope(t *testing.T) {
+	h := newHarness(t)
+	path := filepath.Join(t.TempDir(), "encrypted.json")
+	if err := os.WriteFile(path,
+		[]byte(`{"version":1,"encrypted":true,"accounts":[{"number":1,"email":"a@b.c"}]}`),
+		0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := h.run("import", path); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal", code)
+	}
+	wantContains(t, h.stderr(), "Decrypt it before importing", "gpg")
+}
+
+func TestImportOfAMissingFile(t *testing.T) {
+	h := newHarness(t)
+	if code := h.run("import", filepath.Join(t.TempDir(), "nope.json")); code != ExitError {
+		t.Fatalf("exit = %d", code)
+	}
+	wantContains(t, h.stderr(), "import file not found")
+}
+
+func TestMappings(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+	dir := t.TempDir()
+
+	if code := h.run("map", "1", dir); code != ExitOK {
+		t.Fatalf("map: exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "Mapped", "one@example.com")
+
+	if code := h.run("mappings"); code != ExitOK {
+		t.Fatalf("mappings: exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "one@example.com")
+
+	if code := h.run("unmap", dir); code != ExitOK {
+		t.Fatalf("unmap: exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "Unmapped")
+
+	if code := h.run("mappings"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "No directories are mapped", "cswap map")
+}
+
+func TestMappingAnUnknownAccount(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+	if code := h.run("map", "nobody@example.com", t.TempDir()); code != ExitError {
+		t.Fatalf("exit = %d", code)
+	}
+	wantContains(t, h.stderr(), "does not match any managed account")
+}
+
+// Everything after `--` belongs to Claude Code, including something that looks
+// like an account.
+func TestSplitRunArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		dashAt         int
+		wantIdentifier string
+		wantClaude     []string
+	}{
+		{"just an account", []string{"2"}, -1, "2", nil},
+		{"an account and passthrough", []string{"2", "--resume"}, 1, "2", []string{"--resume"}},
+		{"only passthrough", []string{"--resume"}, 0, "", []string{"--resume"}},
+		{"nothing at all", nil, -1, "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.SetArgs(tt.args)
+			// ArgsLenAtDash is what cobra records; drive it directly rather
+			// than re-parsing.
+			identifier, claudeArgs := splitRunArgsAt(tt.args, tt.dashAt)
+			if identifier != tt.wantIdentifier {
+				t.Errorf("identifier = %q, want %q", identifier, tt.wantIdentifier)
+			}
+			if len(claudeArgs) != len(tt.wantClaude) {
+				t.Errorf("claudeArgs = %v, want %v", claudeArgs, tt.wantClaude)
+				return
+			}
+			for i := range claudeArgs {
+				if claudeArgs[i] != tt.wantClaude[i] {
+					t.Errorf("claudeArgs = %v, want %v", claudeArgs, tt.wantClaude)
+					break
+				}
+			}
+		})
+	}
 }

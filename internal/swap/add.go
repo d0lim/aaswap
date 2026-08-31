@@ -99,7 +99,7 @@ func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, alia
 	if err != nil {
 		return AddOutcome{}, err
 	}
-	config, err := s.readLiveConfig()
+	config, err := s.ReadLiveConfig()
 	if err != nil {
 		return AddOutcome{}, err
 	}
@@ -161,7 +161,7 @@ func (s *Switcher) refreshInPlace(ctx context.Context, roster *Roster, num, alia
 	if err != nil {
 		return AddOutcome{}, err
 	}
-	config, err := s.readLiveConfig()
+	config, err := s.ReadLiveConfig()
 	if err != nil {
 		return AddOutcome{}, err
 	}
@@ -277,12 +277,12 @@ func (s *Switcher) captureVerified(ctx context.Context, identity LiveIdentity) (
 	return captured, nil
 }
 
-// readLiveConfig reads Claude Code's config verbatim, for storage alongside the
+// ReadLiveConfig reads Claude Code's config verbatim, for storage alongside the
 // credential.
 //
 // Read as bytes rather than parsed and re-serialized: this is the user's file,
 // and a slot must restore exactly what was captured.
-func (s *Switcher) readLiveConfig() (string, error) {
+func (s *Switcher) ReadLiveConfig() (string, error) {
 	data, err := os.ReadFile(s.Paths.GlobalConfigPath())
 	if err != nil {
 		if os.IsNotExist(err) {
