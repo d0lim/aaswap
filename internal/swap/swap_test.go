@@ -54,10 +54,13 @@ func newFixture(t *testing.T) *fixture {
 
 	f := &fixture{t: t, now: testNow, home: home, root: root}
 	f.Switcher = &Switcher{
-		Paths:    r,
-		Creds:    credstore.New(r, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
-		Usage:    usagestore.New(r.CacheDir()),
-		Settings: settings.Defaults(),
+		// Collapse the request stagger: the STAGGERING is the behavior under
+		// test, not the wall clock it costs.
+		FetchStagger: time.Millisecond,
+		Paths:        r,
+		Creds:        credstore.New(r, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
+		Usage:        usagestore.New(r.CacheDir()),
+		Settings:     settings.Defaults(),
 	}
 	// One clock for the Switcher and its usage store: the store decides
 	// freshness and leases against its own now, and two clocks would make a

@@ -61,12 +61,6 @@ func (f *fixture) snapshot() *Snapshot {
 	return snapshot
 }
 
-func init() {
-	// Collapse the request stagger: the STAGGERING is what the tests check, not
-	// the wall clock it costs.
-	fetchStagger = time.Millisecond
-}
-
 func TestCollectMeasuresEveryDueAccount(t *testing.T) {
 	f := newFixture(t)
 	f.twoAccounts()

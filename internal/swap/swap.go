@@ -112,6 +112,11 @@ type Switcher struct {
 
 	// LockTimeout bounds how long a roster mutation waits for the lock.
 	LockTimeout time.Duration
+
+	// FetchStagger spaces the request starts of a parallel collect. Zero uses
+	// [DefaultFetchStagger]; a negative value disables the spacing, which only
+	// a test should ever want.
+	FetchStagger time.Duration
 }
 
 // New returns a Switcher wired to the given paths.

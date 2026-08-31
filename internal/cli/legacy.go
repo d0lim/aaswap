@@ -24,6 +24,11 @@ var legacyFlags = map[string]string{
 	"--unclaimed":       "unclaimed",
 	"--alias":           "alias",
 	"--switch-to":       "switch",
+	"--auto":            "auto",
+	"--run":             "run",
+	"--map":             "map",
+	"--unmap":           "unmap",
+	"--mappings":        "mappings",
 }
 
 // translateLegacyFlags rewrites a leading legacy flag into its verb.
