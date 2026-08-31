@@ -58,8 +58,11 @@ func newFixture(t *testing.T) *fixture {
 		Creds:    credstore.New(r, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
 		Usage:    usagestore.New(r.CacheDir()),
 		Settings: settings.Defaults(),
-		Now:      func() time.Time { return f.now },
 	}
+	// One clock for the Switcher and its usage store: the store decides
+	// freshness and leases against its own now, and two clocks would make a
+	// measurement fresh to one half of a collect pass and stale to the other.
+	f.SetClock(func() time.Time { return f.now })
 	return f
 }
 

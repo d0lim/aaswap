@@ -58,6 +58,11 @@ type IdentityOracle interface {
 	Profile(ctx context.Context, accessToken string) *claudeapi.Identity
 }
 
+// TokenRefresher exchanges a refresh token for a rotated credential.
+type TokenRefresher interface {
+	Refresh(ctx context.Context, credentials string, now time.Time) claudeapi.RefreshOutcome
+}
+
 // UsageFetcher measures one account's rate-limit usage.
 type UsageFetcher interface {
 	FetchUsageForAccount(ctx context.Context, req claudeapi.FetchRequest) claudeapi.UsageOutcome
@@ -88,10 +93,21 @@ type Switcher struct {
 	// and every account reads as unknown, never as exhausted.
 	Fetcher UsageFetcher
 
+	// Refresher POSTs a refresh-token grant. Nil defers every refresh rather
+	// than reporting one as failed — an absent client is not evidence about a
+	// token.
+	Refresher TokenRefresher
+
 	// Settings is the effective configuration after CLI overrides.
 	Settings settings.Settings
 
 	// Now is the clock, injected so a test can drive timestamps.
+	//
+	// It must be the SAME clock the usage store uses: the store decides
+	// freshness, leases and backoff against its own now, and two clocks would
+	// let a measurement read as fresh to one half of a collect pass and stale
+	// to the other. Use [Switcher.SetClock] rather than assigning this
+	// directly.
 	Now func() time.Time
 
 	// LockTimeout bounds how long a roster mutation waits for the lock.
@@ -108,9 +124,18 @@ func New(r *paths.Resolver) *Switcher {
 		Usage:       usagestore.New(r.CacheDir()),
 		Oracle:      client,
 		Fetcher:     client,
+		Refresher:   client,
 		Settings:    settings.Defaults(),
 		Now:         time.Now,
 		LockTimeout: lockfile.DefaultTimeout,
+	}
+}
+
+// SetClock points the Switcher and its usage store at one clock.
+func (s *Switcher) SetClock(now func() time.Time) {
+	s.Now = now
+	if s.Usage != nil {
+		s.Usage.Now = now
 	}
 }
 
