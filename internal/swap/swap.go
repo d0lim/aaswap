@@ -166,7 +166,7 @@ type Switcher struct {
 func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 	root := r.BackupRoot()
 	client := claudeapi.New()
-	return &Switcher{
+	s := &Switcher{
 		Provider:    provider,
 		Paths:       r,
 		Creds:       credstore.NewForProvider(r, root, keychain.New(), provider),
@@ -179,6 +179,14 @@ func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 		Now:         time.Now,
 		LockTimeout: lockfile.DefaultTimeout,
 	}
+	if provider == ProviderCodex {
+		// Codex's identity oracle and token refresher are Anthropic's, and
+		// pointing them at a Codex credential would ask the wrong server about
+		// the wrong token. Nil is the documented "do not check" for both.
+		s.Oracle, s.Refresher = nil, nil
+		s.Fetcher = s.codexUsageFetcher()
+	}
+	return s
 }
 
 // SetClock points the Switcher and its usage store at one clock.

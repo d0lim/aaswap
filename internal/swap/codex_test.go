@@ -3,12 +3,14 @@ package swap
 import (
 	"encoding/base64"
 	json "encoding/json/v2"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/d0lim/aaswap/internal/claudeapi"
 	"github.com/d0lim/aaswap/internal/credstore"
 	"github.com/d0lim/aaswap/internal/keychain"
 	"github.com/d0lim/aaswap/internal/paths"
@@ -114,5 +116,67 @@ func TestACodexAPIKeyInstallHasNoIdentity(t *testing.T) {
 	}
 	if identity, ok := f.LiveIdentity(); ok {
 		t.Errorf("LiveIdentity = %+v, want nothing", identity)
+	}
+}
+
+// writeCodexRollout writes a session rollout in the shape Codex writes one.
+func (f *fixture) writeCodexRollout(usedPct float64) {
+	f.t.Helper()
+	dir := filepath.Join(f.Paths.CodexHome(), "sessions", "2026", "08", "18")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		f.t.Fatal(err)
+	}
+	line := fmt.Sprintf(`{"timestamp":"2026-08-18T13:06:00Z","type":"token_count","payload":`+
+		`{"rate_limits":{"plan_type":"plus","primary":`+
+		`{"used_percent":%v,"window_minutes":10080,"resets_at":1787617468}}}}`, usedPct)
+	if err := os.WriteFile(filepath.Join(dir, "rollout-a.jsonl"), []byte(line+"\n"), 0o600); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// Codex quota comes from what Codex already recorded, attributed to whoever is
+// live now — the rollout does not say which account it belonged to.
+func TestTheCodexFetcherReportsTheLiveAccountsRecordedQuota(t *testing.T) {
+	f := codexFixture(t)
+	f.codexLogin("work@example.com", "acct-9", "plus")
+	f.writeCodexRollout(73)
+
+	roster := newRoster()
+	roster.Insert("work", &Account{Email: "work@example.com", OrganizationUUID: "acct-9"})
+	roster.Insert("spare", &Account{Email: "other@example.com"})
+	f.seedRoster(roster)
+
+	fetcher := f.codexUsageFetcher()
+
+	live := fetcher.FetchUsageForAccount(t.Context(), claudeapi.FetchRequest{AccountNum: "work"})
+	if live.Usage == nil || live.Usage.SevenDay == nil || live.Usage.SevenDay.Pct != 73 {
+		t.Fatalf("the live account reports %+v, want the recorded 73%%", live.Usage)
+	}
+
+	// An idle account gets NOTHING rather than the live one's numbers. Handing
+	// it those would send an auto-switch onto an account it has never measured,
+	// believing it had the other's headroom.
+	idle := fetcher.FetchUsageForAccount(t.Context(), claudeapi.FetchRequest{AccountNum: "spare"})
+	if idle.Usage != nil {
+		t.Errorf("an idle account reports %+v, want no measurement", idle.Usage)
+	}
+	// And no measurement must not read as an error either: unknown is unknown.
+	if !idle.OK() {
+		t.Errorf("an unmeasured account reported an error: %+v", idle)
+	}
+}
+
+// With nothing logged in there is no account to attribute a record to.
+func TestTheCodexFetcherAttributesNothingWithNoLiveLogin(t *testing.T) {
+	f := codexFixture(t)
+	f.writeCodexRollout(73)
+	roster := newRoster()
+	roster.Insert("work", &Account{Email: "work@example.com"})
+	f.seedRoster(roster)
+
+	got := f.codexUsageFetcher().FetchUsageForAccount(t.Context(),
+		claudeapi.FetchRequest{AccountNum: "work"})
+	if got.Usage != nil {
+		t.Errorf("attributed %+v with nobody logged in", got.Usage)
 	}
 }
