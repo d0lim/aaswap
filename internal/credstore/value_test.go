@@ -183,7 +183,7 @@ func TestServiceNames(t *testing.T) {
 	}
 	// Distinct from the legacy keyring service so old and new items coexist
 	// during migration.
-	if BackupService != "claude-swap" {
+	if BackupService != "ccswap" {
 		t.Errorf("BackupService = %q", BackupService)
 	}
 }

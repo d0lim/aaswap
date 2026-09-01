@@ -42,7 +42,7 @@ import (
 )
 
 // RosterFileName is the roster's name inside the backup root.
-const RosterFileName = "sequence.json"
+const RosterFileName = paths.RosterFileName
 
 // LockFileName guards every roster mutation. One lock for the whole store: the
 // operations that matter — adding, removing, relocating, switching — touch the

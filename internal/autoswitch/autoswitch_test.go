@@ -83,7 +83,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	home := t.TempDir()
-	root := filepath.Join(home, ".local", "share", "claude-swap")
+	root := filepath.Join(home, ".local", "share", paths.BackupDirName)
 	resolver := paths.New(home, platform.Linux)
 	for _, dir := range []string{resolver.ClaudeConfigHome(), root} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {

@@ -11,8 +11,8 @@
 //   - Credentials: <config-home>/.credentials.json.
 //
 // The ccswap backup root follows the XDG Base Directory Specification on
-// Linux and WSL ($XDG_DATA_HOME/ccswap) and keeps the legacy
-// ~/.claude-swap-backup on macOS and Windows.
+// Linux and WSL ($XDG_DATA_HOME/ccswap) and uses ~/.ccswap-backup on macOS and
+// Windows.
 //
 // # Why a Resolver instead of package functions
 //
@@ -41,9 +41,37 @@ import (
 	"github.com/d0lim/ccswap/internal/platform"
 )
 
-// LegacyBackupDirName is the pre-XDG backup directory, still the layout used on
-// macOS and Windows.
-const LegacyBackupDirName = ".claude-swap-backup"
+// Backup directory names.
+//
+// ccswap keeps its own store, separate from the claude-swap project it was
+// forked from. That is not cosmetic. Both projects stamp the same schema
+// version numbers into settings.json, usage.json and the roster, and the
+// version is how each decides whether a file is one it understands — the
+// Python implementation discards a usage table whose version it does not
+// recognise. Two independently evolving projects cannot both own that number,
+// so the first one to bump it would silently wipe the other's state. Sharing a
+// backup root only looks like compatibility.
+//
+// A claude-swap store is therefore FOREIGN. See [Resolver.ClaudeSwapRoots] and
+// the `ccswap import-store` command, which moves one over on request.
+const (
+	// BackupDirName is the XDG data directory, used on Linux and WSL.
+	BackupDirName = "ccswap"
+	// RosterFileName is the account table's name inside a backup root. Named
+	// here because "is there a store at this path" is a question about
+	// locations, and both ccswap's own roots and a foreign one answer it.
+	RosterFileName = "sequence.json"
+	// LegacyBackupDirName is the pre-XDG backup directory, still the layout
+	// used on macOS and Windows.
+	LegacyBackupDirName = ".ccswap-backup"
+)
+
+// claude-swap's own backup directory names, which ccswap only ever reads, and
+// only when asked to import.
+const (
+	claudeSwapDirName       = "claude-swap"
+	claudeSwapLegacyDirName = ".claude-swap-backup"
+)
 
 // Resolver answers every "where does that file live" question from a fixed set
 // of inputs. The zero value is not usable; build one with [FromEnv] in
@@ -152,7 +180,7 @@ func (r *Resolver) CredentialsPath() string {
 	return filepath.Join(r.ClaudeConfigHome(), ".credentials.json")
 }
 
-// LegacyBackupRoot returns the pre-XDG backup root, ~/.claude-swap-backup.
+// LegacyBackupRoot returns the pre-XDG backup root, ~/.ccswap-backup.
 func (r *Resolver) LegacyBackupRoot() string {
 	return filepath.Join(r.Home, LegacyBackupDirName)
 }
@@ -165,9 +193,9 @@ func (r *Resolver) LegacyBackupRoot() string {
 func (r *Resolver) BackupRoot() string {
 	if r.Platform.UsesXDG() {
 		if xdg := r.expandTilde(r.XDGDataHome); filepath.IsAbs(xdg) {
-			return filepath.Join(xdg, "claude-swap")
+			return filepath.Join(xdg, BackupDirName)
 		}
-		return filepath.Join(r.Home, ".local", "share", "claude-swap")
+		return filepath.Join(r.Home, ".local", "share", BackupDirName)
 	}
 	return r.LegacyBackupRoot()
 }
@@ -205,4 +233,42 @@ func (r *Resolver) expandTilde(p string) string {
 func exists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil
+}
+
+// ClaudeSwapRoots returns the places a claude-swap store could be on this
+// platform, most-current layout first.
+//
+// Only ever read, and only when the user asks to import. The two projects share
+// no on-disk state by design; this is the one seam between them, and it exists
+// so someone arriving from claude-swap does not have to move files by hand.
+//
+// Both layouts are returned rather than just the one this platform would write,
+// because a store can arrive from another machine through file sync — the same
+// reason [Resolver.MigrateLegacyBackupDir] has to reason about a legacy
+// directory appearing on a host that would never create one.
+func (r *Resolver) ClaudeSwapRoots() []string {
+	legacy := filepath.Join(r.Home, claudeSwapLegacyDirName)
+	if !r.Platform.UsesXDG() {
+		return []string{legacy}
+	}
+	xdg := filepath.Join(r.Home, ".local", "share", claudeSwapDirName)
+	if custom := r.expandTilde(r.XDGDataHome); filepath.IsAbs(custom) {
+		xdg = filepath.Join(custom, claudeSwapDirName)
+	}
+	return []string{xdg, legacy}
+}
+
+// FindClaudeSwapStore returns the first claude-swap store that exists and
+// carries a roster, and whether there was one.
+//
+// The roster is the test rather than the directory: an empty directory left by
+// an uninstall is not a store worth telling anyone about, and offering to
+// import nothing is worse than saying nothing.
+func (r *Resolver) FindClaudeSwapStore() (string, bool) {
+	for _, root := range r.ClaudeSwapRoots() {
+		if exists(filepath.Join(root, RosterFileName)) {
+			return root, true
+		}
+	}
+	return "", false
 }

@@ -254,9 +254,33 @@ The original flag spellings (`ccswap --switch`, `ccswap --list`, ...) keep worki
 
 | Platform | Credentials | Config backups |
 |----------|-------------|----------------|
-| macOS | macOS Keychain | `~/.claude-swap-backup/` |
-| Linux / WSL | File-based (inside the backup directory, under `credentials/`) | `${XDG_DATA_HOME:-~/.local/share}/claude-swap/` |
-| Windows | File-based (inside the backup directory, under `credentials/`) | `~/.claude-swap-backup/` |
+| macOS | macOS Keychain | `~/.ccswap-backup/` |
+| Linux / WSL | File-based (inside the backup directory, under `credentials/`) | `${XDG_DATA_HOME:-~/.local/share}/ccswap/` |
+| Windows | File-based (inside the backup directory, under `credentials/`) | `~/.ccswap-backup/` |
+
+### Coming from claude-swap
+
+ccswap was forked from [claude-swap](https://github.com/realiti4/claude-swap)
+and keeps its **own** store — a different backup directory and a different
+Keychain service.
+
+That is not cosmetic. Both projects stamp the same schema version numbers into
+the same file names, and neither can tell the other's numbers from its own; the
+Python implementation discards a usage table whose version it does not
+recognise. Two independently evolving projects cannot share that namespace, so
+the first one to bump a version would silently wipe the other's state.
+
+If you already use claude-swap, `ccswap list` will point out the store and
+
+```bash
+ccswap import-store
+```
+
+moves it over. The directory is **moved**, not copied — two stores holding the
+same refresh tokens would fight, since refreshing rotates the token and
+whichever tool got there first would leave the other reporting a live account as
+dead. macOS Keychain items are copied rather than moved, so putting the
+directory back restores a working claude-swap install.
 
 Session-mode profiles (`ccswap run`) live under the backup directory in `sessions/`. Tool preferences (`settings.json`) and auto-switch state (`autoswitch_state.json` — cooldown and quarantined accounts; delete it to reset) live in the backup directory root.
 

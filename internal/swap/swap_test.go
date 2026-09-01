@@ -40,7 +40,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	home := t.TempDir()
-	root := filepath.Join(home, ".local", "share", "claude-swap")
+	root := filepath.Join(home, ".local", "share", paths.BackupDirName)
 
 	// Linux, so the credential store is files. macOS Keychain behavior is
 	// credstore's own subject; here it would only add a fake to see through.
