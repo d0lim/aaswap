@@ -85,10 +85,13 @@ func newHarness(t *testing.T) *harness {
 	h.switcher.SetClock(func() time.Time { return h.now })
 
 	h.app = &App{
-		Out:         &h.out,
-		Err:         &h.err,
-		In:          &h.in,
-		NewSwitcher: func() (*swap.Switcher, error) { return h.switcher, nil },
+		Out: &h.out,
+		Err: &h.err,
+		In:  &h.in,
+		NewSwitcher: func(provider string) (*swap.Switcher, error) {
+			h.switcher.Provider = provider
+			return h.switcher, nil
+		},
 	}
 	return h
 }
@@ -105,6 +108,7 @@ func (h *harness) run(args ...string) int {
 		NewSwitcher: h.app.NewSwitcher,
 		Confirm:     h.app.Confirm,
 		Choose:      h.app.Choose,
+		provider:    h.app.provider,
 		awaitTuning: h.app.awaitTuning,
 	}
 	return app.Execute(h.t.Context(), args)

@@ -14,6 +14,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
@@ -57,7 +58,7 @@ type App struct {
 
 	// NewSwitcher builds the switcher a command operates on. Injected so tests
 	// substitute a fixture.
-	NewSwitcher func() (*swap.Switcher, error)
+	NewSwitcher func(provider string) (*swap.Switcher, error)
 
 	// Confirm asks a yes-or-no question. Nil falls back to reading In.
 	Confirm func(prompt string) bool
@@ -74,6 +75,9 @@ type App struct {
 	json bool
 	// assumeYes answers every confirmation with yes.
 	assumeYes bool
+	// provider is the auth domain this invocation addresses. Empty means the
+	// default, which is Claude.
+	provider string
 	// overrides are the policy knobs a flag may override for this run.
 	overrides settings.Overrides
 	// awaitTuning collapses the login wait's polling cadence. Zero uses the
@@ -95,12 +99,21 @@ func New() *App {
 	return app
 }
 
-func defaultSwitcher() (*swap.Switcher, error) {
+// ProviderEnv pins the provider for a shell session, so it does not have to be
+// repeated on every command.
+const ProviderEnv = "AASWAP_PROVIDER"
+
+// providerFromEnv reads the pinned provider, empty when none is set.
+func providerFromEnv() string {
+	return strings.TrimSpace(os.Getenv(ProviderEnv))
+}
+
+func defaultSwitcher(provider string) (*swap.Switcher, error) {
 	resolver, err := paths.FromEnv()
 	if err != nil {
 		return nil, err
 	}
-	s := swap.New(resolver)
+	s := swap.NewForProvider(resolver, provider)
 	s.Settings = settings.Load(resolver.BackupRoot())
 	return s, nil
 }
@@ -198,7 +211,14 @@ func (a *App) emitJSON(payload any) {
 
 // switcher builds the switcher for a command, applying this run's overrides.
 func (a *App) switcher() (*swap.Switcher, error) {
-	s, err := a.NewSwitcher()
+	name := cmp.Or(a.provider, providerFromEnv(), swap.ProviderClaude)
+	// Refused before anything reads a store: a typo must not quietly create an
+	// empty section and report no accounts.
+	if !swap.KnownProvider(name) {
+		return nil, fmt.Errorf("%w: %q is not a provider this build manages. Known: %s",
+			apperr.ErrValidation, name, strings.Join(swap.Providers, ", "))
+	}
+	s, err := a.NewSwitcher(name)
 	if err != nil {
 		return nil, err
 	}

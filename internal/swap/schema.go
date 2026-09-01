@@ -19,9 +19,25 @@ import (
 // one active pointer cannot express two tools being logged in at once.
 const SchemaVersion = 2
 
-// ProviderClaude is the provider every v1 store's accounts belong to: it is the
-// only tool that implementation could manage.
-const ProviderClaude = "claude"
+// The providers this build can manage.
+//
+// A store may hold sections for providers not listed here — a newer release's
+// — and those round-trip untouched. This list is what a person may ADDRESS.
+const (
+	// ProviderClaude is the provider every v1 store's accounts belong to: it
+	// is the only tool that implementation could manage.
+	ProviderClaude = "claude"
+	// ProviderCodex is the OpenAI Codex CLI.
+	ProviderCodex = "codex"
+)
+
+// Providers lists every addressable provider, in the order they are shown.
+var Providers = []string{ProviderClaude, ProviderCodex}
+
+// KnownProvider reports whether a name is one this build can manage.
+func KnownProvider(name string) bool {
+	return slices.Contains(Providers, name)
+}
 
 // File is sequence.json in full.
 //

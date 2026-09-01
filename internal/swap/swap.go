@@ -37,7 +37,8 @@ import (
 	"github.com/d0lim/aaswap/internal/keychain"
 	"github.com/d0lim/aaswap/internal/lockfile"
 	"github.com/d0lim/aaswap/internal/paths"
-	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/platform"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/settings"
 	"github.com/d0lim/aaswap/internal/usagestore"
 )
@@ -101,7 +102,7 @@ type Switcher struct {
 	// Profiles is how this provider's tool keeps a credential inside a session
 	// profile. Held here so it is injected once, beside the credential store it
 	// is the profile-scoped counterpart of.
-	Profiles provider.ProfileStore
+	Profiles providerpkg.ProfileStore
 
 	// Usage is the shared measurement table.
 	Usage *usagestore.Store
@@ -156,14 +157,23 @@ type Switcher struct {
 	FetchStagger time.Duration
 }
 
-// New returns a Switcher wired to the given paths.
-func New(r *paths.Resolver) *Switcher {
+// New returns a Switcher for the default provider.
+func New(r *paths.Resolver) *Switcher { return NewForProvider(r, ProviderClaude) }
+
+// NewForProvider returns a Switcher wired to one auth domain.
+//
+// The provider is chosen HERE rather than assigned afterwards, because the
+// credential store and the profile store are both scoped by it. Setting a field
+// on a built Switcher would leave those two pointed at the wrong provider's
+// files while the roster read the right one's section.
+func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 	root := r.BackupRoot()
 	client := claudeapi.New()
 	return &Switcher{
+		Provider:    provider,
 		Paths:       r,
-		Creds:       credstore.NewForProvider(r, root, keychain.New(), ProviderClaude),
-		Profiles:    provider.NewClaudeProfiles(r.Platform, keychain.New()),
+		Creds:       credstore.NewForProvider(r, root, keychain.New(), provider),
+		Profiles:    profilesFor(provider, r.Platform),
 		Usage:       usagestore.New(r.CacheDir()),
 		Oracle:      client,
 		Fetcher:     client,
@@ -228,4 +238,16 @@ func (s *Switcher) withLock(fn func() error) error {
 		timeout = lockfile.DefaultTimeout
 	}
 	return lockfile.With(s.LockPath(), timeout, fn)
+}
+
+// profilesFor is the profile credential store a provider's tool uses.
+//
+// Codex keeps a profile's credential in a plain file and nothing else, so it
+// gets the file-only shape outright — passing it a Keychain would hand a
+// file-only tool a macOS constraint it does not have.
+func profilesFor(provider string, p platform.Platform) providerpkg.ProfileStore {
+	if provider == ProviderCodex {
+		return providerpkg.NewClaudeProfiles(p, nil)
+	}
+	return providerpkg.NewClaudeProfiles(p, keychain.New())
 }
