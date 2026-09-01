@@ -180,24 +180,29 @@ func TestNewer(t *testing.T) {
 	}
 }
 
-// The notice names the command for however this copy got here, because "a new
-// version exists" without that is a chore rather than help.
-func TestNoticeNamesTheUpgradeCommand(t *testing.T) {
+// A newer version is only actionable if we can say how to get it, and that
+// depends on how this copy was installed.
+func TestUpgradeCommandNamesTheInstallMethod(t *testing.T) {
 	tests := []struct {
 		method Method
 		want   string
 	}{
 		{Homebrew, "brew upgrade"},
 		{GoInstall, "go install"},
-		{Unknown, "releases page"},
+		// Nothing to say: the caller falls back to naming the releases page,
+		// which is the one instruction that always works.
+		{Unknown, ""},
 	}
 	for _, tt := range tests {
-		notice := Notice("1.2.4", "1.2.3", tt.method)
-		if !strings.Contains(notice, tt.want) {
-			t.Errorf("Notice for %q = %q, want it to mention %q", tt.method, notice, tt.want)
+		got := tt.method.UpgradeCommand()
+		if tt.want == "" {
+			if got != "" {
+				t.Errorf("UpgradeCommand for %q = %q, want no command", tt.method, got)
+			}
+			continue
 		}
-		if !strings.Contains(notice, "1.2.4") || !strings.Contains(notice, "1.2.3") {
-			t.Errorf("Notice = %q, want both versions", notice)
+		if !strings.Contains(got, tt.want) {
+			t.Errorf("UpgradeCommand for %q = %q, want it to mention %q", tt.method, got, tt.want)
 		}
 	}
 }

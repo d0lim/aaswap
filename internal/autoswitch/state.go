@@ -72,7 +72,9 @@ func NewStore(backupRoot string) *Store {
 	}
 }
 
-// Path is the state file's location.
+// Path is the state file's location. Production never needs it — the store
+// owns its own file — but a test that has to inspect or corrupt the state on
+// disk should not be reconstructing the path by hand.
 func (s *Store) Path() string { return s.path }
 
 // Read loads the state, returning an empty one for anything unusable.

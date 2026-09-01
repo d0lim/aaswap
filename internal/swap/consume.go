@@ -253,6 +253,7 @@ func (s *Switcher) persistSuccessor(accountNum, email, consumedFP string, result
 			if err := s.Creds.WriteAccount(accountNum, email, result.Credentials); err != nil {
 				return err
 			}
+			s.BackupWritten(accountNum, email)
 		}
 		return nil
 	})
@@ -349,6 +350,7 @@ func (s *Switcher) adoptStashedSuccessor(accountNum, email, current string) (str
 			slog.Warn("could not adopt a stashed successor", "account", accountNum, "error", err)
 			return "", nil
 		}
+		s.BackupWritten(accountNum, email)
 		// Housekeeping, and never fatal: the slot has already advanced.
 		if err := s.Creds.DeleteUnclaimed(entryID); err != nil {
 			slog.Warn("could not retire an adopted stash entry",

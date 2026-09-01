@@ -159,29 +159,6 @@ func truthy(value any) bool {
 	}
 }
 
-// Save writes the autoswitch section, preserving unknown keys and sections.
-func Save(backupRoot string, auto AutoSwitch) error {
-	path := Path(backupRoot)
-	raw, err := readRawForWrite(path)
-	if err != nil {
-		return err
-	}
-	stampSchemaVersion(raw)
-
-	sec, ok := section(raw, "autoswitch")
-	if !ok {
-		sec = map[string]any{}
-	}
-	settings := Settings{AutoSwitch: auto}
-	for _, spec := range specs {
-		if spec.Section == "autoswitch" {
-			sec[spec.JSONKey] = spec.get(settings)
-		}
-	}
-	raw["autoswitch"] = sec
-	return fsutil.WriteJSONAtomic(path, raw)
-}
-
 // Set validates and persists one key, returning the stored value.
 //
 // It writes only that key plus schemaVersion — deliberately not every known key

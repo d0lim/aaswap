@@ -240,9 +240,6 @@ type Manager struct {
 	Now func() time.Time
 }
 
-// SessionsDir holds every profile.
-func (m *Manager) SessionsDir() string { return filepath.Join(m.BackupRoot, "sessions") }
-
 // Dir is a slot's profile directory.
 func (m *Manager) Dir(accountNum, email string) string {
 	return DirFor(m.BackupRoot, accountNum, email)
@@ -472,35 +469,30 @@ func (m *Manager) storedIdentity(accountNum, email string) (identity, theme json
 	return account, theme, nil
 }
 
-// ProfileMatchesBackup reports whether a profile is on the same credential
-// GENERATION as the slot's backup.
+// ProfileSuperseded reports that a profile PROVABLY holds a different
+// credential generation than the slot's backup.
 //
 // Compared by lineage fingerprint, because that is what identifies a
-// generation. A profile seeded before a refresh holds the predecessor, and
-// Claude Code's own first refresh from it would be rejected.
-func (m *Manager) ProfileMatchesBackup(sessionDir, accountNum, email string) bool {
+// generation: a profile seeded before a rotation is the same ACCOUNT holding
+// the predecessor token — well-formed, unexpired, and rejected by the server on
+// its first refresh. Identity checks cannot see that.
+//
+// False whenever the question cannot be answered: no profile credential, or an
+// absent or unreadable backup. Each of those is "unknown", and the caller
+// spends this answer on discarding a working profile — so unknown has to mean
+// leave it alone. Unreadable is not absent, the same rule every stored-credential
+// read in this codebase follows, and it binds harder here: one momentary
+// Keychain lock would otherwise re-bootstrap every profile on the machine.
+func (m *Manager) ProfileSuperseded(sessionDir, accountNum, email string) bool {
 	profile := m.ReadCredentials(sessionDir)
 	if profile == "" {
 		return false
 	}
-	backup, _ := m.Creds.ReadAccount(accountNum, email)
-	if backup == "" {
+	backup, unreadable := m.Creds.ReadAccount(accountNum, email)
+	if unreadable || backup == "" {
 		return false
 	}
-	return claudeapi.Fingerprint(profile) == claudeapi.Fingerprint(backup)
-}
-
-// HasRefreshToken reports whether a credential carries a refresh token.
-//
-// An unrecognized shape reports TRUE, letting the refresh attempt decide: a
-// setup-token account genuinely has none, but a blob this version cannot parse
-// is not evidence of that.
-func HasRefreshToken(credentials string) bool {
-	payload, ok := claudeapi.OAuthPayload(credentials)
-	if !ok {
-		return true
-	}
-	return claudeapi.RefreshToken(payload) != ""
+	return claudeapi.Fingerprint(profile) != claudeapi.Fingerprint(backup)
 }
 
 // Remove deletes a profile entirely.

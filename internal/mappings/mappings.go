@@ -77,7 +77,8 @@ func New(backupRoot string) *Store {
 	return &Store{path: filepath.Join(backupRoot, FileName), Now: time.Now}
 }
 
-// Path is the table's location.
+// Path is the table's location. See [Store.Get] on why the tests need reach
+// that production does not.
 func (s *Store) Path() string { return s.path }
 
 func (s *Store) now() time.Time {
@@ -163,6 +164,11 @@ func (s *Store) Load() map[string]*Entry {
 }
 
 // Get looks up one directory exactly, with no ancestor walk.
+//
+// Production reads go through Resolve, which walks ancestors — that is what a
+// directory mapping means to a user. This is the exact form, which is how a
+// test asserts that a specific key was written or removed without a parent
+// mapping being able to answer for it.
 func (s *Store) Get(path string) (*Entry, bool, error) {
 	key, err := NormalizePath(path)
 	if err != nil {

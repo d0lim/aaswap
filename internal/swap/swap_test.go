@@ -5,6 +5,7 @@ import (
 	json "encoding/json/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -161,5 +162,91 @@ func wantErr(t *testing.T, err error, fragments ...string) {
 		if !strings.Contains(err.Error(), fragment) {
 			t.Errorf("error does not mention %q: %v", fragment, err)
 		}
+	}
+}
+
+// Every path that replaces a slot's stored credential has to announce it, or a
+// session profile keeps serving the generation the write just superseded — and
+// the local reuse check cannot tell, because it asks whether a credential is
+// well-formed, not whether the server still honours it.
+func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
+	tests := []struct {
+		name string
+		act  func(f *fixture)
+		want string
+	}{
+		{
+			name: "add-token registers a new slot",
+			act: func(f *fixture) {
+				if _, err := f.AddToken(AddTokenRequest{
+					Token: "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					Email: "token@example.com",
+				}); err != nil {
+					f.t.Fatal(err)
+				}
+			},
+			want: "1",
+		},
+		{
+			// Only when the credential actually CHANGED. A switch that finds
+			// the live bytes untouched since ccswap wrote them backs up the
+			// config alone, and a profile seeded from those same bytes is not
+			// stale — announcing there would invalidate profiles on every
+			// ordinary switch.
+			name: "a switch backs up an outgoing account whose token rotated",
+			act: func(f *fixture) {
+				f.twoAccounts()
+				if err := f.Creds.WriteActive(
+					`{"claudeAiOauth":{"accessToken":"rotated-under-us"}}`); err != nil {
+					f.t.Fatal(err)
+				}
+				if _, err := f.Switch(f.t.Context(), SwitchRequest{Target: "2"}); err != nil {
+					f.t.Fatal(err)
+				}
+			},
+			want: "1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFixture(t)
+			var announced []string
+			f.OnBackupWritten = func(num, _ string) { announced = append(announced, num) }
+
+			tt.act(f)
+
+			if !slices.Contains(announced, tt.want) {
+				t.Errorf("announced %v, want it to include account %s", announced, tt.want)
+			}
+		})
+	}
+}
+
+// The other half of the same rule: an unchanged credential must NOT announce,
+// or every ordinary switch would tear down a session profile that is perfectly
+// current.
+func TestAnUnchangedCredentialAnnouncesNothing(t *testing.T) {
+	f := newFixture(t)
+	var announced []string
+	f.OnBackupWritten = func(num, _ string) { announced = append(announced, num) }
+	f.twoAccounts()
+
+	if _, err := f.Switch(t.Context(), SwitchRequest{Target: "2"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(announced) != 0 {
+		t.Errorf("announced %v for a switch that changed no credential", announced)
+	}
+}
+
+// The hook is optional. A Switcher built without one must not panic on a write:
+// most callers have no session profiles to care about.
+func TestACredentialWriteWorksWithNoListener(t *testing.T) {
+	f := newFixture(t)
+	f.OnBackupWritten = nil
+	f.twoAccounts()
+	if _, err := f.Switch(t.Context(), SwitchRequest{Target: "2"}); err != nil {
+		t.Fatal(err)
 	}
 }

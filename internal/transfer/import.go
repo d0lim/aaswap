@@ -314,6 +314,7 @@ func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force boo
 	if err := s.Creds.WriteAccount(target, entry.Email, entry.Credentials); err != nil {
 		return ImportedAccount{}, err
 	}
+	s.BackupWritten(target, entry.Email)
 	if err := s.WriteAccountConfig(target, entry.Email, entry.Config); err != nil {
 		return ImportedAccount{}, err
 	}

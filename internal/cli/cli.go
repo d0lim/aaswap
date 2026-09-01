@@ -27,6 +27,7 @@ import (
 	"github.com/d0lim/ccswap/internal/jsonout"
 	"github.com/d0lim/ccswap/internal/paths"
 	"github.com/d0lim/ccswap/internal/render"
+	"github.com/d0lim/ccswap/internal/session"
 	"github.com/d0lim/ccswap/internal/settings"
 	"github.com/d0lim/ccswap/internal/swap"
 	"github.com/spf13/cobra"
@@ -194,7 +195,37 @@ func (a *App) switcher() (*swap.Switcher, error) {
 		return nil, err
 	}
 	s.Settings.AutoSwitch = settings.Clamp(settings.MergeCLI(s.Settings.AutoSwitch, a.overrides))
+	// A replaced backup credential leaves that slot's session profile holding
+	// the previous generation, which still passes the local reuse check. The
+	// switcher does not know about profiles, so the command layer — which does
+	// — supplies the invalidation.
+	s.OnBackupWritten = func(accountNum, email string) {
+		a.invalidateSessionProfile(s, accountNum, email)
+	}
 	return s, nil
+}
+
+// invalidateSessionProfile re-points a slot's session profile after its stored
+// credential changed.
+//
+// Reports rather than returns: this runs after a credential write that already
+// succeeded, and the write is what the user asked for. Failing the command here
+// would say the thing that happened did not.
+func (a *App) invalidateSessionProfile(s *swap.Switcher, accountNum, email string) {
+	outcome, err := a.sessionManager(s).InvalidateForSlot(accountNum, email)
+	switch outcome {
+	case session.MarkFailed:
+		a.errs.Warning(fmt.Sprintf(
+			"account %s's credential changed but its session profile could not be "+
+				"invalidated; `ccswap run %s` may keep using the superseded one until "+
+				"you remove the profile: %v", accountNum, accountNum, err))
+	case session.Marked:
+		a.printer.Println(a.printer.Dimmed(
+			"  a live session profile for this account will re-bootstrap when it next exits"))
+	case session.Cleared:
+		a.printer.Println(a.printer.Dimmed(
+			"  its session profile will re-bootstrap from the new credential"))
+	}
 }
 
 // confirm asks a yes-or-no question, defaulting to no.

@@ -18,6 +18,10 @@ type RemoveOutcome struct {
 	WasActive bool
 	// Cancelled marks a confirmation the user declined.
 	Cancelled bool
+	// OrganizationUUID completes the identity the removed slot pointed at.
+	// Carried out so the caller can drop what else referenced it — directory
+	// mappings key on the composite, not on the slot number.
+	OrganizationUUID string
 }
 
 // RemoveRequest is one removal.
@@ -69,7 +73,10 @@ func (s *Switcher) Remove(req RemoveRequest) (RemoveOutcome, error) {
 		}
 
 		activeNum, _ := roster.Active()
-		outcome = RemoveOutcome{Number: num, Email: account.Email, WasActive: activeNum == num}
+		outcome = RemoveOutcome{
+			Number: num, Email: account.Email, WasActive: activeNum == num,
+			OrganizationUUID: account.OrganizationUUID,
+		}
 
 		if !req.AssumeYes {
 			prompt := fmt.Sprintf("Permanently remove account %s (%s)?", num, account.Email)
