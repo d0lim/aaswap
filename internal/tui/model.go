@@ -56,6 +56,14 @@ type Model struct {
 	showHelp bool
 	watch    bool
 	quitting bool
+
+	// awaitCancel stops a login wait, and is non-nil exactly while one is
+	// running. The wait outlives the keypress that started it — it can run for
+	// as long as it takes a person to log in elsewhere — so the only way to end
+	// it early is to hold its cancel here.
+	awaitCancel context.CancelFunc
+	// awaitFrame advances the waiting modal's marker.
+	awaitFrame int
 }
 
 // NewModel builds the dashboard over a switcher.

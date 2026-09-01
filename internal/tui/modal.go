@@ -16,6 +16,11 @@ const (
 	modalConfirm modalKind = iota
 	// modalNotice reports a result and is dismissed by any key.
 	modalNotice
+	// modalInput collects one line of text — a token — and submits it.
+	modalInput
+	// modalWaiting reports work that ends on its own, and is cancelled rather
+	// than answered.
+	modalWaiting
 )
 
 // modal is the one overlay the dashboard can show at a time.
@@ -35,6 +40,32 @@ type modal struct {
 	// whatever the prompt named is exactly what runs.
 	run       tea.Cmd
 	busyLabel string
+
+	// input is what a modalInput has collected so far, and submit turns it
+	// into the command to run. Unused by every other kind.
+	input  string
+	submit func(string) tea.Cmd
+	// placeholder shows in the field while it is empty.
+	placeholder string
+	// hint describes what has been typed so far — for a token, which kind of
+	// account it would become. Rendered under the field, and skipped when it
+	// returns nothing.
+	hint func(string) string
+}
+
+// visibleInput is what the field shows for what has been typed.
+//
+// A token is a live credential, so it is masked — but never entirely. The first
+// characters are the kind marker (sk-ant-oat01- against sk-ant-api03-), they
+// decide which sort of account this becomes, and a field that hides them leaves
+// no way to notice the wrong thing was pasted.
+func (md *modal) visibleInput() string {
+	const revealed = 13
+	runes := []rune(md.input)
+	if len(runes) <= revealed {
+		return md.input
+	}
+	return string(runes[:revealed]) + strings.Repeat("•", len(runes)-revealed)
 }
 
 // render draws a modal centered on the dashboard.
@@ -50,6 +81,18 @@ func (m Model) renderModal(md *modal) string {
 	for _, line := range md.body {
 		b.WriteString("\n" + line)
 	}
+	if md.kind == modalInput {
+		field := md.visibleInput()
+		if field == "" {
+			field = st.muted.Render(md.placeholder)
+		}
+		b.WriteString("\n\n  " + st.accent.Render("▏") + field + st.accent.Render("▁"))
+		if md.hint != nil {
+			if note := md.hint(md.input); note != "" {
+				b.WriteString("\n  " + st.muted.Render("  "+note))
+			}
+		}
+	}
 	b.WriteString("\n\n")
 	switch md.kind {
 	case modalConfirm:
@@ -57,6 +100,12 @@ func (m Model) renderModal(md *modal) string {
 			st.helpKey.Render("n/esc") + st.help.Render(" cancel"))
 	case modalNotice:
 		b.WriteString(st.help.Render("any key to dismiss"))
+	case modalInput:
+		b.WriteString(st.helpKey.Render("enter") + st.help.Render(" submit    ") +
+			st.helpKey.Render("ctrl+u") + st.help.Render(" clear    ") +
+			st.helpKey.Render("esc") + st.help.Render(" cancel"))
+	case modalWaiting:
+		b.WriteString(st.helpKey.Render("esc") + st.help.Render(" stop waiting"))
 	}
 
 	// Cap the modal so a long error wraps inside the frame instead of running

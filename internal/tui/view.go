@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -64,8 +65,9 @@ func (m Model) dashboard() string {
 	case len(m.snapshot.Views) == 0:
 		sections = append(sections,
 			m.styles.muted.Render("  No accounts are managed yet."),
-			m.styles.muted.Render("  Log in with Claude Code, then quit and run: ")+
-				m.styles.accent.Render("ccswap add"))
+			m.styles.muted.Render("  Press ")+m.styles.accent.Render("a")+
+				m.styles.muted.Render(" to add the account you are logged in as, or ")+
+				m.styles.accent.Render("n")+m.styles.muted.Render(" to wait for a /login."))
 	default:
 		sections = append(sections, m.accountList())
 	}
@@ -214,15 +216,45 @@ func (m Model) footer() string {
 		lines = append(lines, "")
 	}
 
-	hints := [][2]string{
-		{"↑↓", "move"}, {"enter", "switch"}, {"d", "disable"},
-		{"r", "refresh"}, {"w", "watch"}, {"?", "help"}, {"q", "quit"},
+	return strings.Join(append(lines, " "+m.hintBar()), "\n")
+}
+
+// footerHints are the keys the bar gives up when it has to, in the order it
+// gives them up: the last is the first to go.
+//
+// The bar is one line, and there are more keys than fit an eighty-column
+// terminal. Rather than wrapping — which pushes an account row off a short
+// screen — it drops hints until what is left fits.
+var footerHints = [][2]string{
+	{"↑↓", "move"}, {"enter", "switch"}, {"a", "add"},
+	{"t", "token"}, {"d", "disable"}, {"r", "refresh"}, {"w", "watch"},
+}
+
+// pinnedHints survive any width.
+//
+// Quit, because a dashboard whose exit is not written down is one people kill
+// the terminal to escape; help, because it is where every key shed above can
+// still be read.
+var pinnedHints = [][2]string{{"q", "quit"}, {"?", "help"}}
+
+// hintBar renders as many hints as fit, keeping the pinned ones whatever
+// happens.
+func (m Model) hintBar() string {
+	st := m.styles
+	separator := st.help.Render("  ·  ")
+	render := func(hints [][2]string) string {
+		parts := make([]string, 0, len(hints)+len(pinnedHints))
+		for _, hint := range slices.Concat(hints, pinnedHints) {
+			parts = append(parts, st.helpKey.Render(hint[0])+st.help.Render(" "+hint[1]))
+		}
+		return strings.Join(parts, separator)
 	}
-	var parts []string
-	for _, h := range hints {
-		parts = append(parts, st.helpKey.Render(h[0])+st.help.Render(" "+h[1]))
+
+	bar := render(footerHints)
+	for shown := len(footerHints); shown > 0 && lipgloss.Width(bar) > m.width-1; shown-- {
+		bar = render(footerHints[:shown-1])
 	}
-	return strings.Join(append(lines, " "+strings.Join(parts, st.help.Render("  ·  "))), "\n")
+	return bar
 }
 
 // renderHelp is the full key reference, which the footer only samples.
@@ -232,6 +264,9 @@ func (m Model) renderHelp() string {
 		{"↑ / k", "move up"},
 		{"↓ / j", "move down"},
 		{"enter / s", "switch to the selected account"},
+		{"a", "add the account you are logged in as"},
+		{"n", "wait for a /login, then add that account"},
+		{"t", "add a setup token or managed API key"},
 		{"d", "disable or enable the selected account"},
 		{"r", "collect now"},
 		{"w", "toggle watch mode (re-collect every 30s)"},
@@ -245,6 +280,8 @@ func (m Model) renderHelp() string {
 	}
 	b.WriteString("\n\n" + st.muted.Render(
 		"Switching writes a live credential. It takes the store lock, so it may\n"+
-			"pause while another ccswap or a running Claude Code holds it."))
+			"pause while another ccswap or a running Claude Code holds it.\n\n"+
+			"ccswap cannot log you in — Claude Code owns that flow. `n` waits for you\n"+
+			"to run /login elsewhere and captures the account when it lands."))
 	return st.modal.Render(b.String())
 }
