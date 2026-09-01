@@ -3,12 +3,14 @@ package swap
 import (
 	json "encoding/json/v2"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/claudeapi"
 	"github.com/d0lim/aaswap/internal/credstore"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
 )
 
 // LiveIdentity is who the machine is currently logged in as, read from Claude
@@ -55,6 +57,38 @@ func (a *Account) DisplayTag() string {
 // identity, and treating it as one would let every comparison against it
 // succeed vacuously.
 func (s *Switcher) LiveIdentity() (LiveIdentity, bool) {
+	if s.provider() == ProviderCodex {
+		return s.codexLiveIdentity()
+	}
+	return s.claudeLiveIdentity()
+}
+
+// codexLiveIdentity reads the identity out of Codex's credential file.
+//
+// One file, not two. Codex has no config beside the credential to read an
+// address from — the id_token inside the credential IS the identity document —
+// so the read that answers "who is logged in" and the read that answers "what
+// is the token" are the same read. That is not a smaller version of Claude's
+// shape; it is a different one, which is why this cannot be a path swap.
+func (s *Switcher) codexLiveIdentity() (LiveIdentity, bool) {
+	data, err := os.ReadFile(s.Paths.CodexAuthPath())
+	if err != nil {
+		return LiveIdentity{}, false
+	}
+	identity, ok := providerpkg.CodexIdentity(string(data))
+	if !ok {
+		return LiveIdentity{}, false
+	}
+	return LiveIdentity{
+		Email:            identity.Email,
+		OrganizationUUID: identity.OrganizationUUID,
+		OrganizationName: identity.OrganizationName,
+		AccountUUID:      identity.AccountUUID,
+	}, true
+}
+
+// claudeLiveIdentity reads Claude Code's config.
+func (s *Switcher) claudeLiveIdentity() (LiveIdentity, bool) {
 	data, ok := readObjectLenient(s.Paths.GlobalConfigPath())
 	if !ok {
 		return LiveIdentity{}, false

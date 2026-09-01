@@ -72,6 +72,11 @@ const (
 type Resolver struct {
 	// Home is the user's home directory ($HOME, or %USERPROFILE% on Windows).
 	Home string
+	// CodexHomeDir is CODEX_HOME, or "" when unset. Codex's counterpart to
+	// CLAUDE_CONFIG_DIR, and the same warning applies: it relocates a live
+	// tool's whole directory.
+	CodexHomeDir string
+
 	// ConfigDir is CLAUDE_CONFIG_DIR, or "" when unset. When set it relocates
 	// Claude Code's entire profile, which is how session mode isolates accounts.
 	ConfigDir string
@@ -112,6 +117,7 @@ func FromEnv() (*Resolver, error) {
 	r := &Resolver{
 		Home:                      home,
 		ConfigDir:                 os.Getenv("CLAUDE_CONFIG_DIR"),
+		CodexHomeDir:              os.Getenv(CodexHomeEnv),
 		XDGDataHome:               os.Getenv("XDG_DATA_HOME"),
 		SecureStorageConfigDir:    secure,
 		SecureStorageConfigDirSet: secureSet,
