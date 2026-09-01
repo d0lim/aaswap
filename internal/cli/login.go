@@ -33,8 +33,8 @@ func (a *App) loginCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Store an account, logging in first if you need to",
-		Long: "aaswap cannot log you in — Claude Code owns that flow — so storing an\n" +
-			"account means being logged in as it, or going and logging in.\n\n" +
+		Long: "aaswap cannot log you in — the agent's own CLI owns that flow — so\n" +
+			"storing an account means being logged in as it, or going and logging in.\n\n" +
 			"With no flags this looks at what is live and says what it will do. The\n" +
 			"one case it cannot decide alone is a live login already stored: refresh\n" +
 			"that account, or wait for a different one? Both are ordinary, so it\n" +
@@ -43,7 +43,8 @@ func (a *App) loginCommand() *cobra.Command {
 			"people who already know:\n" +
 			"  --capture   store the account logged in now\n" +
 			"  --wait      wait for a /login elsewhere, then store that account\n" +
-			"  --token     read a setup token or API key from stdin\n\n" +
+			"  --token     store a token you already have (where the provider's\n" +
+			"              format is known — `aaswap doctor` says which)\n\n" +
 			"Without a terminal, nothing is asked and nothing waits: an unstored\n" +
 			"live login is captured, a stored one is refreshed, and no login at all\n" +
 			"is an error.",
@@ -56,9 +57,9 @@ func (a *App) loginCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&req.capture, "capture", false,
 		"store the account logged in now, without asking")
 	cmd.Flags().BoolVar(&req.wait, "wait", false,
-		"wait for a /login in Claude Code, then store that account")
+		"wait for a login in the provider's own tool, then store that account")
 	cmd.Flags().StringVar(&req.token, "token", "",
-		`a setup token or managed API key, or "-" to read one from stdin`)
+		`a token to store as an account, or "-" to read one from stdin`)
 	cmd.Flags().StringVar(&req.email, "email", "",
 		"with --token, label the account with an address (a placeholder is "+
 			"synthesized otherwise)")

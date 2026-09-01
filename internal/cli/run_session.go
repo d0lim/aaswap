@@ -82,14 +82,17 @@ func splitRunArgsAt(args []string, at int) (identifier string, claudeArgs []stri
 // a capability added later cannot be forgotten for an existing one. Every
 // refusal names the provider, says what is missing, and points at the command
 // that does work — a refusal with no way forward is a dead end.
+//
+// The way forward comes from Why, which knows the capability. A single tail
+// appended to every refusal cannot: "use `switch` instead" is the answer for a
+// provider that cannot isolate a session and nonsense for one that cannot store
+// a pasted token.
 func (a *App) requireCapability(s *swap.Switcher, capability provider.Capability) error {
 	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
 	if spec.Can(capability) {
 		return nil
 	}
-	return fmt.Errorf("%w: %s. Use `aaswap --provider %s switch` to change that "+
-		"provider's active login instead",
-		apperr.ErrConfig, spec.Why(capability), spec.Name)
+	return fmt.Errorf("%w: %s", apperr.ErrConfig, spec.Why(capability))
 }
 
 func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []string, share session.ShareOptions) error {

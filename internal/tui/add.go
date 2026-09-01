@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/swap"
 )
 
@@ -186,20 +187,31 @@ func (m Model) waitingModal() *modal {
 	}
 }
 
-// askAddToken opens the field for a setup token or managed API key.
+// askAddToken opens the field for a pasted token.
+//
+// Refused where the provider declares no token format: aaswap would have to
+// invent both the recognition and the stored shape, and the shape it would
+// invent is Claude's — which, written into another tool's credential file,
+// replaces a working login with one that tool cannot read.
 func (m Model) askAddToken() (tea.Model, tea.Cmd) {
 	if m.busy != "" || m.awaitCancel != nil {
+		return m, nil
+	}
+	if !m.spec.Can(provider.CapToken) {
+		// Said rather than ignored: the key was pressed because the help
+		// screen offered it, and a key that does nothing reads as a freeze.
+		m.status, m.statusErr = m.spec.Why(provider.CapToken), true
 		return m, nil
 	}
 	st := m.styles
 	m.modal = &modal{
 		kind:        modalInput,
 		title:       "Add a token",
-		placeholder: "sk-ant-oat01-… or sk-ant-api03-…",
+		placeholder: m.spec.Token.Hint(),
 		body: []string{
 			"",
-			st.muted.Render("  An OAuth setup token or a managed API key. Nothing is sent"),
-			st.muted.Render("  anywhere: the kind is read off the value itself."),
+			st.muted.Render("  A token this tool accepts. Nothing is sent anywhere: the"),
+			st.muted.Render("  kind is read off the value itself."),
 		},
 		hint:      tokenKindNote,
 		busyLabel: "adding",
