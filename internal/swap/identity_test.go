@@ -327,3 +327,52 @@ func TestCredentialFingerprintIsLineageIdentity(t *testing.T) {
 		t.Error("a refresh-token rotation did not move the fingerprint")
 	}
 }
+
+// A token refresh is not an account change.
+//
+// The drift guard compares the whole identity that was read, and the fingerprint
+// in it names the credential generation rather than the account. Counting that
+// as drift refuses the re-login of the very account being captured — which is
+// exactly what `aaswap login` does when an account's token has expired.
+func TestATokenRefreshIsNotIdentityDrift(t *testing.T) {
+	before := LiveIdentity{
+		Email: "one@example.com", OrganizationUUID: "org-1",
+		OrganizationName: "S TF", AccountUUID: "acct-1",
+		Fingerprint: "a11111111",
+	}
+	after := before
+	after.Fingerprint = "a22222222"
+
+	if !before.SameAccount(after) {
+		t.Error("a new credential generation for the same account read as drift")
+	}
+}
+
+// A different account is still drift, however similar it looks.
+func TestADifferentAccountIsStillDrift(t *testing.T) {
+	base := LiveIdentity{Email: "one@example.com", OrganizationUUID: "org-1"}
+	for name, other := range map[string]LiveIdentity{
+		"another address":      {Email: "two@example.com", OrganizationUUID: "org-1"},
+		"another organization": {Email: "one@example.com", OrganizationUUID: "org-2"},
+	} {
+		if base.SameAccount(other) {
+			t.Errorf("%s compared equal to the original", name)
+		}
+	}
+}
+
+// With no address the fingerprint is the only identifying field, so a changed
+// one has to read as a different account. aaswap cannot tell a re-login from a
+// switch there, and refusing is the safe side of that.
+func TestWithNoAddressTheFingerprintIsTheIdentity(t *testing.T) {
+	before := LiveIdentity{Fingerprint: "a11111111"}
+	same := LiveIdentity{Fingerprint: "a11111111"}
+	other := LiveIdentity{Fingerprint: "a22222222"}
+
+	if !before.SameAccount(same) {
+		t.Error("an unchanged credential read as a different account")
+	}
+	if before.SameAccount(other) {
+		t.Error("a changed credential with no address read as the same account")
+	}
+}
