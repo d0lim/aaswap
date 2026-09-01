@@ -22,7 +22,7 @@ func (a *App) exportCommand() *cobra.Command {
 		Use:   "export PATH",
 		Short: "Write accounts to a portable file",
 		Long: "Use \"-\" to write to stdout, which is how you add your own encryption:\n" +
-			"  aaswap export - | gpg -c > accounts.gpg\n\n" +
+			"  aaswap account export - | gpg -c > accounts.gpg\n\n" +
 			"The file carries live refresh tokens in the clear. aaswap does not encrypt\n" +
 			"it, because your own tools do that better than a scheme invented here.",
 		Args: cobra.ExactArgs(1),
@@ -43,7 +43,7 @@ func (a *App) importCommand() *cobra.Command {
 		Use:   "import PATH",
 		Short: "Restore accounts from a portable file",
 		Long: "Use \"-\" to read from stdin:\n" +
-			"  gpg -d accounts.gpg | aaswap import -\n\n" +
+			"  gpg -d accounts.gpg | aaswap account import -\n\n" +
 			"An account that already exists here is left alone unless --force says\n" +
 			"otherwise — except one whose stored credential is quarantined as dead,\n" +
 			"which a plain import replaces.",

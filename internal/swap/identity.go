@@ -208,8 +208,8 @@ func RejectLiveAPIKeyCapture(credentials string) error {
 	if !credstore.LooksLikeAPIKey(credentials) {
 		return nil
 	}
-	return fmt.Errorf("%w: the active login is an API-key account. Add it with "+
-		"`aaswap add-token sk-ant-api...` instead", apperr.ErrValidation)
+	return fmt.Errorf("%w: the active login is an API-key account. Store it with "+
+		"`aaswap login --token sk-ant-api...` instead", apperr.ErrValidation)
 }
 
 // RejectCrossKindCollision refuses to register a token whose identity already

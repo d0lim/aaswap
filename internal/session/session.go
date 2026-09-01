@@ -462,8 +462,9 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 				"unreadable right now (locked, or no GUI session). Retry from a GUI "+
 				"terminal; do not re-add", apperr.ErrSession, accountNum)
 		}
-		return fmt.Errorf("%w: account %s has no stored credentials. Re-add with: "+
-			"aaswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
+		return fmt.Errorf("%w: account %s has no stored credentials. Log in as it, then "+
+			"run: aaswap login --capture --name %s",
+			apperr.ErrSession, accountNum, accountNum)
 	}
 
 	// Read AFTER the credential and BEFORE any write, but only for a provider
@@ -545,8 +546,9 @@ func (m *Manager) storedIdentity(accountNum, email string) (identity, theme json
 		fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email))
 	data, readErr := os.ReadFile(path)
 	if readErr != nil {
-		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Re-add "+
-			"with: aaswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
+		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Log in "+
+			"as it, then run: aaswap login --capture --name %s",
+			apperr.ErrSession, accountNum, accountNum)
 	}
 	var stored map[string]jsontext.Value
 	if err := json.Unmarshal(data, &stored); err != nil || stored == nil {
@@ -556,7 +558,7 @@ func (m *Manager) storedIdentity(accountNum, email string) (identity, theme json
 	account, present := stored["oauthAccount"]
 	if !present || string(account) == "null" {
 		return nil, nil, fmt.Errorf("%w: account %s's stored config carries no account "+
-			"identity. Re-add with: aaswap add --slot %s",
+			"identity. Log in as it, then run: aaswap login --capture --name %s",
 			apperr.ErrSession, accountNum, accountNum)
 	}
 	theme = stored["theme"]

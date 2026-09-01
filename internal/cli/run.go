@@ -42,7 +42,9 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 	}
 
 	if len(snapshot.Views) == 0 {
-		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: aaswap add"))
+		a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+			"No accounts are managed yet. Log in with %s, then run: aaswap login --capture",
+			s.Spec().DisplayName())))
 		a.notePredecessorStore(s.Paths)
 		return nil
 	}
@@ -113,7 +115,8 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 	if !managed {
 		a.printer.Println(a.printer.Bold("Status: "), live.Email,
 			a.printer.Muted(" ["+live.DisplayTag()+"]"))
-		a.printer.Println(a.printer.Dimmed("  Not managed by aaswap. Run `aaswap add` to store it."))
+		a.printer.Println(a.printer.Dimmed(
+			"  Not managed by aaswap. Run `aaswap login --capture` to store it."))
 		return nil
 	}
 
@@ -205,7 +208,8 @@ func (a *App) runSwitch(cmd *cobra.Command, target string, force bool) error {
 		return err
 	}
 	if len(roster.Accounts) == 0 {
-		return fmt.Errorf("no accounts are managed yet. Log in with Claude Code, then run: aaswap add")
+		return fmt.Errorf("no accounts are managed yet. Log in with %s, then run: "+
+			"aaswap login --capture", s.Spec().DisplayName())
 	}
 
 	if target == "" {
@@ -517,7 +521,8 @@ func (a *App) runUnclaimed(cmd *cobra.Command, purge string) error {
 	}
 	a.printer.Blank()
 	a.printer.Println(a.printer.Dimmed(
-		"Drop one with: aaswap unclaimed --purge <id>, or all of them with --purge all"))
+		"Drop one with: aaswap account unclaimed --purge <id>, or all of them " +
+			"with --purge all"))
 	return nil
 }
 

@@ -172,7 +172,7 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 	}
 	if len(roster.Accounts) == 0 {
 		return ExportResult{}, fmt.Errorf("%w: there are no accounts to export — run "+
-			"`aaswap add` first", apperr.ErrTransfer)
+			"`aaswap login` first", apperr.ErrTransfer)
 	}
 
 	explicit := req.Account != ""
@@ -226,8 +226,8 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 
 	if len(result.Envelope.Accounts) == 0 {
 		return ExportResult{}, fmt.Errorf("%w: no account could be exported — every "+
-			"managed slot is missing its stored credential or config. Re-add one with: "+
-			"aaswap add --slot <number>", apperr.ErrTransfer)
+			"managed account is missing its stored credential or config. Log in as one, "+
+			"then run: aaswap login --capture", apperr.ErrTransfer)
 	}
 
 	// Carried only when that slot is actually in the payload: pointing at an
@@ -276,8 +276,8 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 			// Exporting everything: one damaged slot must not poison the whole
 			// backup.
 			return ExportedAccount{}, fmt.Sprintf(
-				"account %s (%s): no stored credential or config — re-add with: "+
-					"aaswap add --name %s", num, account.Email, num), nil
+				"account %s (%s): no stored credential or config — log in as it, then "+
+					"run: aaswap login --capture --name %s", num, account.Email, num), nil
 		}
 	}
 

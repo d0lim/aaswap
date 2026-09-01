@@ -244,7 +244,7 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 		return err
 	}
 	return fmt.Errorf("%w: the session profile for %s (%s) failed validation. Log "+
-		"in with that account and re-add it: aaswap add --slot %s",
+		"in as that account, then run: aaswap login --capture --name %s",
 		apperr.ErrSession, num, account.Email, num)
 }
 
@@ -273,7 +273,7 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 		// user asked to run Claude Code, and the default login still can.
 		a.printer.Warning(fmt.Sprintf(
 			"This directory maps to %s, which is no longer managed. Remove the mapping "+
-				"with `aaswap unmap`, or re-add the account.", entry.Email))
+				"with `aaswap dir unmap`, or store the account again.", entry.Email))
 		return "", false, nil
 	}
 	return num, true, nil
@@ -478,7 +478,7 @@ func (a *App) runMappings() error {
 
 	if len(table) == 0 {
 		a.printer.Println(a.printer.Dimmed(
-			"No directories are mapped. Map one with: aaswap map <account> [directory]"))
+			"No directories are mapped. Map one with: aaswap dir map <account> [directory]"))
 		return nil
 	}
 	for _, dir := range sortedMapKeys(table) {

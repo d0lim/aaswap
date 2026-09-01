@@ -214,8 +214,8 @@ func (s *Switcher) persistSuccessor(accountNum, email, consumedFP string, result
 			// only in the returned credentials.
 			stashedReason = "consume-gate-unpersisted"
 			slog.Error("the consumed successor could not be persisted or stashed — it "+
-				"survives only for this pass. Fix the storage failure, then re-login and "+
-				"run `aaswap add` if the slot strikes",
+				"survives only for this pass. Fix the storage failure, then log in again "+
+				"and run `aaswap login --capture` if the account strikes",
 				"account", accountNum, "error", err)
 			return
 		}
@@ -312,7 +312,8 @@ func (s *Switcher) adoptStashedSuccessor(accountNum, email, current string) (str
 		// account is quarantined while its successor sits orphaned on disk.
 		return "", fmt.Errorf("%w: the unclaimed manifest is %s and stashed entry files "+
 			"exist; deferring adoption rather than POSTing a generation a stashed "+
-			"successor may already have superseded (`aaswap unclaimed` lists them, "+
+			"successor may already have superseded (`aaswap account unclaimed` lists "+
+			"them, "+
 			"`--purge` drops one)", apperr.ErrCredentialRead, verdict)
 	}
 

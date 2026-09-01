@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -209,7 +210,12 @@ func (t Tier) String() string {
 // something else. That is the difference between adding a provider and porting
 // aaswap to it.
 type Spec struct {
-	Name  string
+	Name string
+	// Label is the tool's name as a person writes it — "Claude Code" against
+	// the identifier "claude". Messages a user reads name the TOOL, not the
+	// `--provider` value, and a store key makes a poor sentence. Optional:
+	// empty falls back to Name, so a minimal declaration still reads correctly.
+	Label string
 	Home  Home
 	Files []File
 
@@ -235,6 +241,9 @@ type Spec struct {
 	// provider declaration must stay constructible without one.
 	Refreshable bool
 }
+
+// DisplayName is what to call this tool in a sentence.
+func (s Spec) DisplayName() string { return cmp.Or(s.Label, s.Name) }
 
 // IdentitySource reads who a credential belongs to.
 //

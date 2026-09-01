@@ -248,9 +248,9 @@ func DuplicateAccountWarnings(views []AccountView) []string {
 			if fp := claudeapi.Fingerprint(view.Credentials); fp != "" {
 				if other, seen := byFingerprint[fp]; seen {
 					out = append(out, fmt.Sprintf(
-						"Accounts %s and %s hold the same credential (%s) — one slot's backup "+
-							"was overwritten. Log in with the missing account and re-add it: "+
-							"aaswap add --slot N", other, view.Name, view.Account.Email))
+						"Accounts %s and %s hold the same credential (%s) — one account's "+
+							"backup was overwritten. Log in as the missing account, then run: "+
+							"aaswap login --capture", other, view.Name, view.Account.Email))
 				} else {
 					byFingerprint[fp] = view.Name
 				}
@@ -310,8 +310,8 @@ func LockstepUsageWarnings(views []AccountView, entries map[string]usagestore.En
 		if other, dup := seen[key]; dup {
 			out = append(out, fmt.Sprintf(
 				"Accounts %s and %s report identical usage and reset times — they may be "+
-					"the same account. If it persists, log in with the missing account and "+
-					"re-add it: aaswap add --slot N", other, view.Name))
+					"the same account. If it persists, log in as the missing account, then "+
+					"run: aaswap login --capture", other, view.Name))
 		} else {
 			seen[key] = view.Name
 		}

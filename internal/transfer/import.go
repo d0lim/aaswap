@@ -115,7 +115,8 @@ func parseEnvelope(data []byte) (Envelope, error) {
 	}
 	if envelope.Encrypted {
 		return Envelope{}, fmt.Errorf("%w: this export is marked encrypted. Decrypt it "+
-			"before importing — for example: gpg -d accounts.gpg | aaswap import -",
+			"before importing — for example: gpg -d accounts.gpg | "+
+			"aaswap account import -",
 			apperr.ErrTransfer)
 	}
 	if len(envelope.Accounts) == 0 {
