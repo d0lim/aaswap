@@ -85,7 +85,7 @@ func (s *Switcher) Switch(ctx context.Context, req SwitchRequest) (SwitchOutcome
 
 	var outcome SwitchOutcome
 	err = s.withLock(func() error {
-		return s.withClaudeLocks(func() error {
+		return s.withToolLocks(func() error {
 			roster, err := s.RosterOrEmpty()
 			if err != nil {
 				return err
@@ -104,8 +104,18 @@ func (s *Switcher) Switch(ctx context.Context, req SwitchRequest) (SwitchOutcome
 	return outcome, nil
 }
 
-// withClaudeLocks holds Claude Code's advisory locks for the duration.
-func (s *Switcher) withClaudeLocks(fn func() error) error {
+// withToolLocks holds the provider's tool's own advisory locks for the
+// duration, where it declares any.
+//
+// Declared, not assumed. These are Claude Code's locks, at paths inside
+// ~/.claude: taking them for another provider made a Codex switch create
+// directories in an install it was not asked about, and fail outright with
+// "timed out waiting for Claude Code's lock" while a real Claude Code was
+// refreshing — held up by, and holding up, work with nothing to do with it.
+func (s *Switcher) withToolLocks(fn func() error) error {
+	if !s.spec().AdvisoryLocks {
+		return fn()
+	}
 	opts := lockfile.ProperOptions{}
 	return lockfile.WithClaudeCredentials(s.Paths, opts, func() error {
 		return lockfile.WithClaudeConfig(s.Paths, opts, fn)
