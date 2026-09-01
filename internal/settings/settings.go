@@ -31,7 +31,13 @@ const (
 	FileName = "settings.json"
 )
 
-// AutoSwitch holds the policy knobs for the auto-switch engine (`aaswap auto`).
+// AutoSwitch holds the usage-reporting knobs.
+//
+// Named for the rotation engine it used to configure, which is gone. The
+// threshold and model keys are still read — by the LISTING, to decide which
+// accounts to flag and which per-model windows to count. The section keeps its
+// name because renaming it means migrating every user's settings.json, which
+// is not worth doing on its own.
 //
 // Threshold is binding-window utilization — the higher of the 5h and 7d
 // percentages. At or above it the engine looks for a better account. It is 90
@@ -153,7 +159,7 @@ var specs = []Spec{
 	{
 		Section: "autoswitch", JSONKey: "strategy", Kind: KindChoice,
 		Choices: []string{"best", "consume-first"},
-		Help:    "How auto-switch picks the target account",
+		Help:    "Unused since automatic rotation was removed; kept so an existing settings.json still parses",
 		get:     func(s Settings) any { return s.AutoSwitch.Strategy },
 		set:     func(s *Settings, v any) { s.AutoSwitch.Strategy = v.(string) },
 	},

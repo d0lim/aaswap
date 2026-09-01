@@ -1,12 +1,16 @@
 # aaswap
 
 **A**gent **A**ccount **Swap**. Switch between agent CLI accounts without
-logging out, or let it switch for you before you hit a rate limit. See every
-account's remaining quota at a glance, and run several accounts in parallel.
+logging out. See every account's remaining quota at a glance, and run several
+accounts in parallel.
 
 Manages **Claude Code** (the CLI and the VS Code extension) and **Codex**. Each
 provider keeps its own accounts and its own active login, so both tools can be
-signed in at once.
+signed in at once. Adding another agent CLI is a declaration rather than a port
+— see [Adding a provider](#adding-a-provider).
+
+`aaswap doctor` reports what works for which provider, so nothing is left to
+guess at.
 
 A single static binary — no runtime to install, on macOS, Linux or Windows.
 
@@ -133,8 +137,12 @@ it costs no request and consumes nothing — but it can only describe the accoun
 you are signed into now. Idle Codex accounts show no measurement rather than
 stale numbers.
 
-`run` and `dir` are Claude Code's session machinery and refuse other providers
-rather than launching the wrong tool.
+`run` and `dir` work for any provider that declares an isolated profile
+directory — both Claude Code and Codex do. For Codex, aaswap cannot tell whether
+a session is running against a profile, so it never replaces a profile's
+credential on its own and says so instead.
+
+Run `aaswap doctor` for the full table.
 
 ### Switch accounts
 
@@ -198,45 +206,23 @@ run `/login` in another terminal and captures the account when it appears.
 Switching asks before it replaces a live credential. The dashboard needs a
 terminal — in a script, use `aaswap list --json`.
 
-Or let aaswap auto-pick by remaining quota — `aaswap switch --strategy best` (most quota left) or `--strategy next-available` (skip rate-limited accounts).
-
 **Note:** You usually don't need to restart — on Linux/Windows the new account is picked up automatically, and on macOS after the Keychain cache expires. To apply it instantly, restart Claude Code or reopen the VS Code extension tab. See [Tips](#tips) for the per-platform details.
 
-### Automatic switching
+### What aaswap does not do
 
-Let aaswap watch your usage and switch for you. When the active account's 5-hour or 7-day window reaches the threshold (default 90%), it switches to the account with the most quota left — before you hit the limit, and safe to run while Claude Code is working:
+aaswap has no automatic rotation. There is no daemon polling every account's
+quota and moving the live login off one that is running low.
 
-```bash
-aaswap auto                     # foreground loop, polls every 60s
-aaswap auto --threshold 80      # switch earlier
-aaswap auto --model Fable       # also switch when the Fable weekly limit is hit
-aaswap auto --once              # single check-and-switch, for cron/scripts
-aaswap auto --dry-run           # log what it would do, never switch
-aaswap auto --strategy consume-first   # burn the soonest-resetting account first
-```
+That existed and was removed. Automatically rotating between accounts to keep
+working past a rate limit is circumvention however it is dressed up, and it
+leaves a signature no ordinary single user produces: several accounts' tokens
+polled from one machine on a schedule, and one account stopping at its threshold
+while another starts seconds later, repeatedly. The risk of that landed on
+whoever ran it, not on whoever wrote it.
 
-<details>
-<summary>How it behaves & advanced usage</summary>
-
-- Runs safely alongside Claude Code: switches take the same credential locks Claude Code uses, so a swap never collides with a token refresh.
-- A cooldown (default 5 min) and a hysteresis margin stop it flip-flopping near the threshold: a proactive switch only lands on an account that's below the threshold *and* better than the current one by the margin — a candidate that clears the margin is always taken, but two accounts hovering at the line never ping-pong. When every account is exhausted it keeps checking on a bounded slow cadence, waking sooner for an imminent reset.
-- **Strategies** (`--strategy`, or `aaswap config set autoswitch.strategy`): `best` (default) stays put until the active account nears its limit, then moves to the account with the most quota left. `consume-first` proactively keeps you on the account whose **weekly window resets soonest** — use-it-or-lose-it — switching to a sooner-resetting account (with room to spare) even below the threshold, so perishable weekly quota isn't wasted.
-- Usage polling is adaptive — a couple of accounts per check, busy alternates watched more closely, and exhausted ones checked about every ten minutes (or slower after 429s) — so API traffic stays flat no matter how many accounts you manage.
-- It fails safe: if a usage check errors it keeps trusting the last-known numbers while retries back off, and an expired token on an idle machine makes it hold rather than fail over (Claude Code refreshes the token on your next message).
-- An account whose refresh token has died is quarantined and reported until you either log in with it and re-run `aaswap login`, or replace its stored credentials from a known-good export — a plain `aaswap account import backup.aaswap` replaces dead-token accounts on its own (`--force` is still required to replace other existing accounts; note a stale export can carry an already-superseded token). API-key accounts are never rotated onto unless you pass `--include-api-key-accounts`.
-- To hold an account out of rotation yourself — a work account you don't want touched, one you're resting — run `aaswap disable <num|email>`; `aaswap enable <num|email>` puts it back. Disabled accounts are skipped by auto-switch, bare `aaswap switch`, and the `best` / `next-available` strategies, but stay fully managed and remain a valid explicit `aaswap switch <num|email>` target. They show an `(out of rotation)` marker in `aaswap list`.
-- By default only the account-wide 5h/7d windows drive switching. If you work on one model and hit its **weekly per-model limit** first (e.g. Fable), add `--model Fable` (or `aaswap config set autoswitch.model Fable`) to fold that model's window into the decision, so it switches off an account whose model quota is spent even while its 5h/7d windows still have room.
-  - **Model names** are Anthropic's own per-model `display_name`s, matched case-insensitively. The exact strings for your accounts are the per-model rows in `aaswap list` (e.g. a line reading `Fable: 100%`).
-
-For cron/systemd timers, `--once` reports the outcome in its exit code (`0` switched, `1` error, `2` nothing to do, `3` blocked — no viable target), and `--json` emits one JSON event per line:
-
-```bash
-*/5 * * * * aaswap auto --once --json >> ~/.aaswap-auto.log 2>&1
-```
-
-Defaults like the threshold and cooldown are configurable with `aaswap config set autoswitch.threshold 80` — flags override them (see [Configuration](#configuration)).
-
-</details>
+Everything else here is managing several accounts one person legitimately has.
+`aaswap switch` with no argument still rotates to the next account, when you
+decide to.
 
 ### Run multiple accounts at the same time (session mode)
 
@@ -300,16 +286,16 @@ aaswap status                    # which account is currently logged in
 aaswap switch work               # activate an account
 aaswap switch                    # rotate to the next one
 aaswap run work                  # run an account in this terminal only (session mode)
-aaswap auto                      # auto-switch when nearing rate limits
 aaswap tui                       # interactive dashboard
+aaswap doctor                    # what aaswap can do for each provider
 aaswap config                    # show or change settings
 aaswap upgrade                   # check for a newer release
-aaswap purge                     # forget every managed account
 
 aaswap account rename work dev   # give an account a different name
-aaswap account disable work      # hold it out of auto-rotation (keeps its login)
+aaswap account disable work      # hold it out of rotation (keeps its login)
 aaswap account enable work
 aaswap account remove work       # forget aaswap's copy — does NOT log you out
+aaswap account remove --all      # forget every account
 aaswap account export backup.aaswap
 aaswap account import backup.aaswap
 aaswap account unclaimed         # credentials aaswap preserved but could not file
@@ -371,7 +357,9 @@ whichever tool got there first would leave the other reporting a live account as
 dead. macOS Keychain items are copied rather than moved, so putting the
 directory back restores a working claude-swap install.
 
-Session-mode profiles (`aaswap run`) live under the backup directory in `sessions/`. Tool preferences (`settings.json`) and auto-switch state (`autoswitch_state.json` — cooldown and quarantined accounts; delete it to reset) live in the backup directory root.
+Each account's stored files live in `vault/<provider>/<account>/`. Session-mode
+profiles (`aaswap run`) live in `sessions/`, and tool preferences in
+`settings.json` at the backup directory root.
 
 On Linux/WSL, set `XDG_DATA_HOME` to override the default location.
 
@@ -403,7 +391,7 @@ aaswap config get autoswitch.threshold
 aaswap config set autoswitch.threshold 80  # validated: rejects out-of-range values loudly
 aaswap config set autoswitch.model Fable   # per-model switching (see "auto"); Fable,Opus for several
 aaswap config unset autoswitch.threshold   # back to the default
-aaswap config path                         # where settings.json lives
+aaswap config list                         # also prints where settings.json lives
 ```
 
 `aaswap config --help` lists every key with its valid range and default. Hand-editing the file still works — `aaswap config` is just a safer front door. `list` and `get` take `--json` for scripting.
@@ -433,7 +421,7 @@ Add `--json` to `list`, `status`, or `switch` to emit a single machine-readable 
 ```bash
 aaswap list --json                   # all accounts with usage/quota
 aaswap status --json                 # current active account
-aaswap switch --strategy best --json # switch, then report the result
+aaswap switch work --json            # switch, then report the result
 aaswap switch 2 --json
 ```
 
@@ -462,7 +450,41 @@ Weekly windows (`sevenDay` and per-model `scoped` entries — never `fiveHour`) 
 
 </details>
 
-`aaswap auto --json` emits an event *stream* instead — one JSON object per line (`{"schemaVersion":1,"event":"switch","ts":…, …}` with kinds like `poll`, `switch`, `no-switch`, `quarantine`, `unquarantine`, `all-exhausted`, `sleep`, `error`). The contract is additive: new kinds and fields may appear, so scripts should ignore unknown ones.
+`aaswap doctor --json` reports every provider's capabilities, each with a
+`supported` flag and — when it is false — a `reason` naming what is missing. A
+wrapper deciding whether to offer `run` for a provider should read that rather
+than parse prose.
+
+### Adding a provider
+
+A provider is a declaration, not a port. The required part is three fields:
+
+```go
+provider.Spec{
+    Name:  "grok",
+    Home:  provider.Home{Env: "GROK_HOME", Default: ".grok"},
+    Files: []provider.File{{Path: "auth.json", Role: provider.RoleSecret}},
+}
+```
+
+That much makes `list`, `status`, `switch`, `login`, `account rename`,
+`account remove` and `export`/`import` work. Accounts get named by a digest of
+the credential — `aaswap account rename a1b2c3d4 work` renames one — because
+nothing has to parse the token format for the tool to be manageable.
+
+Everything beyond those three fields is a capability. Declare `Identity` to read
+real addresses out of the credential, `Session` for `run`, `Usage` for quota
+reporting, `Refreshable` when tokens can be renewed without a browser. Whatever
+is not declared is reported as unsupported by `aaswap doctor`, with a reason —
+never silently skipped, and never guessed at.
+
+Files carry a role. `RoleSecret` is the token, `RoleIdentity` is where an
+account's name comes from, and `RoleMachine` belongs to the machine rather than
+the account — a model choice or an MCP server list. Machine-scoped files are
+never swapped, because carrying one account's onto another is a silent
+misconfiguration rather than a visible failure.
+
+The design and its reasoning are in [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 ### Add an account from a raw token or API key
 
@@ -497,7 +519,7 @@ rate-limited.
 Remove all data:
 
 ```bash
-aaswap purge
+aaswap account remove --all
 ```
 
 Then remove the binary:

@@ -78,7 +78,27 @@ machines. Breaking one is not a refactor, it is a regression.
    Assigning `Switcher.Provider` afterwards leaves both pointed at the wrong
    provider's files while the roster reads the right one's section.
 
-8. **Tests never touch real state.** Three guards panic in test builds when the
+8. **A provider's abilities are declared, never inferred from its name.**
+   `provider.Spec` says what a tool keeps where and what aaswap can do with it.
+   A command needing something the provider did not declare must refuse by name
+   with a reason (`Spec.Why`), which is what `aaswap doctor` renders and what
+   `App.requireCapability` enforces. Writing `if provider == "codex"` anywhere
+   above `internal/provider` puts a fact in a place no `--help` can reach and
+   no new provider will remember to fill in. Adding a provider is a declaration
+   — `TestAMinimalDeclarationIsUsable` and `internal/cli/newprovider_test.go`
+   hold that line; if either needs more than Name, Home and Files, the contract
+   has grown a requirement it should not have.
+
+9. **The unsafe direction requires evidence; the safe one is the default.**
+   `Session.Liveness` may be nil, meaning aaswap cannot tell whether something
+   is running against a profile. `MayReseed` then answers false and no
+   credential is replaced under a session that might exist. Never invert a check
+   like this so that absence of evidence licenses the destructive branch — and
+   when a limitation like this is in force, SAY so: a stale credential with no
+   explanation is a bug report, the same thing explained is a declared
+   limitation.
+
+10. **Tests never touch real state.** Three guards panic in test builds when the
    real thing is reached: `paths.guardRealStore`, `keychain.guardRealKeychain`,
    `claudeapi.guardRealEndpoint`. They replace Python's `sys.addaudithook`
    safety net and are the reason this codebase injects a dependency at every
@@ -242,15 +262,13 @@ internal/
   provider/                                       the seam between aaswap and
                                                   the tools it swaps
   keychain/ credstore/                            credential storage
-  claudeapi/ usage/ usagestore/ pollpolicy/ pace/ usage pipeline
+  claudeapi/ usage/ usagestore/ pollpolicy/ pace/ usage reporting
   swap/                                           the switcher, split by role
   session/ mappings/ transfer/ procdetect/        session mode, data movement
-  autoswitch/                                     policy engine
   cli/ render/ jsonout/ tui/ updatecheck/         surfaces
   testutil/                                       cross-platform test helpers
 ```
 
 `internal/swap` is split by role on purpose — `add.go`, `activate.go`,
-`relocate.go`, `remove.go`, `snapshot.go`, `report.go`, `roster.go`,
-`identity.go`. Put new switcher behavior in the file that owns that role rather
+`remove.go`, `snapshot.go`, `report.go`, `roster.go`, `identity.go`, `spec.go`. Put new switcher behavior in the file that owns that role rather
 than growing one of them into a god object again.

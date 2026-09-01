@@ -95,7 +95,7 @@ func (s *Switcher) DisabledNumbers(roster *Roster) []string {
 	return out
 }
 
-// SetDisabled holds an account out of automatic selection, or returns it.
+// SetDisabled holds an account out of rotation, or returns it.
 //
 // Reports whether anything changed, so a caller can say "already disabled"
 // rather than claiming an edit it did not make.
@@ -127,7 +127,7 @@ func (s *Switcher) SetDisabled(identifier string, disabled bool) (num, email str
 // is none or the live login is unmanaged.
 //
 // Deliberately NO fallback to the roster's recorded active slot. An unmanaged
-// live login must report nothing rather than a guessed slot, or the auto-switch
+// live login must report nothing rather than a guessed slot, or the rotation
 // engine would evaluate the wrong account's usage and overwrite a login aaswap
 // does not own. Use [Switcher.HasLiveLogin] to tell the two negative cases
 // apart.

@@ -335,7 +335,7 @@ func TestDisablingTheLastAccountWarns(t *testing.T) {
 	if code := h.run("account", "disable", "1"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts remain in rotation", "aaswap enable")
+	wantContains(t, h.stdout(), "No accounts remain in rotation", "aaswap account enable")
 }
 
 func TestConfig(t *testing.T) {

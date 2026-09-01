@@ -204,7 +204,7 @@ func (a *App) removeCommand() *cobra.Command {
 func (a *App) disableCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "disable NUM|EMAIL|ALIAS",
-		Short: "Hold an account out of automatic selection",
+		Short: "Hold an account out of rotation",
 		Long: "The account stays managed and remains a valid explicit switch target; it\n" +
 			"is only skipped by rotation, the headroom strategies, and auto-switch.",
 		Args: cobra.ExactArgs(1),
@@ -219,7 +219,7 @@ func (a *App) disableCommand() *cobra.Command {
 func (a *App) enableCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "enable NUM|EMAIL|ALIAS",
-		Short: "Return an account to automatic selection",
+		Short: "Return an account to rotation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.runSetDisabled(cmd, args[0], false)

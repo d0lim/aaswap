@@ -431,11 +431,11 @@ func (a *App) runSetDisabled(cmd *cobra.Command, identifier string, disabled boo
 	if current, ok := s.CurrentNumber(roster); ok && current == num {
 		a.printer.Println(a.printer.Dimmed(
 			"  It is the active account — it stays live until you switch away; " +
-				"it just will not be an automatic target."))
+				"a bare `aaswap switch` just will not rotate onto it."))
 	}
 	if len(s.SwitchableNumbers(roster)) == 0 {
-		a.printer.Warning("No accounts remain in rotation — auto-switch and a bare " +
-			"switch have nothing to pick. Re-enable one with: aaswap enable <num|email>")
+		a.printer.Warning("No accounts remain in rotation — a bare `aaswap switch` " +
+			"has nothing to pick. Re-enable one with: aaswap account enable <account>")
 	}
 	return nil
 }
