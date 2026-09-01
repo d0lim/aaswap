@@ -257,7 +257,7 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 	if err != nil {
 		return "", false, fmt.Errorf("%w: reading the working directory: %w", apperr.ErrConfig, err)
 	}
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	_, entry, found := store.Resolve(cwd)
 	if !found {
 		return "", false, nil
@@ -414,7 +414,7 @@ func (a *App) runMap(identifier, dir string) error {
 		return err
 	}
 
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	store.Now = s.Now
 	key, err := store.Set(dir, mappings.Identity{
 		Email:            account.Email,
@@ -436,7 +436,7 @@ func (a *App) runUnmap(dir string) error {
 	if err := a.requireCapability(s, provider.CapSession); err != nil {
 		return err
 	}
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	removed, err := store.Remove(dir)
 	if err != nil {
 		return err
@@ -457,7 +457,7 @@ func (a *App) runMappings() error {
 	if err := a.requireCapability(s, provider.CapSession); err != nil {
 		return err
 	}
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	table := store.Load()
 
 	if a.json {
