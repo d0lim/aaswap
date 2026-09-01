@@ -52,8 +52,8 @@ import (
 // so the first one to bump it would silently wipe the other's state. Sharing a
 // backup root only looks like compatibility.
 //
-// A claude-swap store is therefore FOREIGN. See [Resolver.ClaudeSwapRoots] and
-// the `aaswap import-store` command, which moves one over on request.
+// A predecessor's store is therefore FOREIGN. See [Resolver.Predecessors] and
+// the `aaswap account adopt` command, which moves one over on request.
 const (
 	// BackupDirName is the XDG data directory, used on Linux and WSL.
 	BackupDirName = "aaswap"
@@ -64,13 +64,6 @@ const (
 	// LegacyBackupDirName is the pre-XDG backup directory, still the layout
 	// used on macOS and Windows.
 	LegacyBackupDirName = ".aaswap-backup"
-)
-
-// claude-swap's own backup directory names, which aaswap only ever reads, and
-// only when asked to import.
-const (
-	claudeSwapDirName       = "claude-swap"
-	claudeSwapLegacyDirName = ".claude-swap-backup"
 )
 
 // Resolver answers every "where does that file live" question from a fixed set
@@ -235,40 +228,89 @@ func exists(path string) bool {
 	return err == nil
 }
 
-// ClaudeSwapRoots returns the places a claude-swap store could be on this
-// platform, most-current layout first.
+// Predecessor is a store written by a project this one succeeded.
 //
-// Only ever read, and only when the user asks to import. The two projects share
-// no on-disk state by design; this is the one seam between them, and it exists
-// so someone arriving from claude-swap does not have to move files by hand.
+// Only ever read, and only when the user asks. Two independently evolving
+// projects cannot share a backup root — they stamp the same schema versions
+// into the same filenames — so a predecessor's store is FOREIGN, and this is
+// the one seam between them. It exists so someone arriving from an earlier name
+// does not have to move credentials by hand.
+type Predecessor struct {
+	// Name is what the project called itself, and what its store directory and
+	// Keychain service are named after.
+	Name string
+	// Roots are the places its store could be on this platform, most-current
+	// layout first.
+	Roots []string
+	// KeychainService is where it filed backup credentials on macOS.
+	KeychainService string
+}
+
+// Found is a predecessor store that actually exists.
+type Found struct {
+	Predecessor
+	Root string
+}
+
+// predecessorNames are the projects this one succeeded, closest ancestor first.
 //
-// Both layouts are returned rather than just the one this platform would write,
-// because a store can arrive from another machine through file sync — the same
-// reason [Resolver.MigrateLegacyBackupDir] has to reason about a legacy
-// directory appearing on a host that would never create one.
-func (r *Resolver) ClaudeSwapRoots() []string {
-	legacy := filepath.Join(r.Home, claudeSwapLegacyDirName)
+// Order is the answer for a machine that ran both: the closer ancestor is far
+// likelier to hold the store someone actually wants.
+var predecessorNames = []string{"ccswap", "claude-swap"}
+
+// Predecessors lists every project whose store this one can adopt.
+//
+// Both layouts are returned for each rather than just the one this platform
+// would write, because a store can arrive from another machine through file
+// sync — the same reason [Resolver.MigrateLegacyBackupDir] has to reason about
+// a legacy directory appearing on a host that would never create one.
+func (r *Resolver) Predecessors() []Predecessor {
+	out := make([]Predecessor, 0, len(predecessorNames))
+	for _, name := range predecessorNames {
+		out = append(out, Predecessor{
+			Name:            name,
+			Roots:           r.predecessorRoots(name),
+			KeychainService: name,
+		})
+	}
+	return out
+}
+
+func (r *Resolver) predecessorRoots(name string) []string {
+	legacy := filepath.Join(r.Home, "."+name+"-backup")
 	if !r.Platform.UsesXDG() {
 		return []string{legacy}
 	}
-	xdg := filepath.Join(r.Home, ".local", "share", claudeSwapDirName)
+	xdg := filepath.Join(r.Home, ".local", "share", name)
 	if custom := r.expandTilde(r.XDGDataHome); filepath.IsAbs(custom) {
-		xdg = filepath.Join(custom, claudeSwapDirName)
+		xdg = filepath.Join(custom, name)
 	}
 	return []string{xdg, legacy}
 }
 
-// FindClaudeSwapStore returns the first claude-swap store that exists and
-// carries a roster, and whether there was one.
+// FindPredecessor returns the first predecessor store that exists and carries
+// an account table, and whether there was one.
 //
-// The roster is the test rather than the directory: an empty directory left by
+// The table is the test rather than the directory: an empty directory left by
 // an uninstall is not a store worth telling anyone about, and offering to
 // import nothing is worse than saying nothing.
-func (r *Resolver) FindClaudeSwapStore() (string, bool) {
-	for _, root := range r.ClaudeSwapRoots() {
-		if exists(filepath.Join(root, RosterFileName)) {
-			return root, true
+//
+// This tool's own roots are skipped, so a store already in use is never offered
+// back to its owner as something to import.
+func (r *Resolver) FindPredecessor() (Found, bool) {
+	ours := map[string]bool{
+		r.BackupRoot():       true,
+		r.LegacyBackupRoot(): true,
+	}
+	for _, predecessor := range r.Predecessors() {
+		for _, root := range predecessor.Roots {
+			if ours[root] {
+				continue
+			}
+			if exists(filepath.Join(root, RosterFileName)) {
+				return Found{Predecessor: predecessor, Root: root}, true
+			}
 		}
 	}
-	return "", false
+	return Found{}, false
 }

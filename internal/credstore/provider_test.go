@@ -82,3 +82,19 @@ func TestTheLegacyLayoutIsStillReadable(t *testing.T) {
 		t.Error("the legacy store cannot read what it wrote")
 	}
 }
+
+// Unscoped has to name the directory a version 1 store actually used. Deriving
+// it by walking back up from the scoped path is how it came to point one level
+// too deep — and every test that seeded through the same accessor agreed with
+// the bug.
+func TestUnscopedPointsAtTheRealLegacyDirectory(t *testing.T) {
+	root := t.TempDir()
+	scoped := linuxStore(t, root, "claude")
+	want := filepath.Join(root, "credentials")
+	if got := scoped.Unscoped().CredentialsDir(); got != want {
+		t.Errorf("Unscoped().CredentialsDir() = %q, want %q", got, want)
+	}
+	if got := linuxStore(t, root, "").CredentialsDir(); got != want {
+		t.Errorf("an unscoped store files into %q, want %q", got, want)
+	}
+}

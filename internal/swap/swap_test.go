@@ -3,6 +3,7 @@ package swap
 import (
 	"context"
 	json "encoding/json/v2"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -85,7 +86,11 @@ func (f *fixture) seedRoster(roster *Roster) {
 func (f *fixture) seedAccounts(accounts map[string]*Account) *Roster {
 	f.t.Helper()
 	roster := newRoster()
-	for num, account := range accounts {
+	// Sorted, because Insert appends and map iteration is random: seeding from
+	// a map would otherwise give the roster a different display order on every
+	// run, and the tests that assert on the first row would flake.
+	for _, num := range slices.Sorted(maps.Keys(accounts)) {
+		account := accounts[num]
 		roster.Insert(num, account)
 		if err := f.Creds.WriteAccount(num, account.Email, `{"claudeAiOauth":{"accessToken":"tok-`+num+`"}}`); err != nil {
 			f.t.Fatal(err)

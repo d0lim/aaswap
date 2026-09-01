@@ -43,7 +43,7 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 
 	if len(snapshot.Views) == 0 {
 		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: aaswap add"))
-		a.noteClaudeSwapStore(s.Paths)
+		a.notePredecessorStore(s.Paths)
 		return nil
 	}
 
@@ -638,18 +638,18 @@ func sortedIDs(entries map[string]*credstore.StashEntry) []string {
 // noteClaudeSwapStore points out a store left by the claude-swap project.
 //
 // Shown only when aaswap has no accounts of its own, which is the only moment
-// the suggestion is actionable — import-store refuses to merge into a populated
+// the suggestion is actionable — adopt refuses to merge into a populated
 // store, so nagging someone who already has accounts would offer a command that
 // cannot run.
 //
 // A note, never an automatic import: this names another tool's live credential
 // store, and moving one out from under its owner on a first run is not a
 // decision a listing gets to make.
-func (a *App) noteClaudeSwapStore(resolver *paths.Resolver) {
-	source, found := resolver.FindClaudeSwapStore()
-	if !found {
+func (a *App) notePredecessorStore(resolver *paths.Resolver) {
+	found, ok := resolver.FindPredecessor()
+	if !ok {
 		return
 	}
-	a.printer.Println(a.printer.Dimmed(
-		"Found a claude-swap store at " + source + " — `aaswap import-store` moves it over."))
+	a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+		"Found a %s store at %s — `aaswap adopt` moves it over.", found.Name, found.Root)))
 }
