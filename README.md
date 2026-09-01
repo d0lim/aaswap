@@ -128,6 +128,14 @@ AASWAP_PROVIDER=codex aaswap switch work
 Each provider has its own accounts and its own active login. Switching one
 never touches the other.
 
+Codex quota comes from what Codex itself recorded during your last session, so
+it costs no request and consumes nothing — but it can only describe the account
+you are signed into now. Idle Codex accounts show no measurement rather than
+stale numbers.
+
+`run` and `dir` are Claude Code's session machinery and refuse other providers
+rather than launching the wrong tool.
+
 ### Switch accounts
 
 Rotate to the next account:

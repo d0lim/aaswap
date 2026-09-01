@@ -83,3 +83,29 @@ func TestTheProvidersDoNotSeeEachOther(t *testing.T) {
 		t.Errorf("the codex section holds %+v, want the captured account", roster)
 	}
 }
+
+// Session mode is Claude Code's: the profile directory, the env var that
+// points at it, the binary launched into it, and the MCP mirroring are all
+// that tool's shape. Launching `claude` because someone asked for a Codex
+// session is the worst available answer, so `run` says so instead.
+func TestRunSaysItIsClaudeOnly(t *testing.T) {
+	h := newHarness(t)
+	h.codexLogin("work@example.com", "acct-9", "plus")
+	if code := h.run("--provider", "codex", "login", "--capture"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+
+	if code := h.run("--provider", "codex", "run", "work"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	}
+	// Name the command that DOES work, or the refusal is a dead end.
+	wantContains(t, h.stderr(), "session", "codex", "switch")
+}
+
+// The directory mappings `run` reads are equally Claude-only.
+func TestDirMapSaysItIsClaudeOnly(t *testing.T) {
+	h := newHarness(t)
+	if code := h.run("--provider", "codex", "dir", "map", "work"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	}
+}
