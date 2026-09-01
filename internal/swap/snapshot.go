@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/credstore"
-	"github.com/realiti4/claude-swap/internal/pollpolicy"
-	"github.com/realiti4/claude-swap/internal/settings"
-	"github.com/realiti4/claude-swap/internal/usage"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/settings"
+	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // Sentinel states: derived conditions that answer for an account instead of a

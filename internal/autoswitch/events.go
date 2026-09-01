@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/jsonout"
 )
 
 // Event is one thing the engine did or decided.

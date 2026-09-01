@@ -45,10 +45,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/fsutil"
-	"github.com/realiti4/claude-swap/internal/lockfile"
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/lockfile"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 // SchemaVersion is the on-disk format. A file at any other version — a

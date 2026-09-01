@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/fsutil"
-	"github.com/realiti4/claude-swap/internal/keychain"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/keychain"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // Bounded retry for the active OAuth Keychain read.

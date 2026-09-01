@@ -1,4 +1,4 @@
-// Package apperr carries claude-swap's error taxonomy.
+// Package apperr carries ccswap's error taxonomy.
 //
 // The Python original expressed this as an exception hierarchy rooted at
 // ClaudeSwitchError, and callers branched on subclasses: the CLI catches the
@@ -9,7 +9,7 @@
 //
 // That means errors.Is answers the same questions the except clauses did:
 //
-//	errors.Is(err, apperr.Err)              // any claude-swap error (CLI)
+//	errors.Is(err, apperr.Err)              // any ccswap error (CLI)
 //	errors.Is(err, apperr.ErrCredential)    // any credential problem
 //	errors.Is(err, apperr.ErrCredentialRead) // specifically a failed read
 //
@@ -22,7 +22,7 @@ import "errors"
 
 // kind is a node in the taxonomy. Error returns only the node's own label —
 // the parent is reachable through Unwrap but is deliberately absent from the
-// message, so wrapping does not produce "credential: claude-swap error" noise.
+// message, so wrapping does not produce "credential: ccswap error" noise.
 type kind struct {
 	label  string
 	parent error
@@ -33,10 +33,10 @@ func (k *kind) Unwrap() error { return k.parent }
 
 func derive(label string, parent error) error { return &kind{label: label, parent: parent} }
 
-// Err is the root of the taxonomy: every error claude-swap raises on purpose
+// Err is the root of the taxonomy: every error ccswap raises on purpose
 // unwraps to it. The CLI treats a match as "expected failure, print and exit 1"
 // and anything else as a bug worth a stack trace.
-var Err = errors.New("claude-swap error")
+var Err = errors.New("ccswap error")
 
 // Credential storage and retrieval.
 var (

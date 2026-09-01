@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/keychain"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/keychain"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 func readGlobalConfigForTest(t *testing.T, s *Store) map[string]any {

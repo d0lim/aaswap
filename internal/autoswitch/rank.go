@@ -5,8 +5,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/swap"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // rankInput is everything the ranking needs.

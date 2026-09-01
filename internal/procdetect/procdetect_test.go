@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/testutil"
+	"github.com/d0lim/ccswap/internal/testutil"
 )
 
 // writeSession puts one session record under a config directory.

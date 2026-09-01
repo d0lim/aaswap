@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/credstore"
-	"github.com/realiti4/claude-swap/internal/keychain"
-	"github.com/realiti4/claude-swap/internal/paths"
-	"github.com/realiti4/claude-swap/internal/platform"
-	"github.com/realiti4/claude-swap/internal/settings"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/ccswap/internal/keychain"
+	"github.com/d0lim/ccswap/internal/paths"
+	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/ccswap/internal/settings"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 var testNow = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)

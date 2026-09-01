@@ -58,7 +58,7 @@ func (execRunner) Run(ctx context.Context, args []string, stdin string) (Result,
 // guardRealKeychain stops a test binary from touching the developer's real
 // Keychain.
 //
-// claude-swap's Keychain items are live Claude Code logins. A test that reached
+// ccswap's Keychain items are live Claude Code logins. A test that reached
 // them could delete or overwrite the developer's own accounts, so the real
 // binary is unreachable from a test unless a test explicitly opts in. This is
 // the Keychain half of the safety net that paths.guardRealStore provides for
@@ -67,7 +67,7 @@ func guardRealKeychain() {
 	if !testing.Testing() || os.Getenv(AllowRealKeychainEnv) != "" {
 		return
 	}
-	panic("claude-swap test safety net: a test tried to run " + SecurityBinary +
+	panic("ccswap test safety net: a test tried to run " + SecurityBinary +
 		", which would touch the developer's real Keychain.\n" +
 		"Build the Keychain with keychain.NewWithRunner and a fake runner, or — " +
 		"only for a test that genuinely needs the real binary — set " +

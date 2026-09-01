@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/keychain"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/keychain"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // RecheckCooldown is how long after a Keychain failure the store waits before

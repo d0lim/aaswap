@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/claudeapi"
 )
 
 // OutgoingKind is what a switch may do with the live credential it is about to

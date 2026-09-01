@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/fsutil"
-	"github.com/realiti4/claude-swap/internal/keychain"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/keychain"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // Per-account backups have two backends: base64 .enc files under the

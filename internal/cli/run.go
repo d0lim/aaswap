@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/credstore"
-	"github.com/realiti4/claude-swap/internal/jsonout"
-	"github.com/realiti4/claude-swap/internal/pollpolicy"
-	"github.com/realiti4/claude-swap/internal/render"
-	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/render"
+	"github.com/d0lim/ccswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 

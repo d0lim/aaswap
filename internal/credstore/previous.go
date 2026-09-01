@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/realiti4/claude-swap/internal/fsutil"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // The retained previous generation.

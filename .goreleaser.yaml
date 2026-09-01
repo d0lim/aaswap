@@ -6,7 +6,7 @@
 # actually released.
 version: 2
 
-project_name: claude-swap
+project_name: ccswap
 
 before:
   hooks:
@@ -27,7 +27,7 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/realiti4/claude-swap/internal/buildinfo.version={{ .Version }}
+      - -X github.com/d0lim/ccswap/internal/buildinfo.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
@@ -43,7 +43,7 @@ archives:
       - README.md
       - LICENSE
 
-checksums:
+checksum:
   name_template: checksums.txt
 
 snapshot:
@@ -57,16 +57,39 @@ changelog:
       - "^test:"
       - "^chore:"
 
-brews:
-  - name: claude-swap
+# Homebrew, as a cask: `brews` (formulae) is deprecated and goes away in
+# GoReleaser v2.16, and the CI pins `~> v2`, which floats to the latest.
+#
+# GoReleaser emits on_linux stanzas, but casks are a macOS concept and
+# `brew install --cask` is not supported on Linux — so the tap is macOS in
+# practice. Linux keeps `go install` and the release archives, both already
+# documented in the README.
+homebrew_casks:
+  - name: ccswap
+    binaries:
+      - ccswap
     repository:
-      owner: realiti4
+      owner: d0lim
       name: homebrew-tap
-    directory: Formula
-    homepage: https://github.com/realiti4/claude-swap
+      # The formula lands in ANOTHER repository, which the release job's own
+      # GITHUB_TOKEN cannot write to. Without this the publish step fails at
+      # tag time, after the binaries have already been uploaded.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/d0lim/ccswap
     description: Switch between multiple Claude Code accounts
     license: MIT
-    test: |
-      system "#{bin}/ccswap", "--version"
-    install: |
-      bin.install "ccswap"
+    # The download host and the homepage are the same here; saying so keeps
+    # `brew audit` quiet.
+    url:
+      verified: github.com/d0lim/ccswap/
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            # The binaries are not signed or notarized, so Gatekeeper
+            # quarantines them and the first run dies with "cannot be opened".
+            # Homebrew downloaded this itself; clearing the flag it set is the
+            # documented way for an unsigned cask to be runnable at all.
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/ccswap"]
+          end

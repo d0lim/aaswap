@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/claudeapi"
 
-	"github.com/realiti4/claude-swap/internal/testutil"
+	"github.com/d0lim/ccswap/internal/testutil"
 )
 
 // twoAccounts registers two switchable slots and leaves slot 1 live.

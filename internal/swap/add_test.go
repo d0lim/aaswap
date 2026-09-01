@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // fakeOracle answers the ownership question without a network.

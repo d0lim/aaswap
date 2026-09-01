@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 // Bar-fill thresholds. A bar is read at a glance, so the color has to carry

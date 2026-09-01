@@ -41,7 +41,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 const (

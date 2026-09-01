@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // The guard is the Go replacement for the Python suite's audit hook. It is the

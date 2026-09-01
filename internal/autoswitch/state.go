@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/fsutil"
-	"github.com/realiti4/claude-swap/internal/lockfile"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/lockfile"
 )
 
 // State is what the engine remembers between ticks.

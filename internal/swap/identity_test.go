@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/claudeapi"
 )
 
 func TestLiveIdentity(t *testing.T) {

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/credstore"
-	"github.com/realiti4/claude-swap/internal/keychain"
-	"github.com/realiti4/claude-swap/internal/paths"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/ccswap/internal/keychain"
+	"github.com/d0lim/ccswap/internal/paths"
+	"github.com/d0lim/ccswap/internal/platform"
 
-	"github.com/realiti4/claude-swap/internal/testutil"
+	"github.com/d0lim/ccswap/internal/testutil"
 )
 
 func TestMain(m *testing.M) {

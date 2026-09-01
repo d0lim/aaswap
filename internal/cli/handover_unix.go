@@ -7,7 +7,7 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // handOver replaces this process with Claude Code, and does not return.

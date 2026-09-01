@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/testutil"
+	"github.com/d0lim/ccswap/internal/testutil"
 )
 
 // threeAccounts registers three switchable slots with slot 2 active.

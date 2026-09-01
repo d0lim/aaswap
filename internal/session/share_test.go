@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/testutil"
+	"github.com/d0lim/ccswap/internal/testutil"
 )
 
 // defaultProfile builds the ~/.claude a session mirrors from.

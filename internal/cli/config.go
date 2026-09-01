@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/settings"
+	"github.com/d0lim/ccswap/internal/settings"
 	"github.com/spf13/cobra"
 )
 

@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/buildinfo"
-	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/buildinfo"
+	"github.com/d0lim/ccswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 

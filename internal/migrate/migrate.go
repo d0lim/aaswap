@@ -1,4 +1,4 @@
-// Package migrate holds claude-swap's one-time, run-once data migrations.
+// Package migrate holds ccswap's one-time, run-once data migrations.
 //
 // A small, boring home for compatibility migrations so they do not pollute the
 // core switch, read and write flow. Every migration:
@@ -26,7 +26,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/fsutil"
 )
 
 const (

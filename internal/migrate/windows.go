@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // WindowsKeyringMigrationID is the identifier the Python implementation
@@ -94,7 +94,7 @@ func runWindowsKeyringNotice(backups BackupProbe, p platform.Platform, roster Ro
 	}
 
 	fmt.Fprintf(os.Stderr,
-		"claude-swap: %d account(s) have no stored credentials on this machine: %s\n"+
+		"ccswap: %d account(s) have no stored credentials on this machine: %s\n"+
 			"  If these accounts were added with claude-swap 0.10 or earlier, their\n"+
 			"  credentials are still in the Windows Credential Manager, which no\n"+
 			"  current build reads. Log in with each account and re-add it:\n"+

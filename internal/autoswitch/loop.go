@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/jsonout"
-	"github.com/realiti4/claude-swap/internal/pollpolicy"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // Run ticks until the context is cancelled.

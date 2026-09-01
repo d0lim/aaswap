@@ -10,10 +10,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/credstore"
-	"github.com/realiti4/claude-swap/internal/lockfile"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/ccswap/internal/lockfile"
 )
 
 // demotingStashReasons are the stash outcomes that mean the successor is PARKED

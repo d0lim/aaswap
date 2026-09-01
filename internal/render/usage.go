@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/pace"
-	"github.com/realiti4/claude-swap/internal/usage"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/pace"
+	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // sentinelNotes explain a derived state in the terms a user can act on.

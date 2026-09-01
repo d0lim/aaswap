@@ -33,7 +33,7 @@ func guardRealEndpoint(u *url.URL) {
 	host := strings.ToLower(u.Hostname())
 	for _, real := range realHosts {
 		if host == real || strings.HasSuffix(host, "."+real) {
-			panic("claude-swap test safety net: a test tried to reach " + u.String() +
+			panic("ccswap test safety net: a test tried to reach " + u.String() +
 				", which would spend the developer's own refresh token or usage budget.\n" +
 				"Point the Client's URLs at an httptest server, or — only for a test that " +
 				"genuinely needs the live endpoint — set " + AllowRealNetworkEnv + "=1 for that test alone.")

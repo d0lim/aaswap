@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // ConfigBackupPath is where a slot's captured ~/.claude.json lives.

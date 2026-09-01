@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 // oauthKey is the member of a Claude Code credential document that holds the

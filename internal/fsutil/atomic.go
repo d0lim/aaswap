@@ -64,7 +64,7 @@ func WriteFileAtomic(path string, data []byte) error {
 	return writeAtomic(path, data, true)
 }
 
-// WriteForeignFileAtomic writes a file claude-swap does not own — Claude Code's
+// WriteForeignFileAtomic writes a file ccswap does not own — Claude Code's
 // ~/.claude.json and ~/.claude/.credentials.json — atomically, at 0600, WITHOUT
 // touching the containing directory's mode.
 //

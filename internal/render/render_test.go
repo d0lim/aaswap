@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/usage"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 var now = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)

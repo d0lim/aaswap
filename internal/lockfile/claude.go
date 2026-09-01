@@ -3,7 +3,7 @@ package lockfile
 import (
 	"path/filepath"
 
-	"github.com/realiti4/claude-swap/internal/paths"
+	"github.com/d0lim/ccswap/internal/paths"
 )
 
 // Cooperating with Claude Code's own advisory locks while mutating its files.

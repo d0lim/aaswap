@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // handOver runs Claude Code as a child and mirrors its exit code.

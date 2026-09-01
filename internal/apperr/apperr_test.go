@@ -93,14 +93,14 @@ func TestWrappingPreservesTheChain(t *testing.T) {
 }
 
 // A node's message is its own label only. Chaining must not accumulate every
-// ancestor's text into "credential: claude-swap error" noise.
+// ancestor's text into "credential: ccswap error" noise.
 func TestMessagesDoNotAccumulate(t *testing.T) {
 	if got, want := ErrCredentialRead.Error(), "failed to read credentials"; got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
 	}
 }
 
-// Everything claude-swap raises on purpose must reach the root, because the CLI
+// Everything ccswap raises on purpose must reach the root, because the CLI
 // uses that match to decide between a clean message and a stack trace.
 func TestEveryKindReachesTheRoot(t *testing.T) {
 	all := map[string]error{

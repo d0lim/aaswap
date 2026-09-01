@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/d0lim/ccswap/internal/swap"
 )
 
 // Update folds one message into the model.

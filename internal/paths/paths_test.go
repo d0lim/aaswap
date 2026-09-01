@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // These tests pin ccswap's path resolution to Claude Code's own. If they drift,

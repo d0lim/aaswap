@@ -22,10 +22,10 @@ var realHome = func() string {
 }()
 
 // guardRealStore panics when a test binary resolves paths that point at the
-// developer's own Claude Code profile or claude-swap backups.
+// developer's own Claude Code profile or ccswap backups.
 //
 // This is the Go stand-in for the Python suite's sys.addaudithook safety net.
-// claude-swap manipulates live login credentials, so a test that forgets to
+// ccswap manipulates live login credentials, so a test that forgets to
 // redirect HOME would not merely fail — it could overwrite or delete the
 // developer's real accounts. Python could intercept that at the syscall level;
 // Go cannot, so the check sits at the single choke point where the environment
@@ -44,7 +44,7 @@ func guardRealStore(r *Resolver) {
 	} {
 		if withinRealHome(path) {
 			panic(fmt.Sprintf(
-				"claude-swap test safety net: resolved %s to %q, inside the real "+
+				"ccswap test safety net: resolved %s to %q, inside the real "+
 					"home directory %q.\n"+
 					"A test must never touch the developer's live account store. "+
 					"Build a Resolver over t.TempDir() with paths.New instead of "+
@@ -56,7 +56,7 @@ func guardRealStore(r *Resolver) {
 
 // withinRealHome reports whether path is the real home directory or sits
 // underneath it. Temp directories handed out by t.TempDir() live outside the
-// home directory on every platform claude-swap supports, so this does not
+// home directory on every platform ccswap supports, so this does not
 // produce false positives for correctly isolated tests.
 func withinRealHome(path string) bool {
 	if path == "" {

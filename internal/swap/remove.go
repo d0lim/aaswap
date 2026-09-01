@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // RemoveOutcome reports what a removal did.

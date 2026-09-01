@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/jsonout"
-	"github.com/realiti4/claude-swap/internal/testutil"
-	"github.com/realiti4/claude-swap/internal/usage"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // fakeFetcher answers usage fetches without a network.

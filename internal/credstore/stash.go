@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/fsutil"
 )
 
 // The stash preserves credentials of unknown provenance.

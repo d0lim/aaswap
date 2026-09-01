@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/paths"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/paths"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 func testResolver(t *testing.T) *paths.Resolver {

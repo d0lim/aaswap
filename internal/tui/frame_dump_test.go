@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/swap"
-	"github.com/realiti4/claude-swap/internal/usage"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // TestDumpFrame prints a representative frame. Not an assertion — a way to

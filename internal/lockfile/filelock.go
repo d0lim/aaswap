@@ -1,4 +1,4 @@
-// Package lockfile provides the two kinds of exclusion claude-swap needs.
+// Package lockfile provides the two kinds of exclusion ccswap needs.
 //
 // [FileLock] is ccswap's own cross-process lock over its account store: a
 // conventional advisory lock on a file, held while the roster and credentials
@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // DefaultTimeout bounds how long a caller waits for ccswap's own lock.
@@ -110,7 +110,7 @@ func (l *FileLock) Release() error {
 // afterwards even if fn panics.
 //
 // A timeout is an error here rather than a silent skip: every caller in
-// claude-swap mutates the account store, and doing that unlocked is what the
+// ccswap mutates the account store, and doing that unlocked is what the
 // lock exists to prevent.
 func With(path string, timeout time.Duration, fn func() error) (err error) {
 	l := New(path, timeout)

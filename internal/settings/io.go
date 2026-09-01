@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/fsutil"
 )
 
 // readRaw reads settings.json for a *read* path. Anything unreadable or
