@@ -103,7 +103,7 @@ func newHarness(t *testing.T) *harness {
 			// nil disables every profile-credential check, and the session
 			// tests then pass without exercising the thing they name.
 			Profiles: provider.NewProfiles(spec, resolver.Platform, nil),
-			Usage:    usagestore.New(resolver.CacheDir()),
+			Usage:    usagestore.NewForProvider(resolver.CacheDir(), name),
 			Settings: settings.Defaults(),
 		}
 		s.SetClock(func() time.Time { return h.now })

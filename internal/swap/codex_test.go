@@ -37,7 +37,7 @@ func codexFixture(t *testing.T) *fixture {
 		Creds: credstore.NewForProvider(r, root,
 			keychain.NewWithRunner(refusingKeychain{}, 0), ProviderCodex,
 			LiveLayout(r, ProviderCodex)),
-		Usage:    usagestore.New(r.CacheDir()),
+		Usage:    usagestore.NewForProvider(r.CacheDir(), ProviderCodex),
 		Settings: settings.Defaults(),
 	}
 	f.SetClock(func() time.Time { return f.now })

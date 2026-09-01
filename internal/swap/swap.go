@@ -172,7 +172,7 @@ func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 		Paths:       r,
 		Creds:       credstore.NewForProvider(r, root, keychain.New(), provider, liveLayoutFor(r, spec)),
 		Profiles:    providerpkg.NewProfiles(spec, r.Platform, keychain.New()),
-		Usage:       usagestore.New(r.CacheDir()),
+		Usage:       usagestore.NewForProvider(r.CacheDir(), spec.Name),
 		Oracle:      client,
 		Fetcher:     client,
 		Refresher:   client,
