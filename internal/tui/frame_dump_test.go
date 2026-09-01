@@ -1,0 +1,44 @@
+package tui
+
+import (
+	"os"
+	"testing"
+	"time"
+
+	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/realiti4/claude-swap/internal/usagestore"
+)
+
+// TestDumpFrame prints a representative frame. Not an assertion — a way to
+// look at the layout. Run with -run TestDumpFrame -v.
+func TestDumpFrame(t *testing.T) {
+	if os.Getenv("CCSWAP_DUMP_FRAME") == "" {
+		t.Skip("set CCSWAP_DUMP_FRAME=1 to print a frame")
+	}
+	m := fixture(t,
+		[]swap.AccountView{
+			{Number: "1", IsActive: true, Account: &swap.Account{
+				Email: "work@example.com", Alias: "work", OrganizationName: "Acme"}},
+			{Number: "2", Account: &swap.Account{Email: "spare@example.com"}},
+			{Number: "3", Account: &swap.Account{Email: "burned@example.com", Disabled: true}},
+			{Number: "4", Account: &swap.Account{Email: "dead@example.com"}},
+			{Number: "5", Account: &swap.Account{Email: "key@example.com"}},
+		},
+		map[string]usagestore.Entry{
+			"1": {FetchedAt: testNow, LastGood: &usage.Result{
+				FiveHour: window(62, 6*time.Hour+27*time.Minute),
+				SevenDay: window(31, 32*time.Hour)}},
+			"2": {FetchedAt: testNow, LastGood: &usage.Result{
+				FiveHour: window(11, 3*time.Hour+50*time.Minute),
+				SevenDay: window(19, 70*time.Hour)}},
+			"3": {FetchedAt: testNow.Add(-9 * time.Minute), LastGood: &usage.Result{
+				FiveHour: window(97, 41*time.Minute),
+				SevenDay: window(88, 20*time.Hour)}},
+			"4": {Sentinel: swap.SentinelReloginRequired},
+			"5": {Sentinel: swap.SentinelAPIKey},
+		})
+	m.watch = true
+	m.status = "Activated Account 1 (work@example.com)"
+	t.Log("\n" + m.View().Content + "\n")
+}
