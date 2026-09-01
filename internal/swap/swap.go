@@ -38,7 +38,6 @@ import (
 	"github.com/d0lim/aaswap/internal/keychain"
 	"github.com/d0lim/aaswap/internal/lockfile"
 	"github.com/d0lim/aaswap/internal/paths"
-	"github.com/d0lim/aaswap/internal/platform"
 	providerpkg "github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/settings"
 	"github.com/d0lim/aaswap/internal/usagestore"
@@ -172,7 +171,7 @@ func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 		Provider:    provider,
 		Paths:       r,
 		Creds:       credstore.NewForProvider(r, root, keychain.New(), provider, liveLayoutFor(r, spec)),
-		Profiles:    profilesFor(provider, r.Platform),
+		Profiles:    providerpkg.NewProfiles(spec, r.Platform, keychain.New()),
 		Usage:       usagestore.New(r.CacheDir()),
 		Oracle:      client,
 		Fetcher:     client,
@@ -254,21 +253,6 @@ func (s *Switcher) withLock(fn func() error) error {
 		timeout = lockfile.DefaultTimeout
 	}
 	return lockfile.With(s.LockPath(), timeout, fn)
-}
-
-// profilesFor is the profile credential store a provider's tool uses.
-//
-// Codex keeps a profile's credential in a plain file and nothing else, so it
-// gets the file-only shape outright — passing it a Keychain would hand a
-// file-only tool a macOS constraint it does not have.
-func profilesFor(provider string, p platform.Platform) providerpkg.ProfileStore {
-	// Only Claude keeps a profile credential anywhere but a file. Every other
-	// provider is file-only on every platform, so handing it a Keychain would
-	// give a file-only tool a macOS constraint it does not have.
-	if cmp.Or(provider, ProviderClaude) != ProviderClaude {
-		return providerpkg.NewClaudeProfiles(p, nil)
-	}
-	return providerpkg.NewClaudeProfiles(p, keychain.New())
 }
 
 // LiveLayout translates a provider's declaration into the two facts the

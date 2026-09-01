@@ -68,6 +68,15 @@ type App struct {
 	// definition someone to ask, setting it makes the App interactive.
 	Choose func(prompt string, options []Choice) string
 
+	// HandOver replaces the real process handover. Nil uses it.
+	//
+	// `run` normally exec()s the provider's binary and never returns, which
+	// cannot be exercised in process — so it never was. Injecting it is what
+	// lets the session tests assert WHICH binary was launched and in what
+	// environment, the two things a multi-provider launch can get wrong while
+	// looking like it worked.
+	HandOver func(binary string, args, env []string) error
+
 	printer *render.Printer
 	errs    *render.Printer
 

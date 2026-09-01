@@ -3,7 +3,9 @@ package cli
 import (
 	"encoding/base64"
 	json "encoding/json/v2"
+	"github.com/d0lim/aaswap/internal/session"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -84,28 +86,141 @@ func TestTheProvidersDoNotSeeEachOther(t *testing.T) {
 	}
 }
 
-// Session mode is Claude Code's: the profile directory, the env var that
-// points at it, the binary launched into it, and the MCP mirroring are all
-// that tool's shape. Launching `claude` because someone asked for a Codex
-// session is the worst available answer, so `run` says so instead.
-func TestRunSaysItIsClaudeOnly(t *testing.T) {
-	h := newHarness(t)
-	h.codexLogin("work@example.com", "acct-9", "plus")
-	if code := h.run("--provider", "codex", "login", "--capture"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
+// twoCodexAccounts stores two Codex accounts and leaves the SECOND live.
+//
+// Two, because `run` short-circuits for the account that is already the default
+// login — a test with one account exercises the fast path and never reaches
+// session mode at all.
+func (h *harness) twoCodexAccounts(t *testing.T) {
+	t.Helper()
+	for _, account := range []struct{ name, email, id string }{
+		{"work", "work@example.com", "acct-1"},
+		{"personal", "personal@example.com", "acct-2"},
+	} {
+		h.codexLogin(account.email, account.id, "plus")
+		if code := h.run("--provider", "codex", "login", "--capture",
+			"--name", account.name); code != ExitOK {
+			t.Fatalf("storing %s: exit = %d: %s", account.name, code, h.stderr())
+		}
 	}
-
-	if code := h.run("--provider", "codex", "run", "work"); code != ExitError {
-		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
-	}
-	// Name the command that DOES work, or the refusal is a dead end.
-	wantContains(t, h.stderr(), "session", "codex", "switch")
 }
 
-// The directory mappings `run` reads are equally Claude-only.
-func TestDirMapSaysItIsClaudeOnly(t *testing.T) {
+// Session mode used to be Claude Code's alone. It is now whatever a provider
+// declares, and Codex declares it: CODEX_HOME repoints the whole home the way
+// CLAUDE_CONFIG_DIR does, which is the one thing isolation needs.
+func TestRunWorksForCodex(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("--provider", "codex", "dir", "map", "work"); code != ExitError {
-		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	h.twoCodexAccounts(t)
+	h.onPath(t, "codex")
+	record := h.capturing()
+
+	// personal is live, so work has to go through a profile.
+	if code := h.run("--provider", "codex", "run", "work"); code != ExitOK {
+		t.Fatalf("exit = %d, want a launch: %s", code, h.stderr())
+	}
+	if !record.called {
+		t.Fatal("nothing was launched")
+	}
+	// The binary has to be Codex's own. Launching `claude` for a Codex account
+	// would run the wrong tool as the wrong account and look like it worked.
+	if filepath.Base(record.binary) != "codex" {
+		t.Errorf("launched %q, want codex", record.binary)
+	}
+	// Pinned by CODEX_HOME, or Codex reads the default home and runs as
+	// whoever is logged in there.
+	home, ok := record.env_("CODEX_HOME")
+	if !ok || home == "" {
+		t.Fatalf("CODEX_HOME was not set: the session is not isolated at all")
+	}
+	if !strings.Contains(home, "work") {
+		t.Errorf("CODEX_HOME = %q, want work's profile directory", home)
+	}
+	// Claude's variable must NOT come along: it would repoint a Claude Code
+	// that the session's tooling happens to invoke.
+	if value, set := record.env_("CLAUDE_CONFIG_DIR"); set {
+		t.Errorf("CLAUDE_CONFIG_DIR = %q leaked into a Codex session", value)
+	}
+
+	// And the profile must hold CODEX's credential file, not Claude's. This is
+	// what the declaration decides, and getting it wrong seeds a profile the
+	// tool cannot read while every other assertion here still passes.
+	if _, err := os.Stat(filepath.Join(home, "auth.json")); err != nil {
+		entries, _ := os.ReadDir(home)
+		var names []string
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		t.Errorf("the profile holds %v, want Codex's auth.json", names)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".credentials.json")); err == nil {
+		t.Error("the profile holds Claude's .credentials.json: the session was " +
+			"laid out with the wrong provider's declaration")
+	}
+}
+
+// The fail-safe that lets Codex host sessions before anyone has worked out how
+// to detect its running processes.
+//
+// aaswap cannot see a live Codex session, so it must never refresh a profile's
+// credential on its own — the one thing that would yank a token out from under
+// a running agent. It says so instead.
+func TestCodexSessionsAreNotReseededSilently(t *testing.T) {
+	h := newHarness(t)
+	h.twoCodexAccounts(t)
+	h.onPath(t, "codex")
+	h.capturing()
+	if code := h.run("--provider", "codex", "run", "work"); code != ExitOK {
+		t.Fatalf("first launch: exit = %d: %s", code, h.stderr())
+	}
+
+	// Mark the profile stale, which for Claude would trigger a reseed.
+	profile := h.sessionDir(t, "codex", "work", "work@example.com")
+	if err := session.MarkStale(profile); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := h.run("--provider", "codex", "run", "work"); code != ExitOK {
+		t.Fatalf("second launch: exit = %d: %s", code, h.stderr())
+	}
+	// The stale marker survives: nothing cleared it, because nothing reseeded.
+	if !session.IsStale(profile) {
+		t.Error("a Codex profile was reseeded despite aaswap being unable to " +
+			"see whether a session was running against it")
+	}
+	// And the user is told why, or they get an old credential with no
+	// explanation.
+	wantContains(t, h.stderr()+h.stdout(), "cannot tell", "codex")
+}
+
+// Claude still reseeds, because it CAN prove a profile idle. Losing that would
+// be a silent regression: every launch would quietly serve a stale credential.
+func TestClaudeSessionsAreStillReseeded(t *testing.T) {
+	h := newHarness(t)
+	// Stored the way a person stores them, so the config backup a session
+	// profile seeds from actually exists.
+	for _, account := range []struct{ name, email string }{
+		{"one", "one@example.com"}, {"two", "two@example.com"},
+	} {
+		h.login(account.name, account.email)
+		if code := h.run("login", "--capture", "--name", account.name); code != ExitOK {
+			t.Fatalf("storing %s: exit = %d: %s", account.name, code, h.stderr())
+		}
+	}
+	h.onPath(t, "claude")
+	h.capturing()
+	if code := h.run("run", "one"); code != ExitOK {
+		t.Fatalf("first launch: exit = %d: %s", code, h.stderr())
+	}
+
+	profile := h.sessionDir(t, "claude", "one", "one@example.com")
+	if err := session.MarkStale(profile); err != nil {
+		t.Fatal(err)
+	}
+	if code := h.run("run", "one"); code != ExitOK {
+		t.Fatalf("second launch: exit = %d: %s", code, h.stderr())
+	}
+	if session.IsStale(profile) {
+		t.Error("a quiet Claude profile was not reseeded, so the session runs " +
+			"on a credential the server may already have rotated")
 	}
 }

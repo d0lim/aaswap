@@ -42,7 +42,6 @@ import (
 	"github.com/d0lim/aaswap/internal/credstore"
 	"github.com/d0lim/aaswap/internal/fsutil"
 	"github.com/d0lim/aaswap/internal/platform"
-	"github.com/d0lim/aaswap/internal/procdetect"
 	"github.com/d0lim/aaswap/internal/provider"
 	"golang.org/x/text/unicode/norm"
 )
@@ -231,6 +230,22 @@ type Manager struct {
 	// destroying anything.
 	Probe Prober
 
+	// Spec is the provider whose profiles this manager keeps: which file holds
+	// the credential, whether there is a config beside it, what a profile
+	// mirrors, and whether running sessions can be detected at all.
+	//
+	// The zero value resolves to Claude's declaration, which is what every
+	// caller predating providers meant.
+	Spec provider.Spec
+
+	// ConfigsDir is where captured account configs live.
+	//
+	// Supplied rather than derived from BackupRoot: the switcher scopes it by
+	// provider, and a second derivation here silently read the pre-provider
+	// location — so every Claude session refused to seed with "no stored
+	// config backup" while the config sat one directory away.
+	ConfigsDir string
+
 	// Now is the clock.
 	Now func() time.Time
 }
@@ -240,15 +255,78 @@ func (m *Manager) Dir(accountNum, email string) string {
 	return DirFor(m.BackupRoot, accountNum, email)
 }
 
-// LivePIDs lists the Claude Code processes running against a slot's profile.
-func (m *Manager) LivePIDs(accountNum, email string) []int {
-	return procdetect.PIDs(m.Dir(accountNum, email))
+// spec is this manager's provider declaration, defaulting to Claude's.
+func (m *Manager) spec() provider.Spec {
+	if m.Spec.Name == "" {
+		return provider.MustLookup(provider.Claude)
+	}
+	return m.Spec
 }
+
+// secretName is the file a profile keeps its credential in, relative to the
+// profile directory.
+func (m *Manager) secretName() string {
+	if secrets := m.spec().SecretFiles(); len(secrets) > 0 {
+		return secrets[0].Path
+	}
+	return claudeProfileSecret
+}
+
+// configName is the account-scoped config beside the credential, empty for a
+// provider whose credential is the whole story.
+func (m *Manager) configName() string {
+	if file, ok := m.spec().ConfigFile(); ok {
+		return file.Path
+	}
+	return ""
+}
+
+// LivePIDs lists the processes running against a slot's profile.
+//
+// Empty for a provider that declares no way to detect them — which is NOT the
+// same as "nothing is running", and callers must not read it as such. Ask
+// CanDetectSessions before drawing a conclusion from an empty list.
+func (m *Manager) LivePIDs(accountNum, email string) []int {
+	liveness := m.liveness()
+	if liveness == nil {
+		return nil
+	}
+	pids, _ := liveness.PIDs(m.Dir(accountNum, email))
+	return pids
+}
+
+// liveness is this provider's process detector, nil when it declares none.
+func (m *Manager) liveness() provider.Liveness {
+	if session := m.spec().Session; session != nil {
+		return session.Liveness
+	}
+	return nil
+}
+
+// CanDetectSessions reports whether this provider can be asked what is running.
+//
+// The distinction the whole reseeding rule turns on: a provider that cannot be
+// asked never gets an affirmative "nothing is running", so aaswap never
+// refreshes a profile's credential out from under a session it cannot see.
+func (m *Manager) CanDetectSessions() bool { return m.liveness() != nil }
+
+// claudeProfileSecret is the fallback profile credential name.
+const claudeProfileSecret = ".credentials.json"
 
 // Quiescent reports that nothing is running against a slot's profile AND every
 // record was readable.
+//
+// False for a provider with no way to detect processes. That is the safe
+// direction and it is deliberate: proving a profile idle takes evidence, and
+// having none is not evidence of absence. It costs a reseed that could have
+// been done; the alternative costs a running agent its credential.
 func (m *Manager) Quiescent(accountNum, email string) bool {
-	return procdetect.Quiescent(m.Dir(accountNum, email))
+	liveness := m.liveness()
+	if liveness == nil {
+		return false
+	}
+	pids, complete := liveness.PIDs(m.Dir(accountNum, email))
+	return complete && len(pids) == 0
 }
 
 // ReadCredentials reads a profile's CURRENT credential, or empty when there is
@@ -291,7 +369,25 @@ type Identity struct {
 // /login can re-point at a different account than the slot the profile was made
 // for.
 func (m *Manager) ReadIdentity(sessionDir string) (Identity, bool) {
-	data, err := os.ReadFile(filepath.Join(sessionDir, ".claude.json"))
+	if name := m.configName(); name != "" {
+		return m.readIdentityFromConfig(filepath.Join(sessionDir, name))
+	}
+	// No config beside the credential: the credential is the identity
+	// document, so the provider's own resolver reads it.
+	spec := m.spec()
+	data, err := os.ReadFile(filepath.Join(sessionDir, m.secretName()))
+	if err != nil {
+		return Identity{}, false
+	}
+	identity, ok := spec.Resolve(map[string]string{m.secretName(): string(data)})
+	if !ok {
+		return Identity{}, false
+	}
+	return Identity{Email: identity.Email, OrganizationUUID: identity.OrganizationUUID}, true
+}
+
+func (m *Manager) readIdentityFromConfig(path string) (Identity, bool) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return Identity{}, false
 	}
@@ -370,9 +466,17 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 			"aaswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
 	}
 
-	identity, theme, err := m.storedIdentity(accountNum, email)
-	if err != nil {
-		return err
+	// Read AFTER the credential and BEFORE any write, but only for a provider
+	// that has a config to seed. Demanding a stored config from a provider
+	// whose credential is the whole login would refuse every session it could
+	// otherwise run.
+	configName := m.configName()
+	var identity, theme jsontext.Value
+	if configName != "" {
+		var err error
+		if identity, theme, err = m.storedIdentity(accountNum, email); err != nil {
+			return err
+		}
 	}
 
 	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
@@ -383,14 +487,23 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 			"profile", sessionDir, "error", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(sessionDir, ".credentials.json"),
+	if err := os.WriteFile(filepath.Join(sessionDir, m.secretName()),
 		[]byte(credentials), 0o600); err != nil {
 		return fmt.Errorf("%w: seeding the session credential: %w", apperr.ErrSession, err)
 	}
 
+	if configName == "" {
+		// No account-scoped config to write. The credential carries the
+		// identity, and everything else in the home belongs to the machine —
+		// writing an identity block into it would be writing into the user's
+		// own settings.
+		slog.Info("bootstrapped a session profile", "account", accountNum, "profile", sessionDir)
+		return nil
+	}
+
 	// Merged into any existing config, so re-seeding preserves the profile's
 	// own projects and history.
-	configPath := filepath.Join(sessionDir, ".claude.json")
+	configPath := filepath.Join(sessionDir, configName)
 	config := map[string]jsontext.Value{}
 	if data, err := os.ReadFile(configPath); err == nil {
 		if err := json.Unmarshal(data, &config); err != nil || config == nil {
@@ -417,9 +530,18 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 	return nil
 }
 
+// configsDir is where captured configs live, falling back to the pre-provider
+// location for a caller that did not say.
+func (m *Manager) configsDir() string {
+	if m.ConfigsDir != "" {
+		return m.ConfigsDir
+	}
+	return filepath.Join(m.BackupRoot, "configs")
+}
+
 // storedIdentity reads a slot's captured identity block and theme.
 func (m *Manager) storedIdentity(accountNum, email string) (identity, theme jsontext.Value, err error) {
-	path := filepath.Join(m.BackupRoot, "configs",
+	path := filepath.Join(m.configsDir(),
 		fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email))
 	data, readErr := os.ReadFile(path)
 	if readErr != nil {
@@ -489,10 +611,14 @@ func (m *Manager) Remove(sessionDir string) error {
 // The auth overrides are DROPPED rather than passed through: any of them would
 // override the account inside Claude Code, making `aaswap run 2` silently run as
 // something else.
-func Environment(base []string, sessionDir string) (env []string, scrubbed []string) {
+func Environment(base []string, sessionDir string, spec provider.Spec) (env []string, scrubbed []string) {
+	homeEnv := "CLAUDE_CONFIG_DIR"
+	if s := spec.Session; s != nil && s.HomeEnv != "" {
+		homeEnv = s.HomeEnv
+	}
 	for _, entry := range base {
 		name, _, _ := strings.Cut(entry, "=")
-		if name == "CLAUDE_CONFIG_DIR" {
+		if name == homeEnv {
 			continue
 		}
 		if isAuthOverride(name) {
@@ -501,7 +627,14 @@ func Environment(base []string, sessionDir string) (env []string, scrubbed []str
 		}
 		env = append(env, entry)
 	}
-	return append(env, "CLAUDE_CONFIG_DIR="+sessionDir), scrubbed
+	env = append(env, homeEnv+"="+sessionDir)
+	// Whatever this provider declares survives a swap and has to be disabled:
+	// Claude Code's Agent View daemon outlives a session and keeps using the
+	// account it started with.
+	for _, hazard := range spec.Hazards {
+		env = append(env, hazard.Env...)
+	}
+	return env, scrubbed
 }
 
 func isAuthOverride(name string) bool {

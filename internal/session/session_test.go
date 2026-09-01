@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func newFixture(t *testing.T) *fixture {
 			Creds:      credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), "claude", credstore.Layout{Keychain: true}),
 			// A nil Keychain is the file-only shape, which is what Linux is
 			// and what every non-macOS host gets.
-			Profiles: provider.NewClaudeProfiles(platform.Linux, nil),
+			Profiles: provider.NewProfiles(provider.MustLookup(provider.Claude), platform.Linux, nil),
 			Probe:    probe,
 			Now:      func() time.Time { return testNow },
 		},
@@ -576,7 +577,8 @@ func TestEnvironmentDropsAuthOverrides(t *testing.T) {
 		"HOME=/home/u",
 		"CLAUDE_CONFIG_DIR=/somewhere/else",
 	}
-	env, scrubbed := Environment(base, "/profiles/2-a_example.com")
+	env, scrubbed := Environment(base, "/profiles/2-a_example.com",
+		provider.MustLookup(provider.Claude))
 
 	joined := strings.Join(env, "\n")
 	for _, gone := range []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"} {
@@ -693,5 +695,33 @@ func TestAdoptionNeverOverwritesACurrentMarker(t *testing.T) {
 	}
 	if string(data) != "current" {
 		t.Errorf("contents = %q, want the current marker left alone", data)
+	}
+}
+
+// Each provider's session has to be pinned by ITS OWN home variable. Setting
+// Claude's for a Codex session would leave Codex reading the default home and
+// running as whoever is logged in there — a launch that looks like it worked.
+func TestEnvironmentPinsTheProvidersOwnHome(t *testing.T) {
+	for _, tc := range []struct{ provider, want string }{
+		{provider.Claude, "CLAUDE_CONFIG_DIR"},
+		{provider.Codex, "CODEX_HOME"},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			spec := provider.MustLookup(tc.provider)
+			env, _ := Environment([]string{"PATH=/usr/bin"}, "/profiles/p", spec)
+			if !slices.Contains(env, tc.want+"=/profiles/p") {
+				t.Errorf("env = %v, want %s pointing at the profile", env, tc.want)
+			}
+		})
+	}
+}
+
+// A provider's declared hazards reach the launched process, or a daemon that
+// outlives the session keeps using the account it started with.
+func TestEnvironmentInjectsDeclaredHazards(t *testing.T) {
+	spec := provider.MustLookup(provider.Claude)
+	env, _ := Environment(nil, "/profiles/p", spec)
+	if !slices.Contains(env, "CLAUDE_CODE_DISABLE_AGENT_VIEW=1") {
+		t.Errorf("env = %v, want Claude's Agent View disabled", env)
 	}
 }
