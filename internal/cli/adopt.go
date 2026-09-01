@@ -2,8 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
@@ -31,18 +33,28 @@ func (a *App) adoptCommand() *cobra.Command {
 }
 
 func (a *App) runAdopt() error {
+	// Always Claude's, whatever --provider says. A predecessor store predates
+	// providers, so every account it holds is a Claude Code login — and reading
+	// the roster through another provider's section found none of them, so the
+	// Keychain adoption below copied nothing and was never retried, stranding
+	// every credential the predecessor kept there.
+	//
 	// The resolver comes from the switcher rather than the environment: a
 	// command that reads os.Environ itself reaches the developer's real store
 	// from a test binary, which is what the paths guard exists to stop.
-	s, err := a.switcher()
+	s, err := a.switcherFor(swap.ProviderClaude)
 	if err != nil {
 		return err
 	}
 	resolver := s.Paths
 	found, ok := resolver.FindPredecessor()
 	if !ok {
-		return fmt.Errorf("%w: no predecessor store found. Looked for: %v",
-			apperr.ErrConfig, resolver.Predecessors())
+		var looked []string
+		for _, candidate := range resolver.Predecessors() {
+			looked = append(looked, strings.Join(candidate.Roots, ", "))
+		}
+		return fmt.Errorf("%w: no predecessor store found. Looked in: %s",
+			apperr.ErrConfig, strings.Join(looked, "; "))
 	}
 	source := found.Root
 
