@@ -3,12 +3,13 @@ package cli
 import (
 	"encoding/base64"
 	json "encoding/json/v2"
-	"github.com/d0lim/aaswap/internal/provider"
-	"github.com/d0lim/aaswap/internal/session"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/session"
 )
 
 // codexLogin writes what a logged-in Codex install looks like on this harness.

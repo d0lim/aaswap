@@ -270,6 +270,7 @@ func LiveLayout(r *paths.Resolver, provider string) credstore.Layout {
 func liveLayoutFor(r *paths.Resolver, spec providerpkg.Spec) credstore.Layout {
 	layout := credstore.Layout{Keychain: spec.Keychain}
 	if secrets := spec.SecretFiles(); len(secrets) > 0 {
+		layout.SecretName = secrets[0].Path
 		layout.LivePath = r.ProviderCredentialsPath(
 			spec.Home.Env, spec.Home.Default, secrets[0].Path)
 	}

@@ -30,9 +30,30 @@ import (
 // Linux, WSL and Windows use .enc files only. Windows moved off the Credential
 // Manager because it rejects entries over roughly 2,500 bytes (#45).
 
-// backupEncPath is where a slot's fallback credential file lives.
+// backupEncPath is where an account's fallback credential file lives.
+//
+// Inside the account's own vault directory, named after the file it is a copy
+// OF. The flat `.creds-<name>-<email>.enc` this replaced encoded "one account
+// is one credential", which left a provider whose login is several files with
+// nowhere to put the rest.
 func (s *Store) backupEncPath(accountNum, email string) string {
-	return filepath.Join(s.credentialsDir, fmt.Sprintf(".creds-%s-%s.enc", accountNum, email))
+	if s.legacy() {
+		return filepath.Join(s.credentialsDir,
+			fmt.Sprintf(".creds-%s-%s.enc", accountNum, email))
+	}
+	return filepath.Join(s.AccountDir(accountNum, email), s.secretFileName()+".enc")
+}
+
+// secretFileName is the stored copy's name inside an account's directory.
+//
+// From the declaration, so a Codex backup is auth.json.enc. Claude's own name
+// is the fallback for a caller that supplied no layout — every pre-provider
+// store held Claude's accounts.
+func (s *Store) secretFileName() string {
+	if s.layout.SecretName != "" {
+		return filepath.Base(s.layout.SecretName)
+	}
+	return ".credentials.json"
 }
 
 // backupUsername is the Keychain account name for an account's backup item.
@@ -160,6 +181,15 @@ func (s *Store) readBackupKeychain(accountNum, email string) (string, error) {
 // away; when the Keychain is unusable, or the write fails, it falls back to the
 // .enc file. Every other platform writes the file.
 func (s *Store) WriteAccount(accountNum, email, credentials string) error {
+	// Before anything is written, including the retained generation below:
+	// both land inside this directory, and a Keychain-backed write still needs
+	// it for the .enc reconciliation.
+	if !s.legacy() {
+		if err := s.ensureAccountDir(accountNum, email); err != nil {
+			return fmt.Errorf("%w: %w", apperr.ErrCredentialWrite, err)
+		}
+	}
+
 	// Best effort, and never a precondition: the displaced generation is a
 	// recovery cushion for a write that must happen either way.
 	s.retainPreviousBackup(accountNum, email, credentials)
@@ -222,12 +252,19 @@ func (s *Store) reconcileEncAfterKeychainWrite(accountNum, email, credentials st
 func (s *Store) DeleteAccount(accountNum, email string) error {
 	var errs []error
 
-	if err := os.Remove(s.backupEncPath(accountNum, email)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		errs = append(errs, fmt.Errorf("remove backup file: %w", err))
-	}
-	// The retained generation goes with the slot: leaving it would let a future
-	// account landing on this number recover a credential that was never its.
+	// The retained generation goes with the account: leaving it would let a
+	// future account landing on this name recover a credential that was never
+	// its. Dropped before the directory goes, so the Keychain half is cleared
+	// too — removing the directory alone would strand the item.
 	s.DeletePreviousBackup(accountNum, email)
+	if s.legacy() {
+		if err := os.Remove(s.backupEncPath(accountNum, email)); err != nil &&
+			!errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("remove backup file: %w", err))
+		}
+	} else if err := s.removeAccountDir(accountNum, email); err != nil {
+		errs = append(errs, fmt.Errorf("remove the account directory: %w", err))
+	}
 	if s.platform == platform.MacOS {
 		if _, err := s.cap.observe(func() (struct{}, error) {
 			return struct{}{}, s.kc.Delete(BackupService, s.backupUsername(accountNum, email))

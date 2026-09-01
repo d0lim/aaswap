@@ -3,7 +3,6 @@ package swap
 import (
 	"context"
 	json "encoding/json/v2"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -248,8 +247,7 @@ func TestAHealedStrikeIsClearedFromTheStore(t *testing.T) {
 // is the shape a locked Keychain or a momentary lock takes on a file store.
 func (f *fixture) unreadableBackup(num, email string) {
 	f.t.Helper()
-	testutil.MakeUnreadable(f.t, filepath.Join(f.Creds.CredentialsDir(),
-		".creds-"+num+"-"+email+".enc"))
+	testutil.MakeUnreadable(f.t, f.Creds.BackupPath(num, email))
 }
 
 // The active slot's dead verdict consults a second source, and an unreadable

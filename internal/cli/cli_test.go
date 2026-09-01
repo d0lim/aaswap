@@ -5,8 +5,6 @@ import (
 	"cmp"
 	"context"
 	json "encoding/json/v2"
-	"github.com/d0lim/aaswap/internal/provider"
-	"github.com/d0lim/aaswap/internal/session"
 	"io"
 	"log/slog"
 	"os"
@@ -14,6 +12,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/session"
 
 	"github.com/d0lim/aaswap/internal/claudeapi"
 	"github.com/d0lim/aaswap/internal/credstore"

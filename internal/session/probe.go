@@ -3,10 +3,11 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/d0lim/aaswap/internal/provider"
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/d0lim/aaswap/internal/provider"
 )
 
 // AuthStatusTimeout bounds the probe.
