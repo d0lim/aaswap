@@ -1,6 +1,9 @@
 package provider
 
-import "slices"
+import (
+	"fmt"
+	"slices"
+)
 
 // Provider names. These are what `--provider` accepts and what a store's
 // sections are keyed by, so they are on-disk identifiers and cannot be renamed.
@@ -56,4 +59,39 @@ func MustLookup(name string) Spec {
 	}
 	spec, _ := Lookup(Claude)
 	return spec
+}
+
+// Register adds a provider declaration at run time.
+//
+// This is the mechanism the contract promises: a tool aaswap has never heard of
+// becomes manageable by declaring where it keeps its login. Nothing else has to
+// change — identity falls back to a digest of the secret, and every capability
+// the declaration omits is reported unsupported rather than guessed at.
+//
+// Validated on entry, because a declaration that no command can act on is worse
+// than none: an unusable provider that a person can nonetheless name is a store
+// section with credentials in it and no way to reach them.
+//
+// Refuses to replace a declaration already present. Two declarations for one
+// name would make which store a command reads depend on registration order.
+func Register(spec Spec) error {
+	if err := spec.Validate(); err != nil {
+		return err
+	}
+	if _, exists := Lookup(spec.Name); exists {
+		return fmt.Errorf("provider %q is already declared", spec.Name)
+	}
+	registry = append(registry, spec)
+	return nil
+}
+
+// Unregister removes a declaration, reporting whether there was one.
+//
+// The counterpart to Register, for a caller that added a provider for the
+// duration of something — a test, or a command exercising a candidate
+// declaration before it is committed to.
+func Unregister(name string) bool {
+	before := len(registry)
+	registry = slices.DeleteFunc(registry, func(s Spec) bool { return s.Name == name })
+	return len(registry) != before
 }

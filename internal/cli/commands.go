@@ -57,6 +57,7 @@ func (a *App) rootCommand() *cobra.Command {
 		a.autoCommand(),
 		a.tuiCommand(),
 		a.configCommand(),
+		a.doctorCommand(),
 		a.upgradeCommand(),
 		// Destructive, and deliberately not buried: a command that erases every
 		// account is one people should find on purpose, not by accident.
