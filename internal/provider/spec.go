@@ -243,6 +243,26 @@ type Spec struct {
 	// an HTTP client, which belongs to the layer that owns the network, and a
 	// provider declaration must stay constructible without one.
 	Refreshable bool
+
+	// AdvisoryLocks says the provider's own tool takes advisory locks around
+	// the files aaswap swaps, so aaswap has to hold the same ones — in the same
+	// order — or a swap can interleave with the tool's token refresh and one
+	// will write over the other.
+	//
+	// Claude Code is the only one, and its three lock paths and their staleness
+	// windows are versioned facts about that tool: see internal/lockfile. Only
+	// WHETHER they apply is declared here, for the reason Keychain and
+	// Refreshable are — holding them needs a path resolver, which belongs to
+	// the layer that owns the filesystem, and a declaration must stay
+	// constructible without one.
+	//
+	// The default is what matters. Taking these locks for a provider that does
+	// not use them is not harmless: it created lock directories inside
+	// ~/.claude during a Codex switch — on a machine with no Claude Code, the
+	// install directory itself — and made an unrelated switch fail with "timed
+	// out waiting for Claude Code's lock" whenever a real Claude Code happened
+	// to be refreshing.
+	AdvisoryLocks bool
 }
 
 // DisplayName is what to call this tool in a sentence.

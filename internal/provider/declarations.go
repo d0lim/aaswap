@@ -39,7 +39,9 @@ func claudeSpec() Spec {
 		// The only provider that can renew a credential without a new browser
 		// round trip: Anthropic publishes an OAuth token endpoint for it.
 		Refreshable: true,
-		Usage:       perAccountUsage{},
+		// And the only one that locks its own credential while doing so.
+		AdvisoryLocks: true,
+		Usage:         perAccountUsage{},
 		Session: &Session{
 			HomeEnv: "CLAUDE_CONFIG_DIR",
 			Argv:    []string{"claude"},
