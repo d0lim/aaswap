@@ -40,7 +40,19 @@ const FormatVersion = 1
 
 // Envelope is the whole export.
 type Envelope struct {
-	Version    int    `json:"version"`
+	Version int `json:"version"`
+	// Provider names the tool whose logins this holds.
+	//
+	// An archive exists to be moved — to another machine, to a backup, to a
+	// colleague — and without this nothing distinguished two of them: same
+	// extension, same shape inside. Importing one into the wrong store filed a
+	// Claude Code credential as a Codex account and reported success, and the
+	// next switch wrote it over the login that worked.
+	//
+	// Empty means an archive written before providers existed, which is
+	// Claude's: it is the only provider that existed when such a file could
+	// have been written. Refusing it would strand every backup anyone has.
+	Provider   string `json:"provider,omitzero"`
 	ExportedAt string `json:"exportedAt"`
 	// ExportedFrom names the source platform, for diagnosing a transfer that
 	// behaves differently at the far end.
@@ -206,6 +218,7 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 
 	result := ExportResult{Envelope: Envelope{
 		Version:      FormatVersion,
+		Provider:     s.Spec().Name,
 		ExportedAt:   swap.Timestamp(s.Now()),
 		ExportedFrom: s.Paths.Platform.String(),
 		SwapVersion:  swapVersion,

@@ -68,6 +68,9 @@ func Import(s *swap.Switcher, data []byte, force bool) (ImportResult, error) {
 	if err != nil {
 		return ImportResult{}, err
 	}
+	if err := envelope.belongsTo(s.Spec().Name); err != nil {
+		return ImportResult{}, err
+	}
 
 	roster, err := s.RosterOrEmpty()
 	if err != nil {
@@ -125,6 +128,30 @@ func parseEnvelope(data []byte) (Envelope, error) {
 	}
 	return envelope, nil
 }
+
+// belongsTo refuses an archive from a different tool.
+//
+// Refused rather than converted: a credential is the tool's own format, and
+// nothing here could rewrite one into another tool's. Silently accepting it
+// filed the bytes as an account of the wrong provider, which reads as success
+// until the next switch writes them over a working login.
+func (e Envelope) belongsTo(provider string) error {
+	// An archive with no provider predates them, and is Claude's — see
+	// Envelope.Provider.
+	from := e.Provider
+	if from == "" {
+		from = legacyProvider
+	}
+	if from == provider {
+		return nil
+	}
+	return fmt.Errorf("%w: this archive holds %s accounts and you are importing "+
+		"into %s. Import it with `aaswap --provider %s account import`",
+		apperr.ErrTransfer, from, provider, from)
+}
+
+// legacyProvider owns an archive with no provider recorded in it.
+const legacyProvider = "claude"
 
 // validated is one account, checked and normalized.
 type validated struct {
