@@ -252,10 +252,10 @@ Sessions use your normal `~/.claude` setup (settings, CLAUDE.md, skills, MCP ser
 Bind a directory to an account, and a bare `aaswap run` there launches that account in session mode — e.g. work account in work repos, personal elsewhere:
 
 ```bash
-aaswap map 2 ~/work/client-app   # map a directory to account 2
-aaswap map user@example.com      # map the current directory
-aaswap map                       # list mappings
-aaswap unmap ~/work/client-app   # remove one (defaults to current directory)
+aaswap dir map work ~/work/client-app   # map a directory to the account "work"
+aaswap dir map user@example.com         # map the current directory
+aaswap dir list                         # list mappings
+aaswap dir unmap ~/work/client-app      # remove one (defaults to current directory)
 
 cd ~/work/client-app/src
 aaswap run                       # → account 2, session mode
@@ -320,8 +320,8 @@ Every account-addressing command takes `--provider`.
   live account-independent OAuth state (such as MCP server logins) is
   preserved instead of being overwritten by an account's older snapshot
 - Account credentials stored securely using platform-appropriate methods
-- Switches (manual and automatic) hold Claude Code's own credential locks while writing, so a swap never interleaves with a token refresh
-- Auto-switch freshens a target's token before activating it, and quarantines accounts whose refresh token has died (recover by logging in with it and running `aaswap login`, or by replacing its stored credentials from a known-good export — a plain `aaswap account import backup.aaswap` replaces dead-token accounts automatically)
+- A Claude switch holds Claude Code's own credential locks while writing, so a swap never interleaves with a token refresh. A provider that takes no such locks is not made to wait on another tool's
+- A switch freshens the target's token first where the provider can refresh one, and quarantines accounts whose refresh token has died (recover by logging in with it and running `aaswap login`, or by replacing its stored credentials from a known-good export — a plain `aaswap account import backup.aaswap` replaces dead-token accounts automatically)
 - Usage numbers refresh every few minutes — faster for an account being used or close to switching, slower for idle ones — keeping aaswap comfortably inside Anthropic's rate limits however many dashboards you keep open on a machine. An age note like `· 6m ago` just means the next scheduled check hasn't come yet, not that something is stuck.
 
 ## Data locations
@@ -388,10 +388,14 @@ Tool preferences live in `settings.json` in the backup root; `aaswap config` rea
 ```bash
 aaswap config                              # list effective settings ("(default)" = not set)
 aaswap config get autoswitch.threshold
-aaswap config set autoswitch.threshold 80  # validated: rejects out-of-range values loudly
-aaswap config set autoswitch.model Fable   # per-model switching (see "auto"); Fable,Opus for several
+aaswap config set autoswitch.threshold 80  # the listing flags an account at this pct
+aaswap config set autoswitch.model Fable   # fold these models' weekly limits in; Fable,Opus for several
 aaswap config unset autoswitch.threshold   # back to the default
 aaswap config list                         # also prints where settings.json lives
+
+# Three keys, and every one of them changes what you see. The section is still
+# called autoswitch because renaming it would migrate everyone's settings.json;
+# the six keys that configured the rotation loop went with the loop.
 ```
 
 `aaswap config --help` lists every key with its valid range and default. Hand-editing the file still works — `aaswap config` is just a safer front door. `list` and `get` take `--json` for scripting.
@@ -442,7 +446,7 @@ aaswap switch 2 --json
 
 Every payload carries a `schemaVersion` (currently `1`); on a handled error stdout is `{"schemaVersion":1,"error":{...}}` with a non-zero exit code. `--switch`/`--switch-to` report `{"switched": true|false, "from": …, "to": …, "reason": …}`.
 
-Usage is served from a per-account cache: when the usage API is briefly unreachable, the last-known numbers are shown instead of nothing (the human view marks them with their age, e.g. `· 2m ago`). Rows with decision-trusted usage carry additive `usageFetchedAt`/`usageAgeSeconds` fields telling you how old the measurement is. Whenever `usage` is null but a last-known measurement exists — data too old to drive a decision (`usageStatus` stays `unavailable`), or a row in a non-`ok` state such as `token_expired` — additive `lastGoodUsage`/`lastGoodFetchedAt`/`lastGoodAgeSeconds` fields preserve the human display without making the account actionable. These fields apply to list rows and the managed active row from `status --json`. An account held out of rotation with `aaswap disable` carries an additive `"disabled": true` on its row (absent otherwise).
+Usage is served from a per-account cache: when the usage API is briefly unreachable, the last-known numbers are shown instead of nothing (the human view marks them with their age, e.g. `· 2m ago`). Rows with decision-trusted usage carry additive `usageFetchedAt`/`usageAgeSeconds` fields telling you how old the measurement is. Whenever `usage` is null but a last-known measurement exists — data too old to drive a decision (`usageStatus` stays `unavailable`), or a row in a non-`ok` state such as `token_expired` — additive `lastGoodUsage`/`lastGoodFetchedAt`/`lastGoodAgeSeconds` fields preserve the human display without making the account actionable. These fields apply to list rows and the managed active row from `status --json`. An account held out of rotation with `aaswap account disable` carries an additive `"disabled": true` on its row (absent otherwise).
 
 An account row carries its `name` — the handle `switch` and `run` take.
 
