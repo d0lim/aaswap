@@ -271,3 +271,62 @@ func TestClaudeSessionsAreStillReseeded(t *testing.T) {
 			"on a credential the server may already have rotated")
 	}
 }
+
+// `dir` feeds `run`, so it has to be available exactly where `run` is. A
+// mapping a provider cannot act on is worse than no mapping: it silently
+// launches the wrong account.
+func TestDirMappingsWorkForCodex(t *testing.T) {
+	h := newHarness(t)
+	h.twoCodexAccounts(t)
+
+	dir := t.TempDir()
+	if code := h.run("--provider", "codex", "dir", "map", "work", dir); code != ExitOK {
+		t.Fatalf("map exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("--provider", "codex", "dir", "list"); code != ExitOK {
+		t.Fatalf("list exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "work")
+
+	if code := h.run("--provider", "codex", "dir", "unmap", dir); code != ExitOK {
+		t.Fatalf("unmap exit = %d: %s", code, h.stderr())
+	}
+}
+
+// Export and import have to round-trip a provider whose accounts have no
+// account-scoped config, which is the shape every provider but Claude has.
+func TestCodexAccountsRoundTripThroughAnExport(t *testing.T) {
+	h := newHarness(t)
+	h.twoCodexAccounts(t)
+	archive := filepath.Join(t.TempDir(), "accounts.aaswap")
+
+	if code := h.run("--provider", "codex", "account", "export", archive); code != ExitOK {
+		t.Fatalf("export exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("--provider", "codex", "account", "remove", "--all", "--yes"); code != ExitOK {
+		t.Fatalf("removing exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("--provider", "codex", "account", "import", archive, "--yes"); code != ExitOK {
+		t.Fatalf("import exit = %d: %s", code, h.stderr())
+	}
+
+	s, err := h.app.NewSwitcher("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster, err := s.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Names()) != 2 {
+		t.Fatalf("accounts = %v, want both restored", roster.Names())
+	}
+	// The credential has to come back too, or the restore leaves accounts that
+	// cannot be switched to.
+	for _, name := range roster.Names() {
+		value, unreadable := s.Creds.ReadAccount(name, roster.Accounts[name].Email)
+		if unreadable || value == "" {
+			t.Errorf("%s came back with no credential", name)
+		}
+	}
+}

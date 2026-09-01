@@ -18,6 +18,10 @@ func (s *Switcher) spec() providerpkg.Spec {
 	return providerpkg.MustLookup(s.provider())
 }
 
+// Spec is this switcher's provider declaration, for the packages above that
+// have to ask what shape the provider is — transfer, and the command layer.
+func (s *Switcher) Spec() providerpkg.Spec { return s.spec() }
+
 // liveFileLocations maps each declared file to where it actually is on this
 // machine, for the LIVE login rather than a stored copy.
 //

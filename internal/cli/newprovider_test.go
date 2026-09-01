@@ -203,3 +203,116 @@ func TestAnUndocumentedProviderIsIsolatedFromTheRest(t *testing.T) {
 		}
 	}
 }
+
+// Export and import are in BaselineCapabilities, so a provider with the minimal
+// declaration has to round-trip. This is the assertion that keeps that promise
+// honest — the capability table saying "supported" is not evidence.
+func TestAnUndocumentedProviderRoundTripsThroughAnExport(t *testing.T) {
+	h := newHarness(t)
+	spec := declareMinimalProvider(t, "madeup")
+	h.logInAs(t, spec, "only-session")
+	if code := h.run("--provider", "madeup", "login", "--capture"); code != ExitOK {
+		t.Fatalf("storing: exit = %d: %s", code, h.stderr())
+	}
+
+	archive := filepath.Join(t.TempDir(), "accounts.aaswap")
+	if code := h.run("--provider", "madeup", "account", "export", archive); code != ExitOK {
+		t.Fatalf("export: exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("--provider", "madeup", "account", "remove", "--all", "--yes"); code != ExitOK {
+		t.Fatalf("removing: exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("--provider", "madeup", "account", "import", archive, "--yes"); code != ExitOK {
+		t.Fatalf("import: exit = %d: %s", code, h.stderr())
+	}
+
+	s, err := h.app.NewSwitcher("madeup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster, err := s.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Names()) != 1 {
+		t.Fatalf("accounts = %v, want the one that was exported", roster.Names())
+	}
+	name := roster.Names()[0]
+	value, unreadable := s.Creds.ReadAccount(name, roster.Accounts[name].Email)
+	if unreadable || !strings.Contains(value, "only-session") {
+		t.Errorf("the restored credential is %q, want the exported one", value)
+	}
+}
+
+// Capturing the same credential twice must refresh the one account, not add a
+// second.
+//
+// With no address to compare, the digest is the only thing that can tell "this
+// login is already stored" from "this is a new one". A roster record with no
+// fingerprint compares equal to every other identityless record, which reads as
+// "already stored" for the wrong account — or, when nothing matches, adds a
+// duplicate on every capture.
+func TestRecapturingAnUndocumentedProvidersLoginDoesNotDuplicateIt(t *testing.T) {
+	h := newHarness(t)
+	spec := declareMinimalProvider(t, "madeup")
+	h.logInAs(t, spec, "the-only-session")
+
+	for i := range 3 {
+		if code := h.run("--provider", "madeup", "login", "--capture"); code != ExitOK {
+			t.Fatalf("capture %d: exit = %d: %s", i+1, code, h.stderr())
+		}
+	}
+
+	s, err := h.app.NewSwitcher("madeup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster, err := s.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Names()) != 1 {
+		t.Errorf("accounts = %v, want one — the same login was stored repeatedly",
+			roster.Names())
+	}
+}
+
+// A different credential IS a different account, even with no address to tell
+// them apart.
+func TestADifferentCredentialIsADifferentUndocumentedAccount(t *testing.T) {
+	h := newHarness(t)
+	spec := declareMinimalProvider(t, "madeup")
+
+	for _, token := range []string{"session-a", "session-b"} {
+		h.logInAs(t, spec, token)
+		if code := h.run("--provider", "madeup", "login", "--capture"); code != ExitOK {
+			t.Fatalf("capturing %s: exit = %d: %s", token, code, h.stderr())
+		}
+	}
+
+	s, err := h.app.NewSwitcher("madeup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster, err := s.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Names()) != 2 {
+		t.Errorf("accounts = %v, want two distinct ones", roster.Names())
+	}
+	// And each carries the digest that identifies it, or the next capture
+	// cannot tell them apart either.
+	seen := map[string]bool{}
+	for _, name := range roster.Names() {
+		fingerprint := roster.Accounts[name].Fingerprint
+		if fingerprint == "" {
+			t.Errorf("%s was stored with no fingerprint", name)
+			continue
+		}
+		if seen[fingerprint] {
+			t.Errorf("two accounts share the fingerprint %q", fingerprint)
+		}
+		seen[fingerprint] = true
+	}
+}
