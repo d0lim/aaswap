@@ -149,12 +149,6 @@ func (a *App) Execute(ctx context.Context, args []string) int {
 	root.SetErr(a.Err)
 
 	if err := root.ExecuteContext(ctx); err != nil {
-		// An outcome carried as an exit code is not a failure to report: the
-		// command already said everything it had to say, in the shape the
-		// caller asked for.
-		if code, ok := errors.AsType[exitCode](err); ok {
-			return int(code)
-		}
 		return a.reportError(err)
 	}
 	return ExitOK

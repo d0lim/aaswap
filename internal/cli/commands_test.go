@@ -2,10 +2,8 @@ package cli
 
 import (
 	"context"
-	json "encoding/json/v2"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -159,65 +157,7 @@ func TestSwitchByAliasAndEmail(t *testing.T) {
 	}
 }
 
-// The strategy only recommends a move it can prove lands on more headroom.
-func TestSwitchWithTheBestStrategy(t *testing.T) {
-	t.Run("moves to more headroom", func(t *testing.T) {
-		h := newHarness(t)
-		h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-		h.login("1", "one@example.com")
-		h.measuring(map[string]*usage.Result{"1": measured(80), "2": measured(20)})
-
-		if code := h.run("switch", "--strategy", "best"); code != ExitOK {
-			t.Fatalf("exit = %d: %s", code, h.stderr())
-		}
-		wantContains(t, h.stdout(), "2")
-	})
-
-	t.Run("stays rather than moving somewhere worse", func(t *testing.T) {
-		h := newHarness(t)
-		h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-		h.login("1", "one@example.com")
-		h.measuring(map[string]*usage.Result{"1": measured(20), "2": measured(80)})
-
-		if code := h.run("switch", "--strategy", "best"); code != ExitOK {
-			t.Fatalf("exit = %d: %s", code, h.stderr())
-		}
-		wantContains(t, h.stdout(), "most headroom", "Staying put")
-		if live := h.switcher.Creds.ReadActive().Value; !strings.Contains(live, "tok-1") {
-			t.Error("a stay-put decision switched anyway")
-		}
-	})
-
-	t.Run("says so when nothing can be measured", func(t *testing.T) {
-		h := newHarness(t)
-		h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-		h.login("1", "one@example.com")
-		// No fetcher: nothing is measurable.
-		if code := h.run("switch", "--strategy", "best"); code != ExitOK {
-			t.Fatalf("exit = %d: %s", code, h.stderr())
-		}
-		wantContains(t, h.stdout(), "unknown", "Staying put")
-	})
-}
-
-// Unknown is not exhausted: an account whose usage could not be measured stays
-// a candidate, or a failing endpoint would strand the user.
-func TestNextAvailableSkipsOnlyProvenExhaustion(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com", "3": "three@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{
-		"1": measured(50),
-		"2": measured(100), // at its limit — skipped
-		// slot 3 is unmeasurable, and therefore still a candidate
-	})
-
-	if code := h.run("switch", "--strategy", "next-available"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "3")
-}
-
+// The payload names both ends of the move, so a wrapper can log what changed.
 func TestSwitchJSONCarriesBothSides(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
@@ -464,12 +404,15 @@ func TestConfigPath(t *testing.T) {
 	wantContains(t, h.stdout(), "settings.json")
 }
 
-// A --model flag overrides the stored setting for this run only.
-func TestTheModelFlagOverridesTheSettingForOneRun(t *testing.T) {
+// The model setting decides which per-model weekly windows a listing counts.
+//
+// Display only. It used to steer the headroom comparison a rotation strategy
+// made, and that comparison is gone — see docs/PROVIDERS.md.
+func TestTheModelSettingReachesTheListing(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
 	h.login("1", "one@example.com")
-	// Account-wide, slot 1 has more headroom. Its Fable window is spent.
+	// Account-wide, slot 1 is comfortable. Its Fable window is spent.
 	h.measuring(map[string]*usage.Result{
 		"1": {
 			FiveHour: &usage.Window{Pct: 10}, SevenDay: &usage.Window{Pct: 10},
@@ -478,17 +421,15 @@ func TestTheModelFlagOverridesTheSettingForOneRun(t *testing.T) {
 		"2": {FiveHour: &usage.Window{Pct: 50}, SevenDay: &usage.Window{Pct: 50}},
 	})
 
-	// Without the flag, slot 1 is the better account and it stays.
-	if code := h.run("switch", "--strategy", "best"); code != ExitOK {
+	if code := h.run("config", "set", "autoswitch.model", "Fable"); code != ExitOK {
+		t.Fatalf("setting the model: exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Staying put")
-
-	// Counting the Fable window, slot 1 is at its limit for that model.
-	if code := h.run("switch", "--strategy", "best", "--model", "Fable"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "2")
+	// The spent per-model window has to be visible, or counting it changed
+	// nothing a person can see.
+	wantContains(t, h.stdout(), "Fable")
 }
 
 func TestUnclaimedListingAndPurge(t *testing.T) {
@@ -768,123 +709,7 @@ func TestSplitRunArgs(t *testing.T) {
 	}
 }
 
-func TestAutoOnce(t *testing.T) {
-	tests := []struct {
-		name     string
-		setup    func(*harness)
-		wantCode int
-		wantSaid string
-	}{
-		{
-			name: "nothing to do",
-			setup: func(h *harness) {
-				h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-				h.login("1", "one@example.com")
-				h.measuring(map[string]*usage.Result{"1": measured(50), "2": measured(10)})
-			},
-			wantCode: 2,
-			wantSaid: "below-threshold",
-		},
-		{
-			name: "a switch",
-			setup: func(h *harness) {
-				h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-				h.login("1", "one@example.com")
-				h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
-			},
-			wantCode: 0,
-			wantSaid: "2",
-		},
-		{
-			name: "nowhere to go",
-			setup: func(h *harness) {
-				h.seed(map[string]string{"1": "one@example.com"})
-				h.login("1", "one@example.com")
-				h.measuring(map[string]*usage.Result{"1": measured(95)})
-			},
-			wantCode: 3,
-			wantSaid: "no-candidates",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newHarness(t)
-			tt.setup(h)
-
-			if code := h.run("auto", "--once"); code != tt.wantCode {
-				t.Fatalf("exit = %d, want %d: %s%s", code, tt.wantCode, h.stdout(), h.stderr())
-			}
-			wantContains(t, h.stdout(), tt.wantSaid)
-		})
-	}
-}
-
 // The event stream is one JSON object per line, so a consumer can tail it.
-func TestAutoJSONIsOneEventPerLine(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
-
-	if code := h.run("auto", "--once", "--json"); code != 0 {
-		t.Fatalf("exit = %d: %s%s", code, h.stdout(), h.stderr())
-	}
-
-	var kinds []string
-	for line := range strings.SplitSeq(strings.TrimSpace(h.stdout()), "\n") {
-		var event map[string]any
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			t.Fatalf("a line is not one JSON object: %v\n%s", err, line)
-		}
-		if event["schemaVersion"] != float64(jsonout.SchemaVersion) {
-			t.Errorf("schemaVersion = %v", event["schemaVersion"])
-		}
-		if event["ts"] == "" {
-			t.Errorf("an event carries no timestamp: %v", event)
-		}
-		kinds = append(kinds, event["event"].(string))
-	}
-	if !slices.Contains(kinds, "poll") || !slices.Contains(kinds, "switch") {
-		t.Errorf("events = %v, want a poll and a switch", kinds)
-	}
-}
-
-// A dry run reports the decision and changes nothing.
-func TestAutoDryRun(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
-
-	if code := h.run("auto", "--once", "--dry-run"); code != 0 {
-		t.Fatalf("exit = %d: %s%s", code, h.stdout(), h.stderr())
-	}
-	wantContains(t, h.stdout(), "would switch")
-	if live := h.switcher.Creds.ReadActive().Value; !strings.Contains(live, "tok-1") {
-		t.Errorf("a dry run moved the live login: %q", live)
-	}
-}
-
-// A flag overrides the stored policy for one run only.
-func TestAutoThresholdFlagOverridesTheSetting(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{"1": measured(60), "2": measured(10)})
-
-	// At the default threshold, 60% is fine.
-	if code := h.run("auto", "--once"); code != 2 {
-		t.Fatalf("exit = %d, want no action: %s", code, h.stdout())
-	}
-
-	// Lowered, it is not.
-	if code := h.run("auto", "--once", "--threshold", "50"); code != 0 {
-		t.Fatalf("exit = %d, want a switch: %s%s", code, h.stdout(), h.stderr())
-	}
-	wantContains(t, h.stdout(), "2")
-}
-
 func TestLoginWithAToken(t *testing.T) {
 	tests := []struct {
 		name      string

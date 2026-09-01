@@ -22,7 +22,6 @@ func (a *App) rootCommand() *cobra.Command {
 			"  aaswap add                       # capture the account you are logged in as",
 			"  aaswap list                      # show every account and its usage",
 			"  aaswap switch 2                  # activate account 2",
-			"  aaswap switch --strategy best    # activate whichever has the most headroom",
 			"  aaswap list --json               # the same listing, for a script",
 		}, "\n"),
 		SilenceUsage:  true,
@@ -54,7 +53,6 @@ func (a *App) rootCommand() *cobra.Command {
 		a.switchCommand(),
 		a.loginCommand(),
 		a.runCommand(),
-		a.autoCommand(),
 		a.tuiCommand(),
 		a.configCommand(),
 		a.doctorCommand(),
@@ -147,29 +145,21 @@ func (a *App) statusCommand() *cobra.Command {
 }
 
 func (a *App) switchCommand() *cobra.Command {
-	var strategy, model string
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "switch [NUM|EMAIL|ALIAS]",
+		Use:   "switch [ACCOUNT]",
 		Short: "Activate another account",
 		Long: "With no argument, rotates to the next account in sequence.\n" +
-			"With --strategy, picks the target by remaining rate-limit headroom.",
+			"Name an account to activate that one.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := ""
 			if len(args) == 1 {
 				target = args[0]
 			}
-			if model != "" {
-				a.overrides.Model = &model
-			}
-			return a.runSwitch(cmd, target, strategy, force)
+			return a.runSwitch(cmd, target, force)
 		},
 	}
-	cmd.Flags().StringVar(&strategy, "strategy", "",
-		"pick the target by headroom: 'best' or 'next-available'")
-	cmd.Flags().StringVar(&model, "model", "",
-		"also count these models' per-model weekly limits (comma-separated, or 'all')")
 	cmd.Flags().BoolVar(&force, "force", false,
 		"activate the stored credential without backing up the current login first")
 	silenceUsage(cmd)
