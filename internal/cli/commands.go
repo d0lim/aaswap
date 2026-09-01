@@ -133,16 +133,27 @@ func (a *App) switchCommand() *cobra.Command {
 func (a *App) addCommand() *cobra.Command {
 	var slot int
 	var alias string
+	var wait bool
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Capture the account you are currently logged in as",
-		Args:  cobra.NoArgs,
+		Long: "Stores the live login's credential and config against a slot, so ccswap\n" +
+			"can switch back to it later.\n\n" +
+			"ccswap cannot log you in — Claude Code owns that flow — so adding another\n" +
+			"account means logging in with it first. With --wait, ccswap prints how to\n" +
+			"do that and captures the account the moment the login finishes, instead of\n" +
+			"making you come back and re-run this. In a terminal with no account logged\n" +
+			"in at all, it waits without being asked: the alternative is an error whose\n" +
+			"only advice is to go and log in.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.runAdd(cmd, slot, alias)
+			return a.runAdd(cmd, slot, alias, wait)
 		},
 	}
 	cmd.Flags().IntVar(&slot, "slot", 0, "store the account in a specific slot")
 	cmd.Flags().StringVar(&alias, "alias", "", "give the account a short name")
+	cmd.Flags().BoolVar(&wait, "wait", false,
+		"wait for a /login in Claude Code, then capture that account")
 	silenceUsage(cmd)
 	return cmd
 }

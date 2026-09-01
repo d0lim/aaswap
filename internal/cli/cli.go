@@ -71,6 +71,10 @@ type App struct {
 	assumeYes bool
 	// overrides are the policy knobs a flag may override for this run.
 	overrides settings.Overrides
+	// awaitTuning collapses the login wait's polling cadence. Zero uses the
+	// production one; a test sets it so the wait is not measured in seconds.
+	// OnWaiting is always supplied by awaitLogin and never read from here.
+	awaitTuning swap.AwaitOptions
 }
 
 // New returns an App wired to the real environment.

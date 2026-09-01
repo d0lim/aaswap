@@ -41,4 +41,20 @@ func TestDumpFrame(t *testing.T) {
 	m.watch = true
 	m.status = "Activated Account 1 (work@example.com)"
 	t.Log("\n" + m.View().Content + "\n")
+
+	// The overlays, which the dashboard frame never shows together.
+	started, _ := m.startAwait()
+	waiting := started.(Model)
+	t.Log("\n" + waiting.View().Content + "\n")
+	waiting.stopAwait()
+
+	token, _ := m.askAddToken()
+	typed := token.(Model)
+	typed.modal.input = "sk-ant-api03-abcdefghijklmnop"
+	t.Log("\n" + typed.View().Content + "\n")
+
+	confirm, _ := m.handleLiveProbed(liveProbedMsg{state: swap.LiveState{
+		LoggedIn: true, Identity: swap.LiveIdentity{
+			Email: "new@example.com", OrganizationName: "Acme"}}})
+	t.Log("\n" + confirm.(Model).View().Content + "\n")
 }

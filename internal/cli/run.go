@@ -362,10 +362,18 @@ func accountRef(ref swap.AccountRef) jsonout.AccountRef {
 	return out
 }
 
-func (a *App) runAdd(cmd *cobra.Command, slot int, alias string) error {
+func (a *App) runAdd(cmd *cobra.Command, slot int, alias string, wait bool) error {
 	s, err := a.switcher()
 	if err != nil {
 		return err
+	}
+	// Ahead of Add, never inside it: the capture must run against whatever is
+	// live at the moment it runs, and a wait that resolved into the same call
+	// would hand Add an identity read seconds before its own.
+	if wait || a.shouldWaitForLogin(s) {
+		if err := a.awaitLogin(cmd.Context(), s); err != nil {
+			return err
+		}
 	}
 	outcome, err := s.Add(cmd.Context(), swap.AddRequest{
 		Slot: slot, Alias: alias, AssumeYes: a.assumeYes, Confirm: a.confirm,
