@@ -64,6 +64,13 @@ type ExportedAccount struct {
 	OrganizationUUID string `json:"organizationUuid"`
 	OrganizationName string `json:"organizationName"`
 	Added            string `json:"added"`
+	// Fingerprint digests the credential this account was stored with.
+	//
+	// Load-bearing for a provider whose token format nobody has parsed: it has
+	// no address, and this is then the only thing identifying the account. For
+	// the rest it is a note about which generation was exported. Additive, so
+	// an older archive without it still imports.
+	Fingerprint string `json:"fingerprint,omitzero"`
 	// Kind marks an API-key account, whose credential is a raw string rather
 	// than an object.
 	Kind string `json:"kind,omitzero"`
@@ -79,13 +86,21 @@ type ExportedAccount struct {
 // Only the identity block is read back at activation, and stripping the rest
 // keeps a transfer small while keeping the source machine's identifiers — its
 // user id, its absolute paths, its cached flags — out of the destination.
-func slimConfig(config jsontext.Value, label string) (jsontext.Value, error) {
+//
+// hasIdentity is false for a provider with no account-scoped config, where
+// there is no identity block to keep and its absence is not a defect: the
+// credential carries whatever identity the account has. Demanding one refused
+// every export such a provider could otherwise produce.
+func slimConfig(config jsontext.Value, label string, hasIdentity bool) (jsontext.Value, error) {
 	var parsed map[string]jsontext.Value
 	if err := json.Unmarshal(config, &parsed); err != nil || parsed == nil {
 		return nil, fmt.Errorf("%w: the %s is not a JSON object", apperr.ErrTransfer, label)
 	}
 	account, present := parsed["oauthAccount"]
 	if !present || string(account) == "null" {
+		if !hasIdentity {
+			return marshalObject(map[string]jsontext.Value{})
+		}
 		return nil, fmt.Errorf("%w: the %s carries no account identity — it cannot be "+
 			"exported", apperr.ErrTransfer, label)
 	}
@@ -273,11 +288,14 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 		OrganizationUUID: account.OrganizationUUID,
 		OrganizationName: account.OrganizationName,
 		Added:            account.Added,
+		Fingerprint:      account.Fingerprint,
 	}
 
 	configValue := jsontext.Value(config)
 	if !full {
-		slim, err := slimConfig(configValue, fmt.Sprintf("config for %s", account.Email))
+		_, hasIdentity := s.Spec().ConfigFile()
+		slim, err := slimConfig(configValue,
+			fmt.Sprintf("config for %s", account.Email), hasIdentity)
 		if err != nil {
 			return ExportedAccount{}, "", err
 		}

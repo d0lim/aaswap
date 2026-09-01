@@ -73,7 +73,11 @@ func Import(s *swap.Switcher, data []byte, force bool) (ImportResult, error) {
 	if err != nil {
 		return ImportResult{}, err
 	}
-	entries, err := validateAll(envelope, roster)
+	// Whether a stored config must carry an identity block is a property of the
+	// provider, not of the archive: for a provider whose credential IS the
+	// identity document there is nothing to require.
+	_, needsIdentity := s.Spec().ConfigFile()
+	entries, err := validateAll(envelope, roster, needsIdentity)
 	if err != nil {
 		return ImportResult{}, err
 	}
@@ -125,6 +129,7 @@ func parseEnvelope(data []byte) (Envelope, error) {
 type validated struct {
 	Name             string
 	Email            string
+	Fingerprint      string
 	UUID             string
 	OrganizationUUID string
 	OrganizationName string
@@ -134,8 +139,21 @@ type validated struct {
 	Config           string
 }
 
+// identity is the composite that names this account, matching what
+// swap.Account.Identity produces for a stored one.
+//
+// The fallback to the fingerprint is what keeps two identityless accounts —
+// a provider whose token format nobody has parsed has no address — from
+// comparing equal and collapsing into one on import.
+func (v validated) identity() swap.Identity {
+	if v.Email == "" {
+		return swap.Identity{Fingerprint: v.Fingerprint}
+	}
+	return swap.Identity{Email: v.Email, OrganizationUUID: v.OrganizationUUID}
+}
+
 // validateAll checks every account before any is written.
-func validateAll(envelope Envelope, roster *swap.Roster) ([]validated, error) {
+func validateAll(envelope Envelope, roster *swap.Roster, needsIdentity bool) ([]validated, error) {
 	// A name already used here belongs to the local account that has it.
 	localNames := map[string]swap.Identity{}
 	for _, name := range roster.Names() {
@@ -147,12 +165,12 @@ func validateAll(envelope Envelope, roster *swap.Roster) ([]validated, error) {
 	out := make([]validated, 0, len(envelope.Accounts))
 
 	for _, raw := range envelope.Accounts {
-		entry, err := validateOne(raw)
+		entry, err := validateOne(raw, needsIdentity)
 		if err != nil {
 			return nil, err
 		}
 
-		identity := swap.Identity{Email: entry.Email, OrganizationUUID: entry.OrganizationUUID}
+		identity := entry.identity()
 		if seenIdentities[identity] {
 			return nil, fmt.Errorf("%w: the export names %s twice (organization %s)",
 				apperr.ErrTransfer, entry.Email, orgLabel(entry.OrganizationUUID))
@@ -179,14 +197,27 @@ func validateAll(envelope Envelope, roster *swap.Roster) ([]validated, error) {
 
 // validateOne checks one account's fields BEFORE any filename is built from
 // them.
-func validateOne(raw ExportedAccount) (validated, error) {
-	if !emailPattern.MatchString(raw.Email) {
-		return validated{}, fmt.Errorf("%w: an imported account has an invalid or missing "+
-			"email address: %q", apperr.ErrTransfer, raw.Email)
+func validateOne(raw ExportedAccount, needsIdentity bool) (validated, error) {
+	switch {
+	case raw.Email != "" || needsIdentity:
+		// An address is present, or this provider produces them and its
+		// absence means the archive is malformed. Either way it has to be one.
+		if !emailPattern.MatchString(raw.Email) {
+			return validated{}, fmt.Errorf("%w: an imported account has an invalid or "+
+				"missing email address: %q", apperr.ErrTransfer, raw.Email)
+		}
+	case raw.Fingerprint == "":
+		// No address and no fingerprint is nothing to identify the account by,
+		// so importing it would produce a row that compares equal to every
+		// other identityless row.
+		return validated{}, fmt.Errorf("%w: an imported account has neither an email "+
+			"address nor a fingerprint, so there is nothing to identify it by",
+			apperr.ErrTransfer)
 	}
 
 	entry := validated{
 		Email:            raw.Email,
+		Fingerprint:      raw.Fingerprint,
 		UUID:             raw.UUID,
 		OrganizationUUID: raw.OrganizationUUID,
 		OrganizationName: raw.OrganizationName,
@@ -205,16 +236,20 @@ func validateOne(raw ExportedAccount) (validated, error) {
 		entry.Name = swap.NameForEmail(raw.Email)
 	}
 
-	// The config must be an object carrying an identity, or a switch to this
-	// account could never complete.
+	// The config must be an object, and — for a provider that HAS an
+	// account-scoped config — must carry an identity, or a switch to this
+	// account could never complete. For a provider with none, an empty object
+	// is the whole truth: the credential carries whatever identity there is.
 	var config map[string]jsontext.Value
 	if err := json.Unmarshal(raw.Config, &config); err != nil || config == nil {
 		return validated{}, fmt.Errorf("%w: the config for %s must be a JSON object",
 			apperr.ErrTransfer, raw.Email)
 	}
-	if account, present := config["oauthAccount"]; !present || string(account) == "null" {
-		return validated{}, fmt.Errorf("%w: the config for %s carries no account identity",
-			apperr.ErrTransfer, raw.Email)
+	if needsIdentity {
+		if account, present := config["oauthAccount"]; !present || string(account) == "null" {
+			return validated{}, fmt.Errorf("%w: the config for %s carries no account identity",
+				apperr.ErrTransfer, raw.Email)
+		}
 	}
 	formatted, err := json.Marshal(config, jsontext.WithIndent("  "), json.Deterministic(true))
 	if err != nil {
@@ -255,7 +290,7 @@ func validateOne(raw ExportedAccount) (validated, error) {
 
 // importOne writes a single validated account.
 func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force bool) (ImportedAccount, error) {
-	identity := swap.Identity{Email: entry.Email, OrganizationUUID: entry.OrganizationUUID}
+	identity := entry.identity()
 	usageIdentity := usagestore.Identity{Email: entry.Email, OrganizationUUID: entry.OrganizationUUID}
 
 	target := ""
@@ -329,6 +364,7 @@ func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force boo
 		OrganizationUUID: entry.OrganizationUUID,
 		OrganizationName: entry.OrganizationName,
 		Added:            added,
+		Fingerprint:      entry.Fingerprint,
 	}
 	if entry.Kind == swap.KindAPIKey {
 		record.Kind = swap.KindAPIKey

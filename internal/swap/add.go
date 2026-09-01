@@ -135,6 +135,10 @@ func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, name
 		OrganizationUUID: identity.OrganizationUUID,
 		OrganizationName: identity.OrganizationName,
 		Added:            Timestamp(s.now()),
+		// Load-bearing for a provider with no address to store: the digest is
+		// then the only thing identifying this account, and an empty one would
+		// compare equal to every other identityless row.
+		Fingerprint: identity.Fingerprint,
 	})
 	roster.SetActive(num)
 	if err := s.WriteRoster(roster); err != nil {
@@ -168,6 +172,10 @@ func (s *Switcher) refreshInPlace(ctx context.Context, roster *Roster, name stri
 	if err := s.storeCapture(name, identity, captured.Credentials, config); err != nil {
 		return AddOutcome{}, err
 	}
+	// The stored generation moved, so the record of which one it is has to move
+	// with it — otherwise the next read compares the new credential against the
+	// digest of the one it replaced and reports a login that never happened.
+	account.Fingerprint = identity.Fingerprint
 	roster.SetActive(name)
 	if err := s.WriteRoster(roster); err != nil {
 		return AddOutcome{}, err
