@@ -40,31 +40,75 @@ func (a *App) rootCommand() *cobra.Command {
 		"answer every confirmation with yes")
 	root.PersistentFlags().Bool("debug", false, "enable debug logging")
 
+	// What stays at the top level is what gets typed daily. What moves into a
+	// group is what gets typed once a month — and grouping is what keeps a
+	// second provider from doubling this list.
 	root.AddCommand(
 		a.listCommand(),
 		a.statusCommand(),
 		a.switchCommand(),
 		a.addCommand(),
-		a.removeCommand(),
+		a.addTokenCommand(),
+		a.runCommand(),
+		a.autoCommand(),
+		a.tuiCommand(),
+		a.configCommand(),
+		a.upgradeCommand(),
+		// Destructive, and deliberately not buried: a command that erases every
+		// account is one people should find on purpose, not by accident.
+		a.purgeCommand(),
+
+		a.accountCommand(),
+		a.dirCommand(),
+	)
+	return root
+}
+
+// accountCommand groups what is done TO an account rather than with it.
+func (a *App) accountCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "account",
+		Short:   "Manage the accounts themselves",
+		Long:    "Renaming, removing, holding out of rotation, and moving accounts\nbetween machines.",
+		Aliases: []string{"acct"},
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(
+		a.renameCommand(),
 		a.disableCommand(),
 		a.enableCommand(),
-		a.renameCommand(),
-		a.purgeCommand(),
-		a.configCommand(),
+		a.removeCommand(),
+		a.exportCommand(),
+		a.importCommand(),
 		a.unclaimedCommand(),
-		a.runCommand(),
+		a.adoptCommand(),
+	)
+	silenceUsage(cmd)
+	return cmd
+}
+
+// dirCommand groups the directory-to-account routing `aaswap run` reads.
+func (a *App) dirCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dir",
+		Short: "Route a directory to an account",
+		Long: "`aaswap run` in a mapped directory launches that account. Subfolders\n" +
+			"inherit the nearest mapped ancestor.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(
 		a.mapCommand(),
 		a.unmapCommand(),
 		a.mappingsCommand(),
-		a.exportCommand(),
-		a.importCommand(),
-		a.autoCommand(),
-		a.addTokenCommand(),
-		a.tuiCommand(),
-		a.adoptCommand(),
-		a.upgradeCommand(),
 	)
-	return root
+	silenceUsage(cmd)
+	return cmd
 }
 
 func (a *App) listCommand() *cobra.Command {

@@ -146,7 +146,7 @@ func TestSwitchByAliasAndEmail(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
 	h.login("1", "one@example.com")
-	if code := h.run("rename", "2", "work"); code != ExitOK {
+	if code := h.run("account", "rename", "2", "work"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 
@@ -271,7 +271,7 @@ func TestAFailureInJSONModeIsAnEnvelope(t *testing.T) {
 // type must not break a consumer's branch.
 func TestErrorTypesAreTheTaxonomysNames(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("remove", "nobody", "--json", "--yes"); code != ExitError {
+	if code := h.run("account", "remove", "nobody", "--json", "--yes"); code != ExitError {
 		t.Fatalf("exit = %d", code)
 	}
 	envelope := h.decodeJSON()["error"].(map[string]any)
@@ -289,7 +289,7 @@ func TestAddAndRemove(t *testing.T) {
 	}
 	wantContains(t, h.stdout(), "Added", "one@example.com")
 
-	if code := h.run("remove", "one", "--yes"); code != ExitOK {
+	if code := h.run("account", "remove", "one", "--yes"); code != ExitOK {
 		t.Fatalf("remove: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Removed", "one@example.com")
@@ -309,7 +309,7 @@ func TestDestructiveCommandsAskFirst(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"remove", []string{"remove", "1"}},
+		{"remove", []string{"account", "remove", "1"}},
 		{"purge", []string{"purge"}},
 	}
 	for _, tt := range tests {
@@ -364,7 +364,7 @@ func TestDisableAndEnable(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
 	h.login("1", "one@example.com")
 
-	if code := h.run("disable", "2"); code != ExitOK {
+	if code := h.run("account", "disable", "2"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Disabled", "2")
@@ -375,12 +375,12 @@ func TestDisableAndEnable(t *testing.T) {
 	}
 
 	// Saying it twice reports the state rather than claiming an edit.
-	if code := h.run("disable", "2"); code != ExitOK {
+	if code := h.run("account", "disable", "2"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "already disabled")
 
-	if code := h.run("enable", "2"); code != ExitOK {
+	if code := h.run("account", "enable", "2"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Enabled", "back in the rotation")
@@ -392,7 +392,7 @@ func TestDisablingTheLastAccountWarns(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com"})
 	h.login("1", "one@example.com")
 
-	if code := h.run("disable", "1"); code != ExitOK {
+	if code := h.run("account", "disable", "1"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "No accounts remain in rotation", "aaswap enable")
@@ -508,17 +508,17 @@ func TestUnclaimedListingAndPurge(t *testing.T) {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 
-	if code := h.run("unclaimed"); code != ExitOK {
+	if code := h.run("account", "unclaimed"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "reason:", "the config named slot 1", "--purge")
 
-	if code := h.run("unclaimed", "--purge", "all", "--yes"); code != ExitOK {
+	if code := h.run("account", "unclaimed", "--purge", "all", "--yes"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Dropped")
 
-	if code := h.run("unclaimed"); code != ExitOK {
+	if code := h.run("account", "unclaimed"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "No preserved credentials")
@@ -526,7 +526,7 @@ func TestUnclaimedListingAndPurge(t *testing.T) {
 
 func TestUnclaimedOnAnEmptyStore(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("unclaimed"); code != ExitOK {
+	if code := h.run("account", "unclaimed"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "No preserved credentials")
@@ -606,7 +606,7 @@ func TestExportAndImportRoundTripThroughTheCLI(t *testing.T) {
 	from.login("1", "one@example.com")
 
 	path := filepath.Join(t.TempDir(), "accounts.json")
-	if code := from.run("export", path); code != ExitOK {
+	if code := from.run("account", "export", path); code != ExitOK {
 		t.Fatalf("export: exit = %d: %s", code, from.stderr())
 	}
 	// The summary is on stderr, so a piped export yields nothing but the file.
@@ -619,7 +619,7 @@ func TestExportAndImportRoundTripThroughTheCLI(t *testing.T) {
 	testutil.AssertPerm(t, path, 0o600)
 
 	to := newHarness(t)
-	if code := to.run("import", path); code != ExitOK {
+	if code := to.run("account", "import", path); code != ExitOK {
 		t.Fatalf("import: exit = %d: %s", code, to.stderr())
 	}
 	wantContains(t, to.stdout(), "Imported", "one@example.com", "two@example.com")
@@ -639,7 +639,7 @@ func TestExportToStdoutIsPureJSON(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com"})
 
-	if code := h.run("export", "-"); code != ExitOK {
+	if code := h.run("account", "export", "-"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	payload := h.decodeJSON()
@@ -658,14 +658,14 @@ func TestExportToStdoutIsPureJSON(t *testing.T) {
 func TestImportFromStdin(t *testing.T) {
 	from := newHarness(t)
 	from.seed(map[string]string{"1": "one@example.com"})
-	if code := from.run("export", "-"); code != ExitOK {
+	if code := from.run("account", "export", "-"); code != ExitOK {
 		t.Fatalf("export: exit = %d: %s", code, from.stderr())
 	}
 	envelope := from.stdout()
 
 	to := newHarness(t)
 	to.app.In = strings.NewReader(envelope)
-	if code := to.run("import", "-"); code != ExitOK {
+	if code := to.run("account", "import", "-"); code != ExitOK {
 		t.Fatalf("import: exit = %d: %s", code, to.stderr())
 	}
 	wantContains(t, to.stdout(), "Imported", "one@example.com")
@@ -680,7 +680,7 @@ func TestImportRefusesAnEncryptedEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := h.run("import", path); code != ExitError {
+	if code := h.run("account", "import", path); code != ExitError {
 		t.Fatalf("exit = %d, want a refusal", code)
 	}
 	wantContains(t, h.stderr(), "Decrypt it before importing", "gpg")
@@ -688,7 +688,7 @@ func TestImportRefusesAnEncryptedEnvelope(t *testing.T) {
 
 func TestImportOfAMissingFile(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("import", filepath.Join(t.TempDir(), "nope.json")); code != ExitError {
+	if code := h.run("account", "import", filepath.Join(t.TempDir(), "nope.json")); code != ExitError {
 		t.Fatalf("exit = %d", code)
 	}
 	wantContains(t, h.stderr(), "import file not found")
@@ -699,22 +699,22 @@ func TestMappings(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com"})
 	dir := t.TempDir()
 
-	if code := h.run("map", "1", dir); code != ExitOK {
+	if code := h.run("dir", "map", "1", dir); code != ExitOK {
 		t.Fatalf("map: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Mapped", "one@example.com")
 
-	if code := h.run("mappings"); code != ExitOK {
+	if code := h.run("dir", "list"); code != ExitOK {
 		t.Fatalf("mappings: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "one@example.com")
 
-	if code := h.run("unmap", dir); code != ExitOK {
+	if code := h.run("dir", "unmap", dir); code != ExitOK {
 		t.Fatalf("unmap: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Unmapped")
 
-	if code := h.run("mappings"); code != ExitOK {
+	if code := h.run("dir", "list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "No directories are mapped", "aaswap map")
@@ -723,7 +723,7 @@ func TestMappings(t *testing.T) {
 func TestMappingAnUnknownAccount(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com"})
-	if code := h.run("map", "nobody@example.com", t.TempDir()); code != ExitError {
+	if code := h.run("dir", "map", "nobody@example.com", t.TempDir()); code != ExitError {
 		t.Fatalf("exit = %d", code)
 	}
 	wantContains(t, h.stderr(), "does not match any managed account")
@@ -1045,7 +1045,7 @@ func TestRenameMovesTheStoredMaterial(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"work": "one@example.com"})
 
-	if code := h.run("rename", "work", "Personal"); code != ExitOK {
+	if code := h.run("account", "rename", "work", "Personal"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Renamed", "work", "personal")
@@ -1073,7 +1073,7 @@ func TestRenameRefusesAHeldName(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"work": "one@example.com", "spare": "two@example.com"})
 
-	if code := h.run("rename", "work", "spare"); code != ExitError {
+	if code := h.run("account", "rename", "work", "spare"); code != ExitError {
 		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
 	}
 	wantContains(t, h.stderr(), "already")

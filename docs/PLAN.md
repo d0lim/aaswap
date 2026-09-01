@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 1 — 개명 + 단일 저장소 마이그레이션 (위험: 높음)
+## Phase 1 — 개명 + 단일 저장소 마이그레이션 ✅ 완료
 
 살아있는 refresh token 위를 한 번만 지나가기 위해 셋을 묶는다.
 
@@ -46,7 +46,16 @@
 ---
 
 ## Phase 2 — 명령 재편, 단절 (위험: 낮음)
-`account`/`dir` 그룹, `legacyFlags` 21개 삭제, 별칭 없음.
+
+`legacyFlags` 21개, `move`/`swap`, `alias`는 Phase 1에서 이미 삭제됐다. 남은 것:
+
+- `account` 그룹: rename · disable · enable · remove · export · import ·
+  unclaimed · adopt
+- `dir` 그룹: map · unmap · list
+- 최상위에 남는 것: switch · status · list · run · auto · tui · config ·
+  upgrade · purge · add · add-token (뒤 둘은 Phase 3에서 login으로 합쳐진다)
+
+**완료 조건**: `aaswap --help`가 10개 + 그룹 2개를 보인다. 동작 변경 없음.
 
 ## Phase 3 — `login` + 프롬프트 (위험: 낮음)
 `add`/`add-token` 병합, 네 경우 프롬프트, `--capture`/`--wait`/`--token`.
