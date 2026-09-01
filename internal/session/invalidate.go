@@ -97,7 +97,7 @@ func dirExists(path string) bool {
 // else. Both stores, because macOS keeps one in the Keychain and a plaintext
 // file can shadow it.
 func (m *Manager) dropCredentialMaterial(sessionDir string) error {
-	m.DeleteKeychainEntry(sessionDir)
+	m.ClearProfileCredential(sessionDir)
 	path := filepath.Join(sessionDir, ".credentials.json")
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

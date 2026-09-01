@@ -235,6 +235,7 @@ func (a *App) sessionManager(s *swap.Switcher) *session.Manager {
 		BackupRoot: s.BackupRoot(),
 		Platform:   s.Paths.Platform,
 		Creds:      s.Creds,
+		Profiles:   s.Profiles,
 		Probe:      session.ExecProber{},
 		Now:        s.Now,
 	}

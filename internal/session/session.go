@@ -41,9 +41,9 @@ import (
 	"github.com/d0lim/aaswap/internal/claudeapi"
 	"github.com/d0lim/aaswap/internal/credstore"
 	"github.com/d0lim/aaswap/internal/fsutil"
-	"github.com/d0lim/aaswap/internal/keychain"
 	"github.com/d0lim/aaswap/internal/platform"
 	"github.com/d0lim/aaswap/internal/procdetect"
+	"github.com/d0lim/aaswap/internal/provider"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -210,18 +210,6 @@ func ClearStale(sessionDir string) bool {
 	return err == nil
 }
 
-// KeychainServiceName is the Keychain service Claude Code derives for a config
-// directory.
-//
-// Claude Code hashes the RAW CLAUDE_CONFIG_DIR value — NFC-normalized and
-// unresolved. So the string hashed here must be exactly the string exported: a
-// resolved or cleaned variant would look up a service name Claude Code never
-// wrote, and the lookup would silently fall through to a possibly-stale
-// plaintext seed.
-func KeychainServiceName(configDir string) string {
-	return credstore.KeychainServiceName(configDir)
-}
-
 // Manager runs sessions for one backup root.
 //
 // Its collaborators are fields, so a test drives the whole surface without a
@@ -233,7 +221,10 @@ type Manager struct {
 
 	// Keychain deletes a profile's hashed item before seeding. Nil skips it,
 	// which is right off macOS and in a test.
-	Keychain *keychain.Keychain
+	// Profiles is how the provider's tool keeps a credential inside a profile
+	// directory. Nil disables every profile-credential operation, which is a
+	// supported state: a caller that never seeds needs none of them.
+	Profiles provider.ProfileStore
 
 	// Probe answers whether a profile can authenticate. Nil makes every probe
 	// report Unknown, which callers resolve from local artifacts rather than by
@@ -267,20 +258,10 @@ func (m *Manager) Quiescent(accountNum, email string) bool {
 // the account's token family. Strictly read-only: rotating what is here would
 // log the next launch out the same way.
 func (m *Manager) ReadCredentials(sessionDir string) string {
-	if m.Platform == platform.MacOS && m.Keychain != nil {
-		value, found, err := m.Keychain.Get(KeychainServiceName(sessionDir), keychain.AccountName())
-		if err == nil && found && value != "" {
-			return value
-		}
-		// An absent item is Claude Code's own signal to read the file. An
-		// unreadable one falls through too: the seed is the next-best truth for
-		// a best-effort read.
-	}
-	data, err := os.ReadFile(filepath.Join(sessionDir, ".credentials.json"))
-	if err != nil {
+	if m.Profiles == nil {
 		return ""
 	}
-	return string(data)
+	return m.Profiles.Read(sessionDir)
 }
 
 // MayHaveCredentialMaterial reports whether a profile's credential is anything
@@ -291,18 +272,10 @@ func (m *Manager) ReadCredentials(sessionDir string) string {
 // may hold the freshest generation of the account's token family, and
 // re-seeding over it would begin by deleting that item.
 func (m *Manager) MayHaveCredentialMaterial(sessionDir string) bool {
-	if data, err := os.ReadFile(filepath.Join(sessionDir, ".credentials.json")); err == nil && len(data) > 0 {
-		return true
-	}
-	if m.Platform != platform.MacOS || m.Keychain == nil {
+	if m.Profiles == nil {
 		return false
 	}
-	value, found, err := m.Keychain.Get(KeychainServiceName(sessionDir), keychain.AccountName())
-	if err != nil {
-		// Unreadable is not absent: preserve the profile.
-		return true
-	}
-	return found && value != ""
+	return m.Profiles.MayHold(sessionDir)
 }
 
 // Identity is the account a profile is logged in as.
@@ -364,19 +337,17 @@ func (m *Manager) IdentityDrifted(sessionDir string, want Identity) bool {
 		got.OrganizationUUID != want.OrganizationUUID
 }
 
-// DeleteKeychainEntry removes a profile's hashed Keychain item, best effort.
+// ClearProfileCredential removes whatever would shadow a freshly seeded
+// credential, best effort.
 //
-// Needed before seeding — Claude Code reads the Keychain before the plaintext
-// file, so a stale item would shadow a fresh seed — and on removal, because
-// once the directory is gone the hashed name cannot be recomputed.
-func (m *Manager) DeleteKeychainEntry(sessionDir string) {
-	if m.Platform != platform.MacOS || m.Keychain == nil {
+// Needed before seeding and on removal. What it clears is the provider's
+// business — for Claude Code on macOS it is a Keychain item named after the
+// directory, which cannot be recomputed once the directory is gone.
+func (m *Manager) ClearProfileCredential(sessionDir string) {
+	if m.Profiles == nil {
 		return
 	}
-	if err := m.Keychain.Delete(KeychainServiceName(sessionDir), keychain.AccountName()); err != nil {
-		slog.Debug("could not delete a session profile's Keychain item",
-			"profile", sessionDir, "error", err)
-	}
+	m.Profiles.Clear(sessionDir)
 }
 
 // Bootstrap seeds a profile from a slot's stored credential and config.
@@ -386,7 +357,7 @@ func (m *Manager) DeleteKeychainEntry(sessionDir string) {
 func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 	// Claude Code reads the Keychain before the file, so a stale item from an
 	// earlier profile at this path would shadow the seed.
-	m.DeleteKeychainEntry(sessionDir)
+	m.ClearProfileCredential(sessionDir)
 
 	credentials, unreadable := m.Creds.ReadAccount(accountNum, email)
 	if credentials == "" {
@@ -504,7 +475,7 @@ func (m *Manager) ProfileSuperseded(sessionDir, accountNum, email string) bool {
 // The Keychain item goes first: once the directory is gone its hashed service
 // name cannot be recomputed, and the item would linger forever.
 func (m *Manager) Remove(sessionDir string) error {
-	m.DeleteKeychainEntry(sessionDir)
+	m.ClearProfileCredential(sessionDir)
 	if err := os.RemoveAll(sessionDir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("%w: removing the session profile: %w", apperr.ErrSession, err)
 	}

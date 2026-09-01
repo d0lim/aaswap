@@ -16,6 +16,7 @@ import (
 	"github.com/d0lim/aaswap/internal/keychain"
 	"github.com/d0lim/aaswap/internal/paths"
 	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/provider"
 
 	"github.com/d0lim/aaswap/internal/testutil"
 )
@@ -67,9 +68,12 @@ func newFixture(t *testing.T) *fixture {
 		Manager: &Manager{
 			BackupRoot: root,
 			Platform:   platform.Linux,
-			Creds:      credstore.New(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
-			Probe:      probe,
-			Now:        func() time.Time { return testNow },
+			Creds:      credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), "claude"),
+			// A nil Keychain is the file-only shape, which is what Linux is
+			// and what every non-macOS host gets.
+			Profiles: provider.NewClaudeProfiles(platform.Linux, nil),
+			Probe:    probe,
+			Now:      func() time.Time { return testNow },
 		},
 	}
 }
