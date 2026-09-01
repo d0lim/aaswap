@@ -15,8 +15,12 @@ package index.
 ### Homebrew
 
 ```bash
-brew install d0lim/tap/ccswap
+brew install --cask d0lim/tap/ccswap
 ```
+
+A cask rather than a formula because ccswap ships as a prebuilt binary, which is
+what casks are for — the distinction is source-versus-prebuilt, not app-versus-CLI.
+Linux needs Homebrew 4.5.0 or newer, which is where Linux cask support landed.
 
 ### Go
 
@@ -410,7 +414,7 @@ ccswap purge
 Then remove the binary:
 
 ```bash
-brew uninstall ccswap    # if installed from the tap
+brew uninstall --cask ccswap   # if installed from the tap
 rm "$(command -v ccswap)"      # if installed any other way
 ```
 

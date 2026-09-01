@@ -57,13 +57,20 @@ changelog:
       - "^test:"
       - "^chore:"
 
-# Homebrew, as a cask: `brews` (formulae) is deprecated and goes away in
-# GoReleaser v2.16, and the CI pins `~> v2`, which floats to the latest.
+# Homebrew, as a cask.
 #
-# GoReleaser emits on_linux stanzas, but casks are a macOS concept and
-# `brew install --cask` is not supported on Linux — so the tap is macOS in
-# practice. Linux keeps `go install` and the release archives, both already
-# documented in the README.
+# The split is source-versus-prebuilt, not GUI-versus-CLI. A Homebrew FORMULA
+# describes how to build something; a formula that merely unpacks a prebuilt
+# binary is what GoReleaser calls a "hackyish" formula, and it deprecated the
+# `brews` section for exactly that reason. Casks are Homebrew's mechanism for
+# shipping a prebuilt artifact, whatever shape it is — a CLI is a fine cask.
+#
+# Linuxbrew used to be the reason to prefer a formula anyway. Homebrew 4.5.0
+# (2025-04) added Linux cask support for simple binary casks, which is what this
+# is, so that reason is gone. GoReleaser emits the on_linux stanzas below.
+#
+# The forcing function: `brews` is removed in v2.16, and the release workflow
+# pins `~> v2`, which floats to the latest.
 homebrew_casks:
   - name: ccswap
     binaries:
