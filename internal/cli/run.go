@@ -195,7 +195,7 @@ func entrypointLabel(entrypoint string) string {
 	return entrypoint
 }
 
-func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool) error {
+func (a *App) runSwitch(cmd *cobra.Command, target string, force bool) error {
 	s, err := a.switcher()
 	if err != nil {
 		return err
@@ -209,12 +209,8 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 	}
 
 	if target == "" {
-		target, err = a.chooseTarget(cmd, s, roster, strategy)
-		if err != nil {
+		if target, err = a.chooseTarget(s, roster); err != nil {
 			return err
-		}
-		if target == "" {
-			return nil // a strategy that chose to stay put has already said so
 		}
 	} else {
 		if target, err = resolveTarget(s, roster, target); err != nil {
@@ -255,79 +251,20 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 }
 
 // chooseTarget picks a rotation or strategy target.
-func (a *App) chooseTarget(cmd *cobra.Command, s *swap.Switcher, roster *swap.Roster, strategy string) (string, error) {
+func (a *App) chooseTarget(s *swap.Switcher, roster *swap.Roster) (string, error) {
 	switchable := s.SwitchableNumbers(roster)
 	if len(switchable) == 0 {
-		return "", fmt.Errorf("no account has both a stored credential and a stored config; " +
-			"re-add one with: aaswap add --slot N")
+		return "", fmt.Errorf("no account has both a stored credential and a stored " +
+			"config; store one again with: aaswap login")
 	}
-
+	// Plain rotation: the next switchable account after the current one,
+	// wrapping. With no current account, the first.
+	//
+	// Deliberately not by headroom. Choosing the account with the most quota
+	// left is rate-limit rotation, which is the thing this tool stopped doing —
+	// see docs/PROVIDERS.md.
 	current, _ := s.CurrentNumber(roster)
-
-	switch strategy {
-	case "":
-		// Plain rotation: the next switchable slot after the current one,
-		// wrapping. With no current account, the first.
-		return rotate(switchable, current), nil
-
-	case "best":
-		snapshot, err := s.TakeSnapshot(cmd.Context(), swap.CollectRequest{})
-		if err != nil {
-			return "", err
-		}
-		target, note := s.SelectBestSwitchable(snapshot, current)
-		if target != "" {
-			return target, nil
-		}
-		a.explainStay(note, current)
-		return "", nil
-
-	case "next-available":
-		snapshot, err := s.TakeSnapshot(cmd.Context(), swap.CollectRequest{})
-		if err != nil {
-			return "", err
-		}
-		// Rotate, skipping accounts known to be at their limit. UNKNOWN is not
-		// exhausted: an account whose usage could not be measured stays a
-		// candidate, or a failing endpoint would strand the user.
-		usageByAccount := swap.UsageByAccount(snapshot.Entries)
-		start := rotationIndex(switchable, current)
-		for i := range switchable {
-			candidate := switchable[(start+i)%len(switchable)]
-			if candidate == current {
-				continue
-			}
-			result, measured := usageByAccount[candidate]
-			if measured && result != nil {
-				if headroom, known := result.Headroom(nil); known && headroom <= 0 {
-					continue
-				}
-			}
-			return candidate, nil
-		}
-		a.printer.Println(a.printer.Dimmed(
-			"Every other account is at its rate limit; staying put."))
-		return "", nil
-	}
-	return "", fmt.Errorf("unknown strategy %q: use 'best' or 'next-available'", strategy)
-}
-
-// explainStay says why a strategy declined to move.
-func (a *App) explainStay(note swap.SelectionNote, current string) {
-	messages := map[swap.SelectionNote]string{
-		swap.NoteNone:                 "No other account is switchable.",
-		swap.NoteCurrentUnavailable:   "The current account's usage is unknown, so no target can be shown to be better. Staying put.",
-		swap.NoteNoComparison:         "No other account's usage could be measured, so no target can be shown to be better. Staying put.",
-		swap.NoteIncompleteComparison: "The current account has the most headroom of those that could be measured, but not every account could be. Staying put.",
-		swap.NoteStay:                 "The current account already has the most headroom. Staying put.",
-		swap.NoteExhausted:            "Every account is at its rate limit; switching would not help. Staying put.",
-	}
-	message, known := messages[note]
-	if !known {
-		message = "Staying put."
-	}
-	_ = current
-	a.printer.Println(a.printer.Dimmed(message))
+	return rotate(switchable, current), nil
 }
 
 // rotate returns the slot after current, wrapping.
