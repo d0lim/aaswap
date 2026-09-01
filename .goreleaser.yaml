@@ -1,0 +1,102 @@
+# Release configuration for ccswap.
+#
+# Builds a static binary per platform, publishes them to a GitHub release, and
+# updates the Homebrew tap. The version comes from the git tag and is stamped
+# into the binary, so `ccswap --version` and `ccswap upgrade` agree with what was
+# actually released.
+version: 2
+
+project_name: ccswap
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ccswap
+    main: ./cmd/ccswap
+    binary: ccswap
+    env:
+      # No cgo: the whole point of the Go port is one file a user can copy onto
+      # a machine that has no toolchain. Every dependency here is pure Go —
+      # macOS Keychain access shells out to security(1) rather than linking
+      # Security.framework, deliberately, so that Claude Code keeps seeing the
+      # same item creator.
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/d0lim/ccswap/internal/buildinfo.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: ccswap
+    # Reproducible names a script can construct without consulting the release
+    # page.
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+# Homebrew, as a cask.
+#
+# The split is source-versus-prebuilt, not GUI-versus-CLI. A Homebrew FORMULA
+# describes how to build something; a formula that merely unpacks a prebuilt
+# binary is what GoReleaser calls a "hackyish" formula, and it deprecated the
+# `brews` section for exactly that reason. Casks are Homebrew's mechanism for
+# shipping a prebuilt artifact, whatever shape it is — a CLI is a fine cask.
+#
+# Linuxbrew used to be the reason to prefer a formula anyway. Homebrew 4.5.0
+# (2025-04) added Linux cask support for simple binary casks, which is what this
+# is, so that reason is gone. GoReleaser emits the on_linux stanzas below.
+#
+# The forcing function: `brews` is removed in v2.16, and the release workflow
+# pins `~> v2`, which floats to the latest.
+homebrew_casks:
+  - name: ccswap
+    binaries:
+      - ccswap
+    repository:
+      owner: d0lim
+      name: homebrew-tap
+      # The formula lands in ANOTHER repository, which the release job's own
+      # GITHUB_TOKEN cannot write to. Without this the publish step fails at
+      # tag time, after the binaries have already been uploaded.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/d0lim/ccswap
+    description: Switch between multiple Claude Code accounts
+    license: MIT
+    # The download host and the homepage are the same here; saying so keeps
+    # `brew audit` quiet.
+    url:
+      verified: github.com/d0lim/ccswap/
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            # The binaries are not signed or notarized, so Gatekeeper
+            # quarantines them and the first run dies with "cannot be opened".
+            # Homebrew downloaded this itself; clearing the flag it set is the
+            # documented way for an unsigned cask to be runnable at all.
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/ccswap"]
+          end
