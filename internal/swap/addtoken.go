@@ -168,6 +168,7 @@ func (s *Switcher) storeToken(roster *Roster, num, email, credentials, config st
 	if err := s.Creds.WriteAccount(num, email, credentials); err != nil {
 		return err
 	}
+	s.BackupWritten(num, email)
 	if err := s.WriteAccountConfig(num, email, config); err != nil {
 		return err
 	}

@@ -145,7 +145,21 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 	// launch joining a live session must not re-seed under it. The marker
 	// survives for a later launch.
 	stale := session.IsStale(sessionDir) && manager.Quiescent(num, account.Email)
-	if !stale && manager.Usable(sessionDir, identity) {
+
+	// Generation, not just identity. Usable asks whether the profile is logged
+	// in as the right ACCOUNT; it cannot ask whether the credential is the one
+	// the slot currently stores. A profile seeded before a rotation is the same
+	// account holding a superseded token — well-formed, unexpired, and rejected
+	// by the server on its first refresh.
+	//
+	// Invalidation at write time normally clears these, so this is the case
+	// where that did not reach: another process wrote the backup, or the
+	// invalidation itself failed. Only for a quiet profile — re-seeding under a
+	// running session is the thing the stale marker exists to avoid.
+	superseded := manager.Quiescent(num, account.Email) &&
+		manager.ProfileSuperseded(sessionDir, num, account.Email)
+
+	if !stale && !superseded && manager.Usable(sessionDir, identity) {
 		return nil
 	}
 

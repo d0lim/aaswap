@@ -47,6 +47,10 @@ func New(path string, timeout time.Duration) *FileLock {
 }
 
 // Held reports whether this FileLock currently holds the lock.
+//
+// Nothing in production asks: a caller that acquired knows, and one that did
+// not has the error. It exists so a test can assert the release actually
+// released, which is the property the whole type is for.
 func (l *FileLock) Held() bool { return l.file != nil }
 
 // Acquire blocks until the lock is taken or the timeout expires.

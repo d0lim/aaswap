@@ -300,6 +300,7 @@ func (s *Switcher) storeCapture(num string, identity LiveIdentity, credentials, 
 	if err := s.Creds.WriteAccount(num, identity.Email, credentials); err != nil {
 		return err
 	}
+	s.BackupWritten(num, identity.Email)
 	if err := s.WriteAccountConfig(num, identity.Email, config); err != nil {
 		return err
 	}

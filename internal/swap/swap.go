@@ -41,6 +41,14 @@ import (
 	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
+// BackupWritten announces a replaced backup credential, if anyone is listening.
+// Exported because import writes credentials from its own package.
+func (s *Switcher) BackupWritten(accountNum, email string) {
+	if s.OnBackupWritten != nil {
+		s.OnBackupWritten(accountNum, email)
+	}
+}
+
 // RosterFileName is the roster's name inside the backup root.
 const RosterFileName = paths.RosterFileName
 
@@ -97,6 +105,21 @@ type Switcher struct {
 	// than reporting one as failed — an absent client is not evidence about a
 	// token.
 	Refresher TokenRefresher
+
+	// OnBackupWritten, when set, is called after a slot's stored credential is
+	// replaced — a re-login, an import, a relocation, a consumed refresh.
+	//
+	// It exists for session profiles. A profile seeded from the previous
+	// generation can still pass the local reuse check while holding a token the
+	// server has already rotated out, so something has to invalidate it. That
+	// something needs to know about running processes and profile directories,
+	// which is knowledge this package deliberately does not carry — hence a
+	// callback rather than a session dependency.
+	//
+	// Best effort by contract: it returns nothing, and a credential write must
+	// never fail because a profile could not be invalidated. The write is the
+	// operation the user asked for.
+	OnBackupWritten func(accountNum, email string)
 
 	// Settings is the effective configuration after CLI overrides.
 	Settings settings.Settings

@@ -499,7 +499,7 @@ func TestUsableResolvesUnknownFromArtifacts(t *testing.T) {
 
 // A profile seeded before a refresh holds the predecessor, and Claude Code's
 // own first refresh from it would be rejected.
-func TestProfileMatchesBackup(t *testing.T) {
+func TestProfileSuperseded(t *testing.T) {
 	f := newFixture(t)
 	const generation1 = `{"claudeAiOauth":{"accessToken":"a1","refreshToken":"r1"}}`
 	const generation2 = `{"claudeAiOauth":{"accessToken":"a2","refreshToken":"r2"}}`
@@ -509,16 +509,16 @@ func TestProfileMatchesBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !f.ProfileMatchesBackup(dir, "1", "a@example.com") {
-		t.Error("a freshly seeded profile does not match its backup")
+	if f.ProfileSuperseded(dir, "1", "a@example.com") {
+		t.Error("a freshly seeded profile was called superseded")
 	}
 
 	// The backup rotates; the profile still holds the predecessor.
 	if err := f.Creds.WriteAccount("1", "a@example.com", generation2); err != nil {
 		t.Fatal(err)
 	}
-	if f.ProfileMatchesBackup(dir, "1", "a@example.com") {
-		t.Error("a profile on the predecessor matched a rotated backup")
+	if !f.ProfileSuperseded(dir, "1", "a@example.com") {
+		t.Error("a profile on the predecessor was not detected as superseded")
 	}
 
 	// An access-token-only rotation is the SAME generation: the lineage did not
@@ -527,33 +527,43 @@ func TestProfileMatchesBackup(t *testing.T) {
 		`{"claudeAiOauth":{"accessToken":"a1-rotated","refreshToken":"r1"}}`); err != nil {
 		t.Fatal(err)
 	}
-	if !f.ProfileMatchesBackup(dir, "1", "a@example.com") {
+	if f.ProfileSuperseded(dir, "1", "a@example.com") {
 		t.Error("an access-token rotation was read as a new generation")
 	}
 }
 
-func TestHasRefreshToken(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want bool
-	}{
-		{"an OAuth credential", `{"claudeAiOauth":{"refreshToken":"r"}}`, true},
-		{"a setup token with none", `{"claudeAiOauth":{"accessToken":"a"}}`, false},
-		// An unrecognized shape lets the refresh attempt decide: a blob this
-		// version cannot parse is not evidence there is no token in it.
-		{"an unrecognized shape", `{"something":"else"}`, true},
-		{"garbage", `not json`, true},
+// The caller spends this answer on discarding a working profile, so every way
+// of not knowing has to read as "leave it alone". One momentary Keychain lock
+// must not re-bootstrap every profile on the machine.
+func TestNotKnowingIsNeverSuperseded(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, where permission bits deny nothing")
 	}
-	for _, tt := range tests {
-		if got := HasRefreshToken(tt.in); got != tt.want {
-			t.Errorf("%s: HasRefreshToken = %v, want %v", tt.name, got, tt.want)
+	f := newFixture(t)
+	f.seedSlot("1", "a@example.com", `{"claudeAiOauth":{"accessToken":"a1","refreshToken":"r1"}}`)
+	dir := f.Dir("1", "a@example.com")
+	if err := f.Bootstrap(dir, "1", "a@example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("an unreadable backup", func(t *testing.T) {
+		testutil.MakeUnreadable(t, filepath.Join(
+			f.Creds.CredentialsDir(), ".creds-1-a@example.com.enc"))
+		if f.ProfileSuperseded(dir, "1", "a@example.com") {
+			t.Error("an unreadable backup was read as proof of a different generation")
 		}
-	}
+	})
+
+	t.Run("a slot with no backup at all", func(t *testing.T) {
+		if err := f.Creds.DeleteAccount("2", "b@example.com"); err != nil {
+			t.Fatal(err)
+		}
+		if f.ProfileSuperseded(dir, "2", "b@example.com") {
+			t.Error("an absent backup was read as proof of a different generation")
+		}
+	})
 }
 
-// Passing an auth override through would make `ccswap run 2` silently run as
-// something else.
 func TestEnvironmentDropsAuthOverrides(t *testing.T) {
 	base := []string{
 		"PATH=/usr/bin",

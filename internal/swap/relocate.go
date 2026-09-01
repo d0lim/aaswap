@@ -300,6 +300,7 @@ func (s *Switcher) writeOrClearSlot(accountNum, email, credentials, config strin
 		if err := s.Creds.WriteAccount(accountNum, email, credentials); err != nil {
 			return err
 		}
+		s.BackupWritten(accountNum, email)
 	} else if err := s.Creds.DeleteAccount(accountNum, email); err != nil {
 		return err
 	}

@@ -356,6 +356,7 @@ func (s *Switcher) backUpOutgoing(roster *Roster, slot, email, credentials, conf
 		if err := s.Creds.WriteAccount(slot, email, credentials); err != nil {
 			return warnings, err
 		}
+		s.BackupWritten(slot, email)
 		if err := s.WriteAccountConfig(slot, email, config); err != nil {
 			return warnings, err
 		}

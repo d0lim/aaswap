@@ -37,6 +37,9 @@ const (
 )
 
 // String names an outcome.
+//
+// For test failure messages: an exit code printed as "2" says nothing about
+// what happened, and these are the codes scripts branch on.
 func (o Outcome) String() string {
 	switch o {
 	case Switched:

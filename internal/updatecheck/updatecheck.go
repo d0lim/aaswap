@@ -11,7 +11,6 @@ package updatecheck
 import (
 	"context"
 	json "encoding/json/v2"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -276,13 +275,4 @@ func parseVersion(v string) ([]int, bool) {
 		out = append(out, n)
 	}
 	return out, true
-}
-
-// Notice is what to tell the user when a newer version exists.
-func Notice(latest, current string, method Method) string {
-	notice := fmt.Sprintf("A newer ccswap is available (%s); you are on %s.", latest, current)
-	if command := method.UpgradeCommand(); command != "" {
-		return notice + " Upgrade with: " + command
-	}
-	return notice + " See the releases page for the build for your platform."
 }

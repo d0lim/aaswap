@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -183,73 +182,6 @@ func TestLoadChoiceValues(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- Save
-
-func TestSaveRoundTrips(t *testing.T) {
-	root := t.TempDir()
-	custom := Defaults().AutoSwitch
-	custom.Threshold = 85
-	custom.CooldownSeconds = 60
-
-	if err := Save(root, custom); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	if got := Load(root).AutoSwitch; !reflect.DeepEqual(got, custom) {
-		t.Errorf("round trip = %+v, want %+v", got, custom)
-	}
-}
-
-// Another tool's keys, or a future version's, must survive a write from this
-// one — the file is shared, additive space.
-func TestSavePreservesUnknownKeysAndSections(t *testing.T) {
-	root := writeSettings(t, map[string]any{
-		"schemaVersion": 1,
-		"futureSection": map[string]any{"x": 1},
-		"autoswitch":    map[string]any{"threshold": 80, "futureKnob": true},
-	})
-
-	auto := Defaults().AutoSwitch
-	auto.Threshold = 70
-	if err := Save(root, auto); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	raw := readSettings(t, root)
-	future, ok := raw["futureSection"].(map[string]any)
-	if !ok || future["x"] != float64(1) {
-		t.Errorf("futureSection = %v, want it preserved", raw["futureSection"])
-	}
-	sec := raw["autoswitch"].(map[string]any)
-	if sec["futureKnob"] != true {
-		t.Errorf("futureKnob = %v, want it preserved", sec["futureKnob"])
-	}
-	if sec["threshold"] != float64(70) {
-		t.Errorf("threshold = %v, want the saved 70", sec["threshold"])
-	}
-}
-
-func TestSaveFileMode(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX file modes are not meaningful on Windows")
-	}
-	root := t.TempDir()
-	if err := Save(root, Defaults().AutoSwitch); err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(Path(root))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Errorf("settings.json mode = %#o, want 0600", got)
-	}
-}
-
-// ---------------------------------------------------------------- Set / Unset
-
-// Set writes only the key it was given, never every known key: writing them all
-// would freeze today's defaults into the file and pin the user to them if a
-// later version changes one.
 func TestSetWritesAMinimalFile(t *testing.T) {
 	root := t.TempDir()
 

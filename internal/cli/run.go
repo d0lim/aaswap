@@ -1,14 +1,19 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/d0lim/ccswap/internal/claudeapi"
 	"github.com/d0lim/ccswap/internal/credstore"
 	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/mappings"
 	"github.com/d0lim/ccswap/internal/paths"
 	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/procdetect"
 	"github.com/d0lim/ccswap/internal/render"
 	"github.com/d0lim/ccswap/internal/swap"
 	"github.com/spf13/cobra"
@@ -122,7 +127,75 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 	}
 	a.printer.Println(a.printer.Dimmed(fmt.Sprintf("  %d account(s) managed",
 		len(snapshot.Roster.Accounts))))
+	a.reportRunningInstances(s)
 	return nil
+}
+
+// reportRunningInstances lists what is attached to the DEFAULT profile right
+// now — Claude Code sessions and editor connections.
+//
+// It belongs in status because switching replaces the credential those
+// instances are authenticated with. Knowing something is attached is what turns
+// "the switch did nothing" into "the running session is still on the old
+// account until it restarts".
+//
+// Only the default profile: a `ccswap run` session has its own profile and its
+// own credential, and a switch does not touch it.
+func (a *App) reportRunningInstances(s *swap.Switcher) {
+	configDir := s.Paths.DefaultClaudeConfigHome()
+	sessions, _ := procdetect.Scan(configDir)
+	ides := procdetect.IDEInstances(configDir)
+	if len(sessions) == 0 && len(ides) == 0 {
+		return
+	}
+
+	// Grouped by what the reader can act on — which program, in which folder.
+	// Four windows on one repo is one line, not four.
+	type place struct{ label, folder string }
+	counts := map[place]int{}
+	for _, session := range sessions {
+		counts[place{entrypointLabel(session.Entrypoint), session.CWD}]++
+	}
+	for _, ide := range ides {
+		for _, folder := range ide.WorkspaceFolders {
+			counts[place{ide.IDEName, folder}]++
+		}
+	}
+
+	a.printer.Blank()
+	a.printer.Println(a.printer.Dimmed("Attached to this login right now:"))
+	for _, key := range slices.SortedFunc(maps.Keys(counts), func(x, y place) int {
+		return cmp.Or(cmp.Compare(x.label, y.label), cmp.Compare(x.folder, y.folder))
+	}) {
+		line := "  " + key.label + "  " + key.folder
+		if n := counts[key]; n > 1 {
+			line += fmt.Sprintf("  ×%d", n)
+		}
+		a.printer.Println(a.printer.Muted(line))
+	}
+	a.printer.Println(a.printer.Dimmed(
+		"  A switch replaces the credential; these keep the old account until they restart."))
+}
+
+// entrypointLabel names how an instance was started, in the words a user would
+// use. An unrecognized entrypoint is shown verbatim rather than dropped: a new
+// one from a newer Claude Code is still worth reporting.
+func entrypointLabel(entrypoint string) string {
+	switch entrypoint {
+	case "cli":
+		return "claude"
+	case "claude-vscode":
+		return "VS Code"
+	case "claude-desktop":
+		return "Claude Desktop"
+	case "sdk-cli":
+		return "SDK"
+	case "mcp":
+		return "MCP"
+	case "":
+		return "unknown"
+	}
+	return entrypoint
 }
 
 func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool) error {
@@ -350,7 +423,33 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 	}
 	a.printer.Println(a.printer.Accent("Removed"), " ",
 		fmt.Sprintf("Account %s (%s)", outcome.Number, outcome.Email))
+	a.pruneMappingsFor(s, mappings.Identity{
+		Email:            outcome.Email,
+		OrganizationUUID: outcome.OrganizationUUID,
+	})
 	return nil
+}
+
+// pruneMappingsFor drops directory mappings that pointed at an account which no
+// longer exists.
+//
+// Best effort, and reported rather than returned: the account is already gone
+// by the time this runs, and failing the command afterwards would say the
+// removal did not happen. A surviving mapping sends `ccswap run` in that
+// directory looking for a slot that is not there, which is a confusing error
+// but not a dangerous one.
+func (a *App) pruneMappingsFor(s *swap.Switcher, identity mappings.Identity) {
+	store := mappings.New(s.BackupRoot())
+	store.Now = s.Now
+	removed, err := store.PruneAccount(identity)
+	if err != nil {
+		a.printer.Warning("could not drop this account's directory mappings: " + err.Error())
+		return
+	}
+	if removed > 0 {
+		a.printer.Println(a.printer.Dimmed(
+			fmt.Sprintf("  dropped %d directory mapping(s) that pointed at it", removed)))
+	}
 }
 
 // chooseAmbiguous asks which of several slots sharing an address was meant.
