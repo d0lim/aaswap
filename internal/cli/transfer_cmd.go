@@ -159,7 +159,7 @@ func (a *App) runImport(source string, force bool) error {
 		transfer.Skipped:   "Skipped",
 	}
 	for _, account := range result.Accounts {
-		line := fmt.Sprintf("%s (slot %s)", account.Email, account.Name)
+		line := fmt.Sprintf("%s (%s)", account.Email, account.Name)
 		if account.Outcome == transfer.Skipped {
 			a.printer.Println(a.printer.Dimmed(verbs[account.Outcome] + " " + line))
 		} else {

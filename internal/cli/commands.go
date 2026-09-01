@@ -254,7 +254,7 @@ func (a *App) unclaimedCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unclaimed",
 		Short: "Inspect credentials aaswap preserved but could not file",
-		Long: "A switch that finds a live credential belonging to no managed slot keeps\n" +
+		Long: "A switch that finds a live credential belonging to no managed account keeps\n" +
 			"it here rather than destroying it. These are the copies it kept.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
