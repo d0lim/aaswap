@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // fastWait collapses the login wait's polling. The behavior under test is what

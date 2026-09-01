@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // Snapshot is one collect pass's result: the roster, each slot's view, and the
@@ -94,7 +94,7 @@ func (s *Switcher) StatusPayload(snapshot *Snapshot) jsonout.StatusPayload {
 
 	live, ok := s.LiveIdentity()
 	if !ok {
-		// Null: there is no live login at all, which is distinct from one ccswap
+		// Null: there is no live login at all, which is distinct from one aaswap
 		// does not manage.
 		return payload
 	}
@@ -256,7 +256,7 @@ func DuplicateAccountWarnings(views []AccountView) []string {
 					out = append(out, fmt.Sprintf(
 						"Accounts %s and %s hold the same credential (%s) — one slot's backup "+
 							"was overwritten. Log in with the missing account and re-add it: "+
-							"ccswap add --slot N", other, view.Number, view.Account.Email))
+							"aaswap add --slot N", other, view.Number, view.Account.Email))
 				} else {
 					byFingerprint[fp] = view.Number
 				}
@@ -317,7 +317,7 @@ func LockstepUsageWarnings(views []AccountView, entries map[string]usagestore.En
 			out = append(out, fmt.Sprintf(
 				"Accounts %s and %s report identical usage and reset times — they may be "+
 					"the same account. If it persists, log in with the missing account and "+
-					"re-add it: ccswap add --slot N", other, view.Number))
+					"re-add it: aaswap add --slot N", other, view.Number))
 		} else {
 			seen[key] = view.Number
 		}

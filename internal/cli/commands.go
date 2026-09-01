@@ -5,26 +5,26 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/buildinfo"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/buildinfo"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
 // rootCommand assembles the whole command surface.
 func (a *App) rootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "ccswap",
+		Use:   "aaswap",
 		Short: "Switch between multiple Claude Code accounts",
-		Long: "ccswap manages several Claude Code logins on one machine: it stores each\n" +
+		Long: "aaswap manages several Claude Code logins on one machine: it stores each\n" +
 			"account's credential, swaps the live login between them, and reports how\n" +
 			"much rate-limit headroom each one has left.",
 		Example: strings.Join([]string{
-			"  ccswap add                       # capture the account you are logged in as",
-			"  ccswap list                      # show every account and its usage",
-			"  ccswap switch 2                  # activate account 2",
-			"  ccswap switch --strategy best    # activate whichever has the most headroom",
-			"  ccswap list --json               # the same listing, for a script",
+			"  aaswap add                       # capture the account you are logged in as",
+			"  aaswap list                      # show every account and its usage",
+			"  aaswap switch 2                  # activate account 2",
+			"  aaswap switch --strategy best    # activate whichever has the most headroom",
+			"  aaswap list --json               # the same listing, for a script",
 		}, "\n"),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -137,10 +137,10 @@ func (a *App) addCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Capture the account you are currently logged in as",
-		Long: "Stores the live login's credential and config against a slot, so ccswap\n" +
+		Long: "Stores the live login's credential and config against a slot, so aaswap\n" +
 			"can switch back to it later.\n\n" +
-			"ccswap cannot log you in — Claude Code owns that flow — so adding another\n" +
-			"account means logging in with it first. With --wait, ccswap prints how to\n" +
+			"aaswap cannot log you in — Claude Code owns that flow — so adding another\n" +
+			"account means logging in with it first. With --wait, aaswap prints how to\n" +
 			"do that and captures the account the moment the login finishes, instead of\n" +
 			"making you come back and re-run this. In a terminal with no account logged\n" +
 			"in at all, it waits without being asked: the alternative is an error whose\n" +
@@ -163,9 +163,9 @@ func (a *App) removeCommand() *cobra.Command {
 		Use:     "remove NUM|EMAIL|ALIAS",
 		Aliases: []string{"rm"},
 		Short:   "Forget a managed account",
-		Long: "Removes ccswap's copy of the account: its stored credential, its stored\n" +
+		Long: "Removes aaswap's copy of the account: its stored credential, its stored\n" +
 			"config, and its roster entry. It does NOT log you out — the live login is\n" +
-			"Claude Code's, not ccswap's.",
+			"Claude Code's, not aaswap's.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.runRemove(cmd, args[0])
@@ -249,7 +249,7 @@ func (a *App) purgeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "purge",
 		Short: "Forget every managed account",
-		Long:  "Removes ccswap's whole store. Your live login survives.",
+		Long:  "Removes aaswap's whole store. Your live login survives.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runPurge(cmd)
@@ -263,7 +263,7 @@ func (a *App) unclaimedCommand() *cobra.Command {
 	var purge string
 	cmd := &cobra.Command{
 		Use:   "unclaimed",
-		Short: "Inspect credentials ccswap preserved but could not file",
+		Short: "Inspect credentials aaswap preserved but could not file",
 		Long: "A switch that finds a live credential belonging to no managed slot keeps\n" +
 			"it here rather than destroying it. These are the copies it kept.",
 		Args: cobra.NoArgs,

@@ -12,15 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 func TestMain(m *testing.M) {

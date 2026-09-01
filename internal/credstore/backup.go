@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // Per-account backups have two backends: base64 .enc files under the

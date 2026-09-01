@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 // defaultProfile builds the ~/.claude a session mirrors from.
@@ -123,7 +123,7 @@ func TestSharingIsIdempotent(t *testing.T) {
 	}
 }
 
-// Turning a flag off removes the links ccswap made for it — and only those.
+// Turning a flag off removes the links aaswap made for it — and only those.
 func TestTurningSharingOffRemovesOnlyManagedLinks(t *testing.T) {
 	f := newFixture(t)
 	source := f.defaultProfile()
@@ -184,7 +184,7 @@ func TestPreExistingProfileDataIsNotReplaced(t *testing.T) {
 	// And it is not claimed in the manifest, so turning sharing off cannot
 	// remove it later.
 	if slices.Contains(readManifest(filepath.Join(profile, ShareManifest)), "settings.json") {
-		t.Error("a file ccswap did not create was claimed in the manifest")
+		t.Error("a file aaswap did not create was claimed in the manifest")
 	}
 }
 

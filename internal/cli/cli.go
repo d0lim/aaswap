@@ -1,4 +1,4 @@
-// Package cli is ccswap's command surface.
+// Package cli is aaswap's command surface.
 //
 // It is a package rather than living in main so it can be tested: every command
 // writes through an [App]'s streams and returns an error, and nothing calls
@@ -6,8 +6,8 @@
 //
 // # Two spellings of one interface
 //
-// Commands are verbs — `ccswap list`, `ccswap switch 2` — and every one of them
-// also answers to the flag spelling it replaced (`ccswap --list`, `ccswap
+// Commands are verbs — `aaswap list`, `aaswap switch 2` — and every one of them
+// also answers to the flag spelling it replaced (`aaswap --list`, `aaswap
 // --switch-to 2`). The flags are hidden from help so the verbs are the one
 // documented interface, but they keep working: they are in people's shell
 // history and their scripts.
@@ -23,13 +23,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/session"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/session"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
@@ -221,7 +221,7 @@ func (a *App) invalidateSessionProfile(s *swap.Switcher, accountNum, email strin
 	case session.MarkFailed:
 		a.errs.Warning(fmt.Sprintf(
 			"account %s's credential changed but its session profile could not be "+
-				"invalidated; `ccswap run %s` may keep using the superseded one until "+
+				"invalidated; `aaswap run %s` may keep using the superseded one until "+
 				"you remove the profile: %v", accountNum, accountNum, err))
 	case session.Marked:
 		a.printer.Println(a.printer.Dimmed(

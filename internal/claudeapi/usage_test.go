@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 func TestFetchUsageNormalizesTheResponse(t *testing.T) {

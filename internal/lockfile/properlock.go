@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 // Timings from Claude Code's own lock options (verified against the 2.1.218

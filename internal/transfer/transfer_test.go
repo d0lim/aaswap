@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 func TestMain(m *testing.M) {
@@ -309,7 +309,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The slot numbers are kept, so a shell history full of `ccswap switch 3`
+	// The slot numbers are kept, so a shell history full of `aaswap switch 3`
 	// keeps working on the new machine.
 	if roster.Accounts["1"].Email != "one@example.com" || roster.Accounts["3"].Email != "three@example.com" {
 		t.Errorf("roster = %+v", roster.Accounts)

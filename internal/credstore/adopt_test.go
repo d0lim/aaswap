@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // seedClaudeSwapItem plants a backup under the claude-swap project's service,
@@ -50,7 +50,7 @@ func TestAdoptingBackupsFromClaudeSwap(t *testing.T) {
 	} {
 		got, err := s.readBackupKeychain(tc.num, tc.email)
 		if err != nil || got != tc.want {
-			t.Errorf("account %s reads %q (err %v) under ccswap's service, want %q",
+			t.Errorf("account %s reads %q (err %v) under aaswap's service, want %q",
 				tc.num, got, err, tc.want)
 		}
 	}

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // SwapSlots exchanges two accounts' slot numbers.

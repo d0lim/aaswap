@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 var now = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -156,7 +156,7 @@ func TestEntryLines(t *testing.T) {
 		{
 			name:  "a sentinel explains itself",
 			entry: usagestore.Entry{Sentinel: "re-login needed"},
-			want:  []string{"re-login needed", "ccswap add"},
+			want:  []string{"re-login needed", "aaswap add"},
 		},
 		{
 			// The state says why there is no number; the older number is still
@@ -186,7 +186,7 @@ func TestEntryLines(t *testing.T) {
 		{
 			name:  "an error with a remedy shows it",
 			entry: usagestore.Entry{LastError: claudeapi.KindConsumeBusy},
-			want:  []string{"usage unavailable", "another ccswap surface"},
+			want:  []string{"usage unavailable", "another aaswap surface"},
 		},
 	}
 

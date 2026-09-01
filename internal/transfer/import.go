@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // emailPattern is what an imported address must look like.
@@ -112,7 +112,7 @@ func parseEnvelope(data []byte) (Envelope, error) {
 	}
 	if envelope.Encrypted {
 		return Envelope{}, fmt.Errorf("%w: this export is marked encrypted. Decrypt it "+
-			"before importing — for example: gpg -d accounts.gpg | ccswap import -",
+			"before importing — for example: gpg -d accounts.gpg | aaswap import -",
 			apperr.ErrTransfer)
 	}
 	if len(envelope.Accounts) == 0 {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 var now = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -214,7 +214,7 @@ func TestNullIsDistinctFromAbsent(t *testing.T) {
 }
 
 // A switch's departing side is null on a machine that had no live login, and
-// numberless for one ccswap did not manage.
+// numberless for one aaswap did not manage.
 func TestSwitchPayloadSides(t *testing.T) {
 	got := decode(t, SwitchPayload{
 		SchemaVersion: SchemaVersion, Switched: true,

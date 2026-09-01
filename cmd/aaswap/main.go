@@ -1,4 +1,4 @@
-// Command ccswap manages several Claude Code logins on one machine.
+// Command aaswap manages several Claude Code logins on one machine.
 //
 // The entry point is deliberately thin: it wires signals to a context and hands
 // everything else to internal/cli, which returns an exit code rather than
@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/d0lim/ccswap/internal/cli"
+	"github.com/d0lim/aaswap/internal/cli"
 )
 
 func main() {

@@ -9,8 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // awaitFrameInterval is how fast the waiting modal's marker advances.
@@ -93,7 +93,7 @@ func awaitTickCmd() tea.Cmd {
 
 // askAdd starts the capture of whatever is logged in now.
 //
-// It probes first and asks second. ccswap's `add` decides between registering a
+// It probes first and asks second. aaswap's `add` decides between registering a
 // new slot and refreshing an existing one from the live identity alone, and a
 // prompt that cannot say which of those it is about is not a prompt worth
 // showing.
@@ -147,7 +147,7 @@ func (m Model) handleLiveProbed(msg liveProbedMsg) (tea.Model, tea.Cmd) {
 
 // startAwait waits for a login to land, then captures it.
 //
-// This is the closest ccswap gets to logging anyone in. Claude Code owns the
+// This is the closest aaswap gets to logging anyone in. Claude Code owns the
 // OAuth flow, so the person has to go and run /login somewhere else — but they
 // do not have to come back, quit, and re-run anything: the dashboard is
 // watching and captures the account the moment it appears.

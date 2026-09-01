@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // awaitLogin blocks until a different account is logged in, narrating the wait.
 //
-// ccswap cannot log anyone in — Claude Code owns the OAuth flow — so adding a
+// aaswap cannot log anyone in — Claude Code owns the OAuth flow — so adding a
 // second account has always been two steps with a person in the middle: go run
-// /login, come back, run `ccswap add`. This closes the gap from ccswap's side.
+// /login, come back, run `aaswap add`. This closes the gap from aaswap's side.
 // It cannot drive the login, but it can tell the person exactly what to do and
 // be watching when they finish.
 func (a *App) awaitLogin(ctx context.Context, s *swap.Switcher) error {
@@ -57,7 +57,7 @@ func (a *App) printWaitInstructions(state swap.LiveState) {
 	if state.LoggedIn {
 		// The warning the README carries, said at the only moment it can still
 		// be acted on. Current Claude Code revokes the refresh token on
-		// /logout, and the account being left is one ccswap is storing.
+		// /logout, and the account being left is one aaswap is storing.
 		a.printer.Println(a.printer.Dimmed(
 			"  Do not run /logout first — it can revoke the token stored for "),
 			a.printer.Dimmed(state.Identity.Email), a.printer.Dimmed("."))

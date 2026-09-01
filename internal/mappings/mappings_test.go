@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 var testNow = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -171,7 +171,7 @@ func TestAnUncreatedDirectoryStillNormalizes(t *testing.T) {
 	}
 }
 
-// A mapping to an account that no longer exists would silently send `ccswap run`
+// A mapping to an account that no longer exists would silently send `aaswap run`
 // looking for it.
 func TestPruneAccount(t *testing.T) {
 	s, root := newStore(t)

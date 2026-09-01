@@ -45,10 +45,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/lockfile"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/lockfile"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 // SchemaVersion is the on-disk format. A file at any other version — a

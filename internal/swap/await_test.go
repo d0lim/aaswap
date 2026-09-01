@@ -37,7 +37,7 @@ func TestAwaitReturnsTheLoginThatLandsWhileWaiting(t *testing.T) {
 	}
 }
 
-// Re-logging in as an account ccswap already stores is a credential refresh,
+// Re-logging in as an account aaswap already stores is a credential refresh,
 // which is exactly as worth waiting for as a new account. Add sorts out which
 // one it is.
 func TestAwaitAcceptsALoginAsAnAlreadyStoredAccount(t *testing.T) {

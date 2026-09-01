@@ -3,9 +3,9 @@ package usagestore
 import (
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 // Entry is one account's usage state at collect time.

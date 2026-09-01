@@ -5,16 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // TestDumpFrame prints a representative frame. Not an assertion — a way to
 // look at the layout. Run with -run TestDumpFrame -v.
 func TestDumpFrame(t *testing.T) {
-	if os.Getenv("CCSWAP_DUMP_FRAME") == "" {
-		t.Skip("set CCSWAP_DUMP_FRAME=1 to print a frame")
+	if os.Getenv("AASWAP_DUMP_FRAME") == "" {
+		t.Skip("set AASWAP_DUMP_FRAME=1 to print a frame")
 	}
 	m := fixture(t,
 		[]swap.AccountView{

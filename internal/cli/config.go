@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/settings"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ import (
 func (a *App) configCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Show or change ccswap's settings",
+		Short: "Show or change aaswap's settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runConfigList()

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/jsonout"
 )
 
 // Event is one thing the engine did or decided.
@@ -91,7 +91,7 @@ func (e Event) Human() string {
 		return "no switch: " + e.Reason
 	case KindQuarantine:
 		return fmt.Sprintf("account %s (%s) quarantined: %s. Log in with it and run "+
-			"`ccswap add --slot %s` to bring it back", e.Number, e.Email, e.Reason, e.Number)
+			"`aaswap add --slot %s` to bring it back", e.Number, e.Email, e.Reason, e.Number)
 	case KindUnquarantine:
 		return fmt.Sprintf("account %s (%s) is back in rotation (%s)", e.Number, e.Email, e.Reason)
 	case KindAllExhausted:

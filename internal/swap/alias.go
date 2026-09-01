@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 // aliasPattern is what an alias may contain once normalized.

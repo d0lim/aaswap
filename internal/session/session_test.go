@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -244,7 +244,7 @@ func TestBootstrapRefusals(t *testing.T) {
 		{
 			name:    "no stored credential",
 			setup:   func(f *fixture) {},
-			wantErr: []string{"no stored credentials", "ccswap add --slot 1"},
+			wantErr: []string{"no stored credentials", "aaswap add --slot 1"},
 		},
 		{
 			name: "no stored config",
@@ -630,10 +630,10 @@ func readConfig(t *testing.T, path string) map[string]any {
 	return out
 }
 
-// Profiles outlive the rename from cswap to ccswap, and every marker is named
+// Profiles outlive the rename from ccswap to aaswap, and every marker is named
 // after the command. An old spelling that goes unseen is not a lost file but a
 // behavior change: the stale marker stops deferring an invalidation, the share
-// manifest stops naming the links ccswap may remove, and the mirror marker lets
+// manifest stops naming the links aaswap may remove, and the mirror marker lets
 // the one-time MCP migration run a second time against already-mirrored
 // servers.
 func TestMarkersWrittenUnderTheOldNameAreAdopted(t *testing.T) {
@@ -642,7 +642,7 @@ func TestMarkersWrittenUnderTheOldNameAreAdopted(t *testing.T) {
 	} {
 		t.Run(current, func(t *testing.T) {
 			dir := t.TempDir()
-			legacy := filepath.Join(dir, strings.Replace(current, ".ccswap-", ".cswap-", 1))
+			legacy := filepath.Join(dir, strings.Replace(current, ".aaswap-", ".ccswap-", 1))
 			if legacy == filepath.Join(dir, current) {
 				t.Fatalf("%q does not carry the command name, so the test proves nothing", current)
 			}
@@ -668,12 +668,12 @@ func TestMarkersWrittenUnderTheOldNameAreAdopted(t *testing.T) {
 }
 
 // Adoption must never overwrite a marker that already exists under the current
-// name: the current one is what this ccswap wrote, and a leftover old file is
+// name: the current one is what this aaswap wrote, and a leftover old file is
 // by definition the older truth.
 func TestAdoptionNeverOverwritesACurrentMarker(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ShareManifest)
-	legacy := filepath.Join(dir, strings.Replace(ShareManifest, ".ccswap-", ".cswap-", 1))
+	legacy := filepath.Join(dir, strings.Replace(ShareManifest, ".aaswap-", ".ccswap-", 1))
 	if err := os.WriteFile(path, []byte("current"), 0o600); err != nil {
 		t.Fatal(err)
 	}

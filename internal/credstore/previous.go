@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // The retained previous generation.

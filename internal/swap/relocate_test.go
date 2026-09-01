@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 // threeAccounts registers three switchable slots with slot 2 active.
@@ -334,7 +334,7 @@ func TestRemoveForgetsAnAccount(t *testing.T) {
 	}
 }
 
-// Removing a slot forgets ccswap's copy; it does not log the user out.
+// Removing a slot forgets aaswap's copy; it does not log the user out.
 func TestRemovingTheActiveAccountLeavesTheLiveLoginAlone(t *testing.T) {
 	f := newFixture(t)
 	f.threeAccounts()
@@ -498,7 +498,7 @@ func TestPurgeForgetsEverything(t *testing.T) {
 	}
 }
 
-// The live login is Claude Code's, not ccswap's.
+// The live login is Claude Code's, not aaswap's.
 func TestPurgeLeavesTheLiveLoginAlone(t *testing.T) {
 	f := newFixture(t)
 	f.threeAccounts()

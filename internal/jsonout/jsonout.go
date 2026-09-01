@@ -21,8 +21,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/pace"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/pace"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 // SchemaVersion is the payload contract's version. Bumped only on a breaking
@@ -197,7 +197,7 @@ func UsageFields(decision Decision, fetchedAt, now time.Time) (string, *Usage) {
 // AccountRef is a minimal reference, used for a switch's two sides.
 //
 // Number is a pointer because null is meaningful: the live login was not one
-// ccswap manages, so there is no slot to name.
+// aaswap manages, so there is no slot to name.
 type AccountRef struct {
 	Number *int   `json:"number"`
 	Email  string `json:"email"`
@@ -250,7 +250,7 @@ func (r *AccountRow) SetFreshness(lastGood *usage.Result, fetchedAt time.Time, a
 	r.LastGoodAgeSeconds = &seconds
 }
 
-// ListPayload is `ccswap list --json`.
+// ListPayload is `aaswap list --json`.
 type ListPayload struct {
 	SchemaVersion       int          `json:"schemaVersion"`
 	ActiveAccountNumber *int         `json:"activeAccountNumber"`
@@ -284,7 +284,7 @@ type ActiveStatus struct {
 	LastGoodAgeSeconds *float64 `json:"lastGoodAgeSeconds,omitzero"`
 }
 
-// StatusPayload is `ccswap status --json`.
+// StatusPayload is `aaswap status --json`.
 //
 // Active is a pointer because null is the answer on a machine with no live
 // login at all — distinct from an unmanaged one, which reports an address with
@@ -295,7 +295,7 @@ type StatusPayload struct {
 	TotalManagedAccounts *int          `json:"totalManagedAccounts,omitzero"`
 }
 
-// SwitchPayload is `ccswap switch --json`.
+// SwitchPayload is `aaswap switch --json`.
 type SwitchPayload struct {
 	SchemaVersion int         `json:"schemaVersion"`
 	Switched      bool        `json:"switched"`

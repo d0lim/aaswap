@@ -5,16 +5,16 @@
 // CLAUDE_CONFIG_DIR. Everything Claude Code keeps — its credential, its
 // identity, its history — lives inside that directory, so several accounts can
 // run side by side in different terminals and none of them disturbs the login
-// `ccswap switch` manages.
+// `aaswap switch` manages.
 //
-// # ccswap never writes Claude Code's hashed Keychain item
+// # aaswap never writes Claude Code's hashed Keychain item
 //
 // On macOS, Claude Code derives a per-profile Keychain service name by hashing
 // the CLAUDE_CONFIG_DIR value it was given, and once it has written there, that
-// item shadows the plaintext seed. ccswap SEEDS a profile by writing the
+// item shadows the plaintext seed. aaswap SEEDS a profile by writing the
 // plaintext file and DELETES a stale item before seeding, but it never writes
-// the hashed item: writing it would make ccswap the item's creator, and macOS
-// then prompts the user for permission every time the ccswap binary changes.
+// the hashed item: writing it would make aaswap the item's creator, and macOS
+// then prompts the user for permission every time the aaswap binary changes.
 //
 // # A profile holds the newest generation
 //
@@ -37,13 +37,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/procdetect"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/procdetect"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -55,22 +55,22 @@ const (
 	// two writers is the fallback for an invalidation that just failed, and the
 	// faults it exists for — an unwritable profile, a read-only mount — are
 	// faults on that very directory.
-	StaleMarkerSuffix = ".ccswap-stale-credentials"
+	StaleMarkerSuffix = ".aaswap-stale-credentials"
 
-	// ShareManifest records which entries in a profile ccswap created, so
-	// turning sharing off only ever removes ccswap's own links and never the
+	// ShareManifest records which entries in a profile aaswap created, so
+	// turning sharing off only ever removes aaswap's own links and never the
 	// user's files.
-	ShareManifest = ".ccswap-shared.json"
+	ShareManifest = ".aaswap-shared.json"
 
-	// MCPMirrorMarker records that this profile's MCP servers are ccswap-
+	// MCPMirrorMarker records that this profile's MCP servers are aaswap-
 	// mirrored. It gates both the one-time migration stash and the removal on
 	// --no-share, so a profile's own pre-existing definitions are never
 	// silently destroyed.
-	MCPMirrorMarker = ".ccswap-mcp-mirror-v1"
+	MCPMirrorMarker = ".aaswap-mcp-mirror-v1"
 
 	// MCPDisplacedStash holds session-local MCP definitions displaced by the
 	// first mirror. Write-once: they land here instead of vanishing.
-	MCPDisplacedStash = ".ccswap-mcp-displaced.json"
+	MCPDisplacedStash = ".aaswap-mcp-displaced.json"
 )
 
 // SharedItems are mirrored from the default profile when sharing is on.
@@ -95,7 +95,7 @@ var HistoryItems = []string{
 
 // AuthOverrideEnvVars would override the account inside Claude Code, so they
 // are dropped from a session's environment. Passing one through would make
-// `ccswap run 2` silently run as something else.
+// `aaswap run 2` silently run as something else.
 var AuthOverrideEnvVars = []string{
 	"ANTHROPIC_API_KEY",
 	"ANTHROPIC_AUTH_TOKEN",
@@ -142,28 +142,32 @@ func StaleMarkerFor(sessionDir string) string {
 // AdoptLegacyMarker renames a marker written under the old command name to its
 // current spelling.
 //
-// The command was renamed from cswap to ccswap, and every marker in this file
+// The command was renamed from ccswap to aaswap, and every marker in this file
 // is named after it. Profiles outlive the rename, so ignoring the old spelling
 // would not merely lose a file — it would change behavior: a stale profile
 // would stop announcing itself and keep serving a superseded credential, an
-// orphaned share manifest would leave ccswap's own links behind on --no-share,
+// orphaned share manifest would leave aaswap's own links behind on --no-share,
 // and an unseen mirror marker would re-run the one-time MCP migration against
 // servers that were already mirrored.
+//
+// One predecessor, not a chain. ccswap is the only spelling that ever shipped a
+// profile; the cswap era was the Python implementation, which wrote none of
+// these markers on a machine this binary will ever meet.
 //
 // Renaming rather than reading both names on: the profile converges on one
 // spelling, so the compatibility shim stays here instead of spreading into
 // every reader. Best effort — a failure leaves the profile exactly as it was,
-// which is the same state a pre-rename ccswap would find.
+// which is the same state a pre-rename aaswap would find.
 func AdoptLegacyMarker(path string) {
 	if _, err := os.Lstat(path); err == nil {
 		return // already current; nothing to adopt
 	}
 	dir, base := filepath.Split(path)
-	suffix, ok := strings.CutPrefix(base, ".ccswap-")
+	suffix, ok := strings.CutPrefix(base, ".aaswap-")
 	if !ok {
 		return
 	}
-	legacy := filepath.Join(dir, ".cswap-"+suffix)
+	legacy := filepath.Join(dir, ".ccswap-"+suffix)
 	if _, err := os.Lstat(legacy); err != nil {
 		return
 	}
@@ -176,7 +180,7 @@ func AdoptLegacyMarker(path string) {
 // IsStale reports whether a profile was marked for re-seeding.
 //
 // The marker is set when a slot's stored credential changes while a session is
-// live: ccswap never pulls credentials out from under a running Claude Code, so
+// live: aaswap never pulls credentials out from under a running Claude Code, so
 // the invalidation is deferred to the next launch that finds the profile quiet.
 func IsStale(sessionDir string) bool {
 	AdoptLegacyMarker(StaleMarkerFor(sessionDir))
@@ -392,7 +396,7 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 				"terminal; do not re-add", apperr.ErrSession, accountNum)
 		}
 		return fmt.Errorf("%w: account %s has no stored credentials. Re-add with: "+
-			"ccswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
+			"aaswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
 	}
 
 	identity, theme, err := m.storedIdentity(accountNum, email)
@@ -449,7 +453,7 @@ func (m *Manager) storedIdentity(accountNum, email string) (identity, theme json
 	data, readErr := os.ReadFile(path)
 	if readErr != nil {
 		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Re-add "+
-			"with: ccswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
+			"with: aaswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
 	}
 	var stored map[string]jsontext.Value
 	if err := json.Unmarshal(data, &stored); err != nil || stored == nil {
@@ -459,7 +463,7 @@ func (m *Manager) storedIdentity(accountNum, email string) (identity, theme json
 	account, present := stored["oauthAccount"]
 	if !present || string(account) == "null" {
 		return nil, nil, fmt.Errorf("%w: account %s's stored config carries no account "+
-			"identity. Re-add with: ccswap add --slot %s",
+			"identity. Re-add with: aaswap add --slot %s",
 			apperr.ErrSession, accountNum, accountNum)
 	}
 	theme = stored["theme"]
@@ -512,7 +516,7 @@ func (m *Manager) Remove(sessionDir string) error {
 // Environment builds the environment a session runs in.
 //
 // The auth overrides are DROPPED rather than passed through: any of them would
-// override the account inside Claude Code, making `ccswap run 2` silently run as
+// override the account inside Claude Code, making `aaswap run 2` silently run as
 // something else.
 func Environment(base []string, sessionDir string) (env []string, scrubbed []string) {
 	for _, entry := range base {

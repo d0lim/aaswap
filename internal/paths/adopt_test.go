@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // seedStore writes a minimal store: a roster plus one file to prove the whole
@@ -35,7 +35,7 @@ func TestCcswapAndClaudeSwapRootsNeverCollide(t *testing.T) {
 			ours := r.BackupRoot()
 			for _, theirs := range r.ClaudeSwapRoots() {
 				if samePath(ours, theirs) {
-					t.Errorf("ccswap's root %q is also claude-swap's", ours)
+					t.Errorf("aaswap's root %q is also claude-swap's", ours)
 				}
 			}
 		})
@@ -97,7 +97,7 @@ func TestAdoptionRefusesToMergeIntoAPopulatedStore(t *testing.T) {
 
 	err := r.AdoptStore(source)
 	if err == nil {
-		t.Fatal("adoption overwrote an existing ccswap store")
+		t.Fatal("adoption overwrote an existing aaswap store")
 	}
 	if !strings.Contains(err.Error(), "already has accounts") {
 		t.Errorf("error = %v, want it to name the collision", err)
@@ -107,7 +107,7 @@ func TestAdoptionRefusesToMergeIntoAPopulatedStore(t *testing.T) {
 	}
 }
 
-// One `ccswap list` on a fresh machine leaves a cache and a log. That is not a
+// One `aaswap list` on a fresh machine leaves a cache and a log. That is not a
 // store, and it must not block an import.
 func TestAdoptionIgnoresThrowawayArtifacts(t *testing.T) {
 	home := t.TempDir()
@@ -119,7 +119,7 @@ func TestAdoptionIgnoresThrowawayArtifacts(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(target, "cache"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(target, "ccswap.log"), []byte("noise"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(target, "aaswap.log"), []byte("noise"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

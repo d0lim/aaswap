@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 // writeSettings drops a raw settings.json into a fresh backup root.

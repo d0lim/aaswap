@@ -7,10 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 var testNow = time.Date(2026, 7, 4, 14, 12, 0, 0, time.UTC)
@@ -124,7 +124,7 @@ func TestResetNote(t *testing.T) {
 // The frame has to name every account and mark exactly one as live.
 func TestTheDashboardShowsEveryAccount(t *testing.T) {
 	frame := twoAccounts(t).View().Content
-	for _, want := range []string{"work@example.com", "spare@example.com", "62%", "11%", "ccswap"} {
+	for _, want := range []string{"work@example.com", "spare@example.com", "62%", "11%", "aaswap"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("the frame is missing %q:\n%s", want, frame)
 		}
