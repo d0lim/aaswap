@@ -16,6 +16,12 @@ import (
 	"strings"
 )
 
+// providerCodex is the Codex provider's id.
+//
+// Duplicated from swap rather than imported: credstore is a leaf collaborator
+// and must not depend on the orchestration above it.
+const providerCodex = "codex"
+
 // Keychain service names.
 const (
 	// BackupService holds aaswap's own per-account backup credentials.

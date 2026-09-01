@@ -33,6 +33,9 @@ import (
 // hashed item. Switching accounts operates on the default profile; session mode
 // isolates itself through its own profile directory instead.
 func (s *Store) WriteActive(credentials string) error {
+	if s.provider == providerCodex {
+		return s.writeCodexActive(credentials)
+	}
 	if LooksLikeAPIKey(credentials) {
 		return s.writeManagedCredentials(strings.TrimSpace(credentials))
 	}

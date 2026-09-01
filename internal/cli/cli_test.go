@@ -57,9 +57,12 @@ type harness struct {
 	t        *testing.T
 	app      *App
 	switcher *swap.Switcher
-	out, err bytes.Buffer
-	in       bytes.Buffer
-	now      time.Time
+	// byProvider holds one Switcher per provider, so a test addressing a
+	// second one gets a store scoped to it rather than the default's.
+	byProvider map[string]*swap.Switcher
+	out, err   bytes.Buffer
+	in         bytes.Buffer
+	now        time.Time
 }
 
 func newHarness(t *testing.T) *harness {
@@ -74,23 +77,37 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 
-	h := &harness{t: t, now: testNow}
-	h.switcher = &swap.Switcher{
-		FetchStagger: time.Millisecond,
-		Paths:        resolver,
-		Creds:        credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), swap.ProviderClaude),
-		Usage:        usagestore.New(resolver.CacheDir()),
-		Settings:     settings.Defaults(),
+	h := &harness{t: t, now: testNow, byProvider: map[string]*swap.Switcher{}}
+
+	// One Switcher per provider, BUILT for it rather than relabelled. The
+	// credential store and the profile store are scoped by provider, so a
+	// harness that reused one Switcher across providers would let every test
+	// pass while the real wiring read the wrong tool's files.
+	build := func(provider string) *swap.Switcher {
+		if existing, ok := h.byProvider[provider]; ok {
+			return existing
+		}
+		s := &swap.Switcher{
+			Provider:     provider,
+			FetchStagger: time.Millisecond,
+			Paths:        resolver,
+			Creds: credstore.NewForProvider(resolver, root,
+				keychain.NewWithRunner(refusingKeychain{}, 0), provider),
+			Usage:    usagestore.New(resolver.CacheDir()),
+			Settings: settings.Defaults(),
+		}
+		s.SetClock(func() time.Time { return h.now })
+		h.byProvider[provider] = s
+		return s
 	}
-	h.switcher.SetClock(func() time.Time { return h.now })
+	h.switcher = build(swap.ProviderClaude)
 
 	h.app = &App{
 		Out: &h.out,
 		Err: &h.err,
 		In:  &h.in,
 		NewSwitcher: func(provider string) (*swap.Switcher, error) {
-			h.switcher.Provider = provider
-			return h.switcher, nil
+			return build(provider), nil
 		},
 	}
 	return h

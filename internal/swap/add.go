@@ -251,6 +251,17 @@ func (s *Switcher) captureVerified(ctx context.Context, identity LiveIdentity) (
 // Read as bytes rather than parsed and re-serialized: this is the user's file,
 // and a slot must restore exactly what was captured.
 func (s *Switcher) ReadLiveConfig() (string, error) {
+	if s.provider() == ProviderCodex {
+		// Codex has no per-account config to capture. Its auth.json holds the
+		// credential AND the identity, and config.toml holds settings that
+		// belong to the machine rather than to whoever is logged in — swapping
+		// those would carry one account's model choice onto another.
+		//
+		// An empty object rather than an empty string, because the layers above
+		// treat "has a stored config" as half of "is switchable", and a Codex
+		// account with a credential IS switchable.
+		return "{}", nil
+	}
 	data, err := os.ReadFile(s.Paths.GlobalConfigPath())
 	if err != nil {
 		if os.IsNotExist(err) {

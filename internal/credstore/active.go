@@ -69,6 +69,9 @@ type ActiveCredentials struct {
 //
 // Non-mutating apart from the capability bookkeeping every Keychain call feeds.
 func (s *Store) ReadActive() ActiveCredentials {
+	if s.provider == providerCodex {
+		return s.readCodexActive()
+	}
 	keychainFailed := false
 
 	// 1. OAuth Keychain (macOS, when usable), with a bounded retry.
