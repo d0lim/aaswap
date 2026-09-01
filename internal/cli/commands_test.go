@@ -33,7 +33,7 @@ func TestListOnAnEmptyStoreExplainsWhatToDo(t *testing.T) {
 	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts are managed yet", "aaswap add")
+	wantContains(t, h.stdout(), "No accounts are managed yet", "aaswap login")
 }
 
 // The JSON surface is what scripts consume, so it must be exactly one object
@@ -93,7 +93,7 @@ func TestStatus(t *testing.T) {
 		if code := h.run("status"); code != ExitOK {
 			t.Fatalf("exit = %d: %s", code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "aaswap add")
+		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "aaswap login")
 	})
 
 	t.Run("as JSON, an absent login is null", func(t *testing.T) {
@@ -672,7 +672,7 @@ func TestMappings(t *testing.T) {
 	if code := h.run("dir", "list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No directories are mapped", "aaswap map")
+	wantContains(t, h.stdout(), "No directories are mapped", "aaswap dir map")
 }
 
 func TestMappingAnUnknownAccount(t *testing.T) {

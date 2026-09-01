@@ -156,7 +156,7 @@ func TestEntryLines(t *testing.T) {
 		{
 			name:  "a sentinel explains itself",
 			entry: usagestore.Entry{Sentinel: "re-login needed"},
-			want:  []string{"re-login needed", "aaswap add"},
+			want:  []string{"re-login needed", "aaswap login --capture"},
 		},
 		{
 			// The state says why there is no number; the older number is still

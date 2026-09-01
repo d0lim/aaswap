@@ -249,7 +249,7 @@ func TestBootstrapRefusals(t *testing.T) {
 		{
 			name:    "no stored credential",
 			setup:   func(f *fixture) {},
-			wantErr: []string{"no stored credentials", "aaswap add --slot 1"},
+			wantErr: []string{"no stored credentials", "aaswap login --capture --name 1"},
 		},
 		{
 			name: "no stored config",

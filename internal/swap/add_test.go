@@ -347,7 +347,7 @@ func TestAFailedAddChangesNothing(t *testing.T) {
 					f.t.Fatal(err)
 				}
 			},
-			wantErr: []string{"API-key account", "add-token"},
+			wantErr: []string{"API-key account", "login --token"},
 		},
 	}
 

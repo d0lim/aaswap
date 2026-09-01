@@ -341,7 +341,7 @@ func TestSwitchingToAnUnusableTarget(t *testing.T) {
 		{
 			name:    "no stored credential",
 			break_:  func(f *fixture) { _ = f.Creds.DeleteAccount("2", "two@example.com") },
-			wantErr: []string{"no stored credentials", "aaswap add --slot 2"},
+			wantErr: []string{"no stored credentials", "aaswap login --capture --name 2"},
 		},
 		{
 			name: "no stored config",

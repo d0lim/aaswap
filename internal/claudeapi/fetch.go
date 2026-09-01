@@ -177,7 +177,7 @@ func (c *Client) persist(req FetchRequest, credentials string) {
 		if req.Warn != nil {
 			req.Warn(fmt.Sprintf(
 				"Warning: failed to save refreshed token for account %s (%s). "+
-					"If the next refresh fails, re-run `aaswap add` after logging in.",
+					"If the next refresh fails, log in again and run `aaswap login --capture`.",
 				req.AccountNum, req.Email))
 		}
 	}

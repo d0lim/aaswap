@@ -346,10 +346,10 @@ func (s *Switcher) backUpOutgoing(roster *Roster, slot, email, credentials, conf
 			return warnings, err
 		}
 		warnings = append(warnings, fmt.Sprintf(
-			"The live credential's tokens were wiped (Claude Code clears them when a "+
+			"The live credential's tokens were wiped (the tool clears them when a "+
 				"refresh is rejected). Account %s's stored backup was kept. If the account "+
-				"cannot authenticate after switching back, log in with Claude Code and run: "+
-				"aaswap add", slot))
+				"cannot authenticate after switching back, log in as it again, then run: "+
+				"aaswap login --capture --name %s", slot, slot))
 
 	case KindOwnBytes:
 		// Untouched since aaswap wrote it. Refresh the config backup only.
@@ -389,15 +389,17 @@ func foreignWarning(kind OutgoingKind, slot, foreignSlot string) string {
 	case KindForeign:
 		return fmt.Sprintf("Credential ownership mismatch detected. The live credential "+
 			"was preserved and was not written into account %s. If account %s later cannot "+
-			"authenticate, log in as it and run: aaswap add --slot %s", slot, foreignSlot, foreignSlot)
+			"authenticate, log in as it and run: aaswap login --capture --name %s",
+			slot, foreignSlot, foreignSlot)
 	case KindKnownForeign:
 		return fmt.Sprintf("The live credential was previously identified as another "+
 			"account's. It was preserved and not written into account %s. If the owning "+
-			"account later cannot authenticate, log in as it and run: aaswap add", slot)
+			"account later cannot authenticate, log in as it and run: "+
+			"aaswap login --capture", slot)
 	default:
 		return fmt.Sprintf("The live login does not match a managed account. It was "+
 			"preserved and not written into account %s. If you need that account, log in "+
-			"as it and run: aaswap add", slot)
+			"as it and run: aaswap login --capture", slot)
 	}
 }
 
@@ -418,8 +420,8 @@ func (s *Switcher) readTargetCredentials(accountNum, email string) (string, erro
 			"unreadable right now (locked, or no GUI session). Retry from a GUI terminal; "+
 			"do not re-add", apperr.ErrSwitch, accountNum)
 	}
-	return "", fmt.Errorf("%w: account %s has no stored credentials. Re-add with: "+
-		"aaswap add --slot %s", apperr.ErrSwitch, accountNum, accountNum)
+	return "", fmt.Errorf("%w: account %s has no stored credentials. Log in as it, "+
+		"then run: aaswap login --capture --name %s", apperr.ErrSwitch, accountNum, accountNum)
 }
 
 // readTargetConfig reads the target slot's stored config and its identity
@@ -435,8 +437,9 @@ func (s *Switcher) readTargetConfig(accountNum, email string) (jsontext.Value, o
 	}
 	stored := s.ReadAccountConfig(accountNum, email)
 	if stored == "" {
-		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Re-add "+
-			"with: aaswap add --slot %s", apperr.ErrSwitch, accountNum, accountNum)
+		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Log in "+
+			"as it, then run: aaswap login --capture --name %s",
+			apperr.ErrSwitch, accountNum, accountNum)
 	}
 	var config object
 	if err := json.Unmarshal([]byte(stored), &config); err != nil {

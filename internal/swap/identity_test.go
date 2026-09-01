@@ -207,7 +207,7 @@ func TestRejectLiveAPIKeyCapture(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := RejectLiveAPIKeyCapture(tt.creds)
 			if tt.wantErr {
-				wantErr(t, err, "API-key account", "add-token")
+				wantErr(t, err, "API-key account", "login --token")
 				if !errors.Is(err, apperr.ErrValidation) {
 					t.Errorf("error is not a validation error: %v", err)
 				}

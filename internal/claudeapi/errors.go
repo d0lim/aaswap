@@ -106,7 +106,7 @@ var errorNotes = map[ErrorKind]string{
 	KindInvalidClient:   "aaswap's OAuth client was rejected — systemic, not this account",
 	KindConsumeBusy:     "another aaswap surface holds the slot — retries next pass",
 	KindStashUnreadable: "this slot's stashed successor is unreadable — unlock the keychain " +
-		"or fix the file, then retry; `aaswap unclaimed` inspects it",
+		"or fix the file, then retry; `aaswap account unclaimed` inspects it",
 }
 
 // Note returns the user-facing explanation for a kind, falling back to the kind

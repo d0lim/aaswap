@@ -16,7 +16,8 @@ import "github.com/d0lim/aaswap/internal/procdetect"
 // the normal shape because it was the only shape implemented.
 func claudeSpec() Spec {
 	return Spec{
-		Name: Claude,
+		Name:  Claude,
+		Label: "Claude Code",
 		Home: Home{
 			Env:     "CLAUDE_CONFIG_DIR",
 			Default: ".claude",
@@ -67,8 +68,9 @@ func claudeSpec() Spec {
 // rather than harder.
 func codexSpec() Spec {
 	return Spec{
-		Name: Codex,
-		Home: Home{Env: "CODEX_HOME", Default: ".codex"},
+		Name:  Codex,
+		Label: "Codex",
+		Home:  Home{Env: "CODEX_HOME", Default: ".codex"},
 		Files: []File{
 			// One file, two roles: the id_token inside it IS the identity.
 			{Path: "auth.json", Role: RoleSecret | RoleIdentity},
