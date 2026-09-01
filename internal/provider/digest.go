@@ -56,26 +56,35 @@ func (s Spec) Digest(files map[string]string) string {
 // Resolve is who a credential belongs to, by the best means this provider
 // declares.
 //
-// The ladder, in order: the declared parser, then the digest. A parser that
-// declines does not sink the account — an API-key install has no address in it,
-// and refusing would make a perfectly usable login unmanageable.
+// One tier answers, not several ORed together. A declared parser is
+// AUTHORITATIVE, including when it says no: a Codex install authenticating with
+// an API key genuinely has no address in it, and that is a fact about the
+// login rather than a gap in aaswap's knowledge. Overriding it with a digest
+// would manufacture an OAuth-shaped identity for a credential that has none,
+// and send it down the wrong path at every layer above.
 //
-// The fingerprint is always filled in, even when an address was parsed. It
-// identifies the credential GENERATION rather than the account, which is what
-// answers "has someone logged in outside aaswap since we last looked".
+// The digest answers only for a provider with no parser at all. There the
+// absence IS the situation: nobody has looked at this token format, and a
+// fingerprint is the honest name for an account until a person renames it.
 //
-// Reports false only when there is no secret at all, which is what "nobody is
-// logged in" looks like at every tier.
+// The fingerprint rides along on a parsed identity as well, where it names the
+// credential GENERATION rather than the account. That is what answers "has
+// someone logged in outside aaswap since we last looked" — an address compares
+// equal across a re-login and the token behind it does not. Best effort: a
+// credential aaswap cannot read as a file, such as one in the macOS Keychain,
+// leaves it empty without making the identity any less real.
 func (s Spec) Resolve(files map[string]string) (Identity, bool) {
 	fingerprint := s.Digest(files)
+	if s.Identity != nil {
+		identity, ok := s.Identity.Identify(files)
+		if !ok {
+			return Identity{}, false
+		}
+		identity.Fingerprint = fingerprint
+		return identity, true
+	}
 	if fingerprint == "" {
 		return Identity{}, false
-	}
-	if s.Identity != nil {
-		if identity, ok := s.Identity.Identify(files); ok {
-			identity.Fingerprint = fingerprint
-			return identity, true
-		}
 	}
 	return Identity{Fingerprint: fingerprint}, true
 }

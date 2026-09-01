@@ -152,19 +152,39 @@ func TestResolveFallsBackToTheDigest(t *testing.T) {
 	}
 }
 
-// A declared parser that cannot read this particular credential — an API-key
-// install, a half-written file — must not sink the account. It degrades.
-func TestResolveDegradesWhenTheParserDeclines(t *testing.T) {
+// A declared parser is authoritative, including when it says no.
+//
+// A Codex install authenticating with an API key genuinely has no address in
+// it. Manufacturing a fingerprint identity there would hand the layers above an
+// OAuth-shaped account for a credential that is not one, and they would take it
+// down the wrong path — the API-key flow exists precisely because that login
+// needs different handling.
+func TestADeclaredParsersRefusalIsAuthoritative(t *testing.T) {
 	spec, _ := Lookup(Codex)
-	identity, ok := spec.Resolve(map[string]string{"auth.json": `{"auth_mode":"apikey"}`})
+	if identity, ok := spec.Resolve(map[string]string{
+		"auth.json": `{"auth_mode":"apikey","OPENAI_API_KEY":"sk-x"}`,
+	}); ok {
+		t.Errorf("Resolve = %+v, want the parser's refusal to stand", identity)
+	}
+}
+
+// The fingerprint is best effort. Claude keeps its identity in the config and,
+// on macOS, its credential in the Keychain — where no file read can reach it.
+// An identity with no fingerprint is still an identity.
+func TestAParsedIdentitySurvivesAnUnreadableSecret(t *testing.T) {
+	spec, _ := Lookup(Claude)
+	identity, ok := spec.Resolve(map[string]string{
+		".claude.json": `{"oauthAccount":{"emailAddress":"person@example.com"}}`,
+	})
 	if !ok {
-		t.Fatal("a credential the parser declined produced no identity")
+		t.Fatal("a readable config with an unreadable credential resolved to nothing")
 	}
-	if identity.Email != "" {
-		t.Errorf("Email = %q, want empty", identity.Email)
+	if identity.Email != "person@example.com" {
+		t.Errorf("Email = %q, want the parsed address", identity.Email)
 	}
-	if identity.Fingerprint == "" {
-		t.Error("the degraded path produced no fingerprint")
+	if identity.Fingerprint != "" {
+		t.Errorf("Fingerprint = %q, want empty: no secret was readable",
+			identity.Fingerprint)
 	}
 }
 

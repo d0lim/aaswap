@@ -1,7 +1,6 @@
 package swap
 
 import (
-	json "encoding/json/v2"
 	"fmt"
 	"os"
 	"strconv"
@@ -20,10 +19,25 @@ type LiveIdentity struct {
 	OrganizationUUID string
 	OrganizationName string
 	AccountUUID      string
+
+	// Fingerprint digests the credential this identity was read from.
+	//
+	// It names the generation rather than the account, which makes it the one
+	// thing that can answer "did someone log in outside aaswap" — an address
+	// compares equal across a re-login, and the token behind it does not.
+	Fingerprint string
 }
 
 // Identity narrows a live identity to the composite that names an account.
+//
+// The address and its organization when there is one. The fingerprint only
+// when there is not: a provider whose token format nobody has parsed has
+// nothing else to be identified by, and leaving the composite empty would make
+// every such account compare equal to every other.
 func (l LiveIdentity) Identity() Identity {
+	if l.Email == "" {
+		return Identity{Fingerprint: l.Fingerprint}
+	}
 	return Identity{Email: l.Email, OrganizationUUID: l.OrganizationUUID}
 }
 
@@ -57,25 +71,8 @@ func (a *Account) DisplayTag() string {
 // identity, and treating it as one would let every comparison against it
 // succeed vacuously.
 func (s *Switcher) LiveIdentity() (LiveIdentity, bool) {
-	if s.provider() == ProviderCodex {
-		return s.codexLiveIdentity()
-	}
-	return s.claudeLiveIdentity()
-}
-
-// codexLiveIdentity reads the identity out of Codex's credential file.
-//
-// One file, not two. Codex has no config beside the credential to read an
-// address from — the id_token inside the credential IS the identity document —
-// so the read that answers "who is logged in" and the read that answers "what
-// is the token" are the same read. That is not a smaller version of Claude's
-// shape; it is a different one, which is why this cannot be a path swap.
-func (s *Switcher) codexLiveIdentity() (LiveIdentity, bool) {
-	data, err := os.ReadFile(s.Paths.CodexAuthPath())
-	if err != nil {
-		return LiveIdentity{}, false
-	}
-	identity, ok := providerpkg.CodexIdentity(string(data))
+	spec := s.spec()
+	identity, ok := spec.Resolve(s.readLiveFiles(spec))
 	if !ok {
 		return LiveIdentity{}, false
 	}
@@ -84,34 +81,28 @@ func (s *Switcher) codexLiveIdentity() (LiveIdentity, bool) {
 		OrganizationUUID: identity.OrganizationUUID,
 		OrganizationName: identity.OrganizationName,
 		AccountUUID:      identity.AccountUUID,
+		Fingerprint:      identity.Fingerprint,
 	}, true
 }
 
-// claudeLiveIdentity reads Claude Code's config.
-func (s *Switcher) claudeLiveIdentity() (LiveIdentity, bool) {
-	data, ok := readObjectLenient(s.Paths.GlobalConfigPath())
-	if !ok {
-		return LiveIdentity{}, false
+// readLiveFiles reads the provider's declared files from their live locations,
+// keyed by declared path.
+//
+// One pass, and every field of the resulting identity comes from it. Reading
+// twice — once for the address and once near the write — lets a login landing
+// in between pair one account's token with another's metadata, which is
+// precisely the failure the ownership guards exist to close.
+//
+// An unreadable file is simply absent from the map. The declaration says which
+// files are optional; the resolver decides what their absence means.
+func (s *Switcher) readLiveFiles(spec providerpkg.Spec) map[string]string {
+	files := map[string]string{}
+	for path, location := range s.liveFileLocations(spec) {
+		if data, err := os.ReadFile(location); err == nil {
+			files[path] = string(data)
+		}
 	}
-	raw, ok := data["oauthAccount"]
-	if !ok {
-		return LiveIdentity{}, false
-	}
-	var account struct {
-		EmailAddress     string `json:"emailAddress"`
-		OrganizationUUID string `json:"organizationUuid"`
-		OrganizationName string `json:"organizationName"`
-		AccountUUID      string `json:"accountUuid"`
-	}
-	if err := json.Unmarshal(raw, &account); err != nil || account.EmailAddress == "" {
-		return LiveIdentity{}, false
-	}
-	return LiveIdentity{
-		Email:            account.EmailAddress,
-		OrganizationUUID: account.OrganizationUUID,
-		OrganizationName: account.OrganizationName,
-		AccountUUID:      account.AccountUUID,
-	}, true
+	return files
 }
 
 // LiveIdentityMatches reports whether the live config names this identity right

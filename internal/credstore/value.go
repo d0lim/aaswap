@@ -16,11 +16,30 @@ import (
 	"strings"
 )
 
-// providerCodex is the Codex provider's id.
+// Layout is how one provider's LIVE credential is stored.
 //
-// Duplicated from swap rather than imported: credstore is a leaf collaborator
-// and must not depend on the orchestration above it.
-const providerCodex = "codex"
+// Plain values rather than the provider's declaration itself: the provider
+// package reads this one for the Keychain service name, so importing it back
+// would make a cycle. Two facts are all this layer needs.
+type Layout struct {
+	// LivePath is the single file holding the live credential. Empty falls
+	// back to Claude's, which is what an unrecognised provider gets.
+	LivePath string
+
+	// Keychain says this provider's tool ALSO keeps the live credential in the
+	// macOS Keychain, so the two stores have to be reconciled.
+	//
+	// Claude Code is the only one, and everything the reconciliation exists for
+	// — the bounded retry, the capability cache, the .enc precedence, the
+	// managed-key axis — follows from having two places that can disagree. A
+	// file-only provider is not a smaller version of that; it is the absence of
+	// the problem. So false takes the simple path on EVERY platform, and true
+	// still degrades to the file wherever there is no Keychain to reach.
+	Keychain bool
+}
+
+// fileOnly reports that the live credential is one file and nothing else.
+func (l Layout) fileOnly() bool { return !l.Keychain }
 
 // Keychain service names.
 const (

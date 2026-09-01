@@ -9,23 +9,24 @@ import (
 	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
-// Codex keeps its live credential in ONE plaintext file, and that is the whole
-// store.
+// Most tools keep their live credential in ONE plaintext file, and that file is
+// the whole store. Codex, Gemini, Grok and Cursor all do.
 //
 // Everything the Claude path does — the Keychain, the bounded retry, the
 // capability cache, the managed-key axis, the .enc reconciliation — exists
 // because Claude Code has two places a credential can be and they can disagree.
-// Codex has one. So this is not a smaller version of that code; it is the
-// absence of the problem that code solves.
+// A file-only tool has one. So this is not a smaller version of that code; it
+// is the absence of the problem that code solves, which is why it is the
+// DEFAULT and Claude's arrangement is the declared exception.
 //
-// The two fields that carry that absence: Degraded is never set, because
-// degraded means "these bytes may be a superseded generation, since a fresher
-// store could not be asked" and there is no fresher store. KeychainUnavailable
-// is never set, because there is no Keychain to be unavailable.
+// Two fields carry that absence: Degraded is never set, because degraded means
+// "these bytes may be a superseded generation, since a fresher store could not
+// be asked" and there is no fresher store. KeychainUnavailable is never set,
+// because there is no Keychain to be unavailable.
 
-// readCodexActive reads Codex's live credential.
-func (s *Store) readCodexActive() ActiveCredentials {
-	path := s.paths.CodexAuthPath()
+// readFileActive reads a file-only provider's live credential.
+func (s *Store) readFileActive() ActiveCredentials {
+	path := s.livePath()
 	data, err := os.ReadFile(path)
 	switch {
 	case err == nil:
@@ -39,9 +40,9 @@ func (s *Store) readCodexActive() ActiveCredentials {
 	return ActiveCredentials{FileReadFailed: true}
 }
 
-// writeCodexActive replaces Codex's live credential.
-func (s *Store) writeCodexActive(credentials string) error {
-	path := s.paths.CodexAuthPath()
+// writeFileActive replaces a file-only provider's live credential.
+func (s *Store) writeFileActive(credentials string) error {
+	path := s.livePath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("%w: creating %s: %w", apperr.ErrCredentialWrite,
 			filepath.Dir(path), err)
@@ -52,4 +53,16 @@ func (s *Store) writeCodexActive(credentials string) error {
 		return fmt.Errorf("%w: writing %s: %w", apperr.ErrCredentialWrite, path, err)
 	}
 	return nil
+}
+
+// livePath is where this provider's live credential file is.
+//
+// Claude's is the fallback for a declaration that named none: an empty path
+// reads the current directory, which is a far worse failure than reading the
+// wrong tool's file.
+func (s *Store) livePath() string {
+	if s.layout.LivePath == "" {
+		return s.paths.CredentialsPath()
+	}
+	return s.layout.LivePath
 }

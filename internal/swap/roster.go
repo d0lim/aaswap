@@ -52,6 +52,15 @@ type Account struct {
 	// record is written elsewhere.
 	Disabled bool `json:"disabled,omitzero"`
 
+	// Fingerprint digests the credential last stored for this account.
+	//
+	// Written for every account and load-bearing for one kind: a provider
+	// whose token format nobody has parsed has no address, and this is then
+	// the only thing that identifies it. For the rest it records the
+	// generation, which is what tells a re-login outside aaswap from the
+	// credential aaswap itself put there.
+	Fingerprint string `json:"fingerprint,omitzero"`
+
 	Extra map[string]jsontext.Value `json:",embed"`
 }
 
@@ -75,12 +84,18 @@ func (a *Account) AuthKind() Kind {
 type Identity struct {
 	Email            string
 	OrganizationUUID string
+	// Fingerprint identifies an account that has no address to be identified
+	// by. Set only when Email is empty — see LiveIdentity.Identity.
+	Fingerprint string
 }
 
 // Identity returns the slot's account identity.
 func (a *Account) Identity() Identity {
 	if a == nil {
 		return Identity{}
+	}
+	if a.Email == "" {
+		return Identity{Fingerprint: a.Fingerprint}
 	}
 	return Identity{Email: a.Email, OrganizationUUID: a.OrganizationUUID}
 }

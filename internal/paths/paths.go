@@ -92,6 +92,16 @@ type Resolver struct {
 	// would send the lookup to the wrong item.
 	SecureStorageConfigDir    string
 	SecureStorageConfigDirSet bool
+	// HomeOverrides holds the home-relocating environment variable of every
+	// provider this build offers, keyed by variable name and omitting the ones
+	// that were unset.
+	//
+	// Generic because the set is not fixed: a provider is added by declaring
+	// it, and its home variable has to be honoured without editing this struct.
+	// ConfigDir and CodexHomeDir remain as named fields because the layers that
+	// read them predate providers entirely.
+	HomeOverrides map[string]string
+
 	// Platform selects the backup layout. Held as a field rather than detected
 	// on demand so tests can exercise every platform's layout on one host.
 	Platform platform.Platform
@@ -108,16 +118,25 @@ func New(home string, p platform.Platform) *Resolver {
 //
 // In a test binary it panics rather than return a Resolver pointing at the
 // developer's real account store — see [guardRealStore].
-func FromEnv() (*Resolver, error) {
+func FromEnv(homeEnvs ...string) (*Resolver, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("locate home directory: %w: %w", apperr.ErrConfig, err)
 	}
 	secure, secureSet := os.LookupEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+	// Every provider's home variable, so one that this build learned about by
+	// declaration alone is still honoured.
+	overrides := map[string]string{}
+	for _, name := range homeEnvs {
+		if value := os.Getenv(name); value != "" {
+			overrides[name] = value
+		}
+	}
 	r := &Resolver{
 		Home:                      home,
-		ConfigDir:                 os.Getenv("CLAUDE_CONFIG_DIR"),
+		ConfigDir:                 os.Getenv(ClaudeConfigDirEnv),
 		CodexHomeDir:              os.Getenv(CodexHomeEnv),
+		HomeOverrides:             overrides,
 		XDGDataHome:               os.Getenv("XDG_DATA_HOME"),
 		SecureStorageConfigDir:    secure,
 		SecureStorageConfigDirSet: secureSet,
@@ -127,6 +146,10 @@ func FromEnv() (*Resolver, error) {
 	return r, nil
 }
 
+// ClaudeConfigDirEnv relocates Claude Code's entire profile, which is how
+// session mode isolates accounts.
+const ClaudeConfigDirEnv = "CLAUDE_CONFIG_DIR"
+
 // ClaudeConfigHome returns Claude Code's config home: CLAUDE_CONFIG_DIR when
 // set, else ~/.claude.
 func (r *Resolver) ClaudeConfigHome() string {
@@ -134,6 +157,27 @@ func (r *Resolver) ClaudeConfigHome() string {
 		return r.ConfigDir
 	}
 	return filepath.Join(r.Home, ".claude")
+}
+
+// ProviderHome is where a provider's tool keeps everything.
+//
+// env is the variable that relocates it and defaultDir is the fallback,
+// relative to the user's home — both taken from the provider's declaration
+// rather than known here, so this resolves a provider whose name this package
+// has never seen.
+//
+// The two named fields win over the generic map because a Resolver built by
+// New — every test — sets those and not the map.
+func (r *Resolver) ProviderHome(env, defaultDir string) string {
+	switch {
+	case env == ClaudeConfigDirEnv && r.ConfigDir != "":
+		return r.ConfigDir
+	case env == CodexHomeEnv && r.CodexHomeDir != "":
+		return r.CodexHomeDir
+	case env != "" && r.HomeOverrides[env] != "":
+		return r.HomeOverrides[env]
+	}
+	return filepath.Join(r.Home, defaultDir)
 }
 
 // DefaultClaudeConfigHome returns the *default* profile's config home, ignoring
