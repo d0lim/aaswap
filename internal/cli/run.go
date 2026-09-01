@@ -364,7 +364,7 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 // directory looking for a slot that is not there, which is a confusing error
 // but not a dangerous one.
 func (a *App) pruneMappingsFor(s *swap.Switcher, identity mappings.Identity) {
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	store.Now = s.Now
 	removed, err := store.PruneAccount(identity)
 	if err != nil {
