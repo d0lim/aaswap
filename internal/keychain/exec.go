@@ -14,7 +14,7 @@ import (
 // Keychain. It exists for the one round-trip test that has to prove the wrapper
 // works against the actual security(1) binary — the equivalent of the Python
 // suite's no_keychain_fake marker — and must never be set for any other test.
-const AllowRealKeychainEnv = "CSWAP_ALLOW_REAL_KEYCHAIN"
+const AllowRealKeychainEnv = "CCSWAP_ALLOW_REAL_KEYCHAIN"
 
 // execRunner runs the real security(1) binary.
 type execRunner struct{}

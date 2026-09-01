@@ -10,7 +10,7 @@ import (
 // AllowRealNetworkEnv opts a test into reaching Anthropic's real endpoints. It
 // exists for a live smoke test run deliberately by hand, and must never be set
 // in CI or for any other test.
-const AllowRealNetworkEnv = "CSWAP_ALLOW_REAL_NETWORK"
+const AllowRealNetworkEnv = "CCSWAP_ALLOW_REAL_NETWORK"
 
 // realHosts are the production endpoints a test must never reach.
 var realHosts = []string{"anthropic.com", "claude.com", "claude.ai"}
