@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -28,7 +29,15 @@ import (
 
 // commandReference matches an invocation named in a string: the binary, then up
 // to two words of command path.
-var commandReference = regexp.MustCompile(`aaswap ((?:--[a-z-]+ )*[a-z][a-z-]*(?: [a-z][a-z-]*)?)`)
+//
+// The leading group requires a delimiter before the name, so an export file
+// called backup.aaswap does not read as an invocation of everything after it.
+// Go's regexp has no lookbehind, hence a group rather than an assertion.
+var commandReference = regexp.MustCompile(
+	`(^|[^\w.-])aaswap ((?:--[a-z-]+ )*[a-z][a-z-]*(?: [a-z][a-z-]*)?)`)
+
+// referenceGroup is the submatch holding the command path.
+const referenceGroup = 2
 
 // proseAfterTheName is every word that follows "aaswap" in a sentence rather
 // than in an invocation — "aaswap cannot log you in", "aaswap manages several".
@@ -38,14 +47,15 @@ var commandReference = regexp.MustCompile(`aaswap ((?:--[a-z-]+ )*[a-z][a-z-]*(?
 // prose" is precisely how a stale name would slip through. A word landing here
 // is a deliberate act, visible in the diff.
 var proseAfterTheName = []string{
-	"already", "and", "backup", "backups", "binary", "can", "cannot", "classifies",
-	"could", "created", "data", "defer", "deliberately", "dir", "does", "error",
-	"exists", "falls", "from", "genuinely", "gets", "hand", "has", "holds", "is",
-	"itself", "keeps", "knows", "made", "manages", "manipulates", "may", "mirrors",
-	"mislabel", "must", "needs", "never", "now", "on", "once", "or", "owns",
+	"already", "and", "backup", "backups", "binary", "can", "cannot",
+	"classifies", "comfortably", "could", "created", "data", "defer",
+	"deliberately", "dir", "does", "error", "exists", "falls", "from",
+	"genuinely", "gets", "hand", "has", "holds", "is", "itself", "keeps",
+	"knows", "made", "manages", "manipulates", "may", "mirrors", "mislabel",
+	"must", "needs", "never", "notices", "now", "on", "once", "or", "owns",
 	"preserved", "puts", "raises", "reads", "rewrote", "run", "ships", "simply",
-	"since", "stays", "supports", "surface", "talks", "test", "that", "the", "to",
-	"under", "wants", "would", "wrote",
+	"since", "stays", "supports", "surface", "talks", "tells", "test", "that",
+	"the", "to", "under", "wants", "was", "would", "wrote",
 }
 
 func TestEveryCommandNamedInAMessageExists(t *testing.T) {
@@ -98,6 +108,26 @@ func TestAdviceNeverStopsAtACommandGroup(t *testing.T) {
 	}
 }
 
+// The README is where someone learns the commands in the first place, so a
+// stale one there is worse than a stale one in an error: they have not even
+// tried yet. `map` and `unmap` had moved under `dir`, and `disable` under
+// `account`, and the README still taught the old spellings.
+func TestEveryCommandNamedInTheDocsExists(t *testing.T) {
+	root := rootForInspection(t)
+
+	for _, found := range scanDocs(t) {
+		words := strings.Fields(found.reference)
+		if slices.Contains(proseAfterTheName, words[0]) {
+			continue
+		}
+		if resolved, _, err := root.Find(words); err == nil && resolved != root {
+			continue
+		}
+		t.Errorf("%s teaches `aaswap %s`, which this binary has no command for",
+			found.where, strings.Join(words, " "))
+	}
+}
+
 // --- the scan ---------------------------------------------------------------
 
 type reference struct {
@@ -137,7 +167,7 @@ func scanStringLiterals(t *testing.T) []reference {
 			}
 			for _, match := range commandReference.FindAllStringSubmatch(literal.Value, -1) {
 				out = append(out, reference{
-					reference: match[1],
+					reference: match[referenceGroup],
 					where:     relative + ":" + itoa(fset.Position(literal.Pos()).Line),
 				})
 			}
@@ -147,6 +177,35 @@ func scanStringLiterals(t *testing.T) []reference {
 	})
 	if err != nil {
 		t.Fatalf("scanning the sources: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("the scan found no command references at all, so it is proving nothing")
+	}
+	return out
+}
+
+// scanDocs finds every command named in the English documentation.
+//
+// Only the files that TEACH the commands. docs/ is a design record written
+// against the code at a moment in time, and holding it to the current surface
+// would turn every design note into a maintenance obligation.
+func scanDocs(t *testing.T) []reference {
+	t.Helper()
+	var out []reference
+	root := repoRoot(t)
+	for _, name := range []string{"README.md", "AGENTS.md"} {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		for number, line := range strings.Split(string(data), "\n") {
+			for _, match := range commandReference.FindAllStringSubmatch(line, -1) {
+				out = append(out, reference{
+					reference: match[referenceGroup],
+					where:     name + ":" + itoa(number+1),
+				})
+			}
+		}
 	}
 	if len(out) == 0 {
 		t.Fatal("the scan found no command references at all, so it is proving nothing")

@@ -474,3 +474,68 @@ OAuth 모양의 신원이 만들어졌고, 상위 계층이 그걸 틀린 경로
 `Unscoped()`가 `credentials/credentials`를 가리켰다). 그래서 vault 사용
 여부를 필드가 아니라 **provider 유무에서 파생**시키고, 시딩 accessor를
 경유하지 않고 두 경로가 다름을 직접 단정하는 테스트를 두었다.
+
+---
+
+## 13. 감사(audit)에서 나온 두 번째 버그 묶음
+
+§12는 `run`을 실제로 실행해 보면서 나왔다. 이번 것들은 **"프로바이더별로
+갈라야 할 상태 중 아직 안 갈린 것"**을 계통적으로 찾아서 나왔다: 백업 루트
+아래에 쓰이는 모든 경로를 열거하고, 각각이 프로바이더로 스코프되는지 하나씩
+확인했다. 그 목록에서 네 개가 안 갈려 있었다.
+
+공통 함정은 같다. **같은 사람의 Claude 계정과 Codex 계정은 대개 같은
+이메일 주소**라서, 크로스는 "틀린 값이 보인다"가 아니라 "한쪽이 다른 쪽을
+덮어쓴다"로 나타난다. 눈에 안 띄는 이유가 그것이다.
+
+### 13.1 크로스-프로바이더 상태
+
+| 대상 | 증상 | 조치 |
+|---|---|---|
+| **v1 → v2 업그레이드가 묻는 쪽으로 마이그레이션** | ccswap에서 올라온 사용자가 첫 명령으로 `aaswap --provider codex list`를 치면 **Claude 스토어 전체가 codex 섹션으로** 들어간다. 그 뒤 `aaswap list`는 계정 0개, `--provider codex switch`는 Claude 자격증명을 `~/.codex/auth.json`에 쓴다 | v1은 무조건 Claude(`LegacyProvider`). 자격증명도 Claude 스코프 스토어로 씀 |
+| **디렉터리 매핑이 전역** | 두 번째 `dir map`이 첫 번째를 **덮어쓴다**. 한 프로젝트가 Claude 계정과 Codex 계정에 동시에 속할 수 없었다. 계정 제거가 다른 프로바이더의 매핑을 지운다 | 프로바이더당 한 테이블. Claude는 기존 `mappings.json` 유지 |
+| **세션 프로필이 전역** | 한 디렉터리에 `[.aaswap-shared.json .claude.json .credentials.json auth.json]` — **두 도구의 살아있는 자격증명이 하나의 share manifest 아래**. 게다가 `sessions`는 Claude Code의 프로세스 기록 디렉터리이면서 Codex의 공유 히스토리(=usage를 읽는 rollout 디렉터리)다 | `sessions/<provider>/…`. Claude는 기존 경로 유지(프로필은 자격증명 사본을 들고 있어 고아로 만들 수 없다) |
+| **usage 테이블이 전역** | 신원 가드가 *데이터*는 지켜주지만 *상태*는 못 지킨다. 두 프로바이더를 번갈아 쓰면 서로의 row를 축출해 **429 백오프가 사라진다** | 프로바이더당 한 테이블 + 각자의 락 |
+| **export 아카이브에 출처가 없음** | `--provider codex account import claude.aaswap`가 성공을 보고하고 Claude 자격증명을 Codex 계정으로 만든다 | `Envelope.Provider`. 없으면 Claude(그 시절엔 그것뿐이었으므로) |
+| **`account adopt`가 묻는 쪽으로** | codex로 실행하면 디렉터리는 옮겨놓고 "0 account(s)"를 보고. Keychain 인계가 빈 목록 위에서 돌고 **재시도되지 않는다** | 항상 Claude로 실행 |
+| **Claude Code의 어드바이저리 락을 전 프로바이더가 획득** | Codex 스왑이 `~/.claude`에 락 디렉터리를 만들고, Claude Code가 갱신 중이면 9초 기다렸다 "Claude Code appears to be refreshing"으로 **실패**한다. 반대로 진짜 갱신 중인 Claude Code가 Codex 작업 뒤에서 기다린다 | `Spec.AdvisoryLocks`로 선언 |
+
+### 13.2 선언이 답할 수 있는데 파일이 대신 답하던 것
+
+`ReadLiveConfig`가 config 없는 프로바이더에 리터럴 `"{}"`를 돌려주고 있었고,
+주석이 그 이유를 적어 두고 있었다 — *"위 계층이 '저장된 config가 있다'를
+'전환 가능하다'의 절반으로 읽기 때문"*. 그래서 Codex 포획마다
+`configs/codex/.claude-config-…json`에 `{}`가 쓰였다. **아무도 안 읽고, 이름은
+다른 도구 것이고, 우연히 load-bearing인 파일.**
+
+셋 중 하나는 이미 살아있는 버그였다: `exportOne`이 config를 요구해서
+**`--provider codex account export`가 두 계정 중 live인 것 하나만 내보내고
+성공을 보고**했다. 테스트가 통과한 이유는 확인한 계정이 마침 live였기 때문이다.
+
+이제 `IsSwitchable` / `exportOne` / `validateOne` 셋 다 선언에 묻는다.
+
+### 13.3 사용자에게 보이는 텍스트
+
+| 문제 | 규모 |
+|---|---|
+| 존재하지 않는 명령을 안내 | **31곳.** `add`는 `login`이 됐고 `--slot`은 아예 없어졌으며, `export`/`import`/`unclaimed`는 `account` 아래로, `map`/`unmap`은 `dir` 아래로 옮겨졌다. 전부 *뭔가 이미 잘못된 순간에* 주는 안내다 |
+| 아무것도 안 읽는 설정 키 | **6개.** `config set autoswitch.cooldownSeconds 300`이 검증하고 저장하고 성공을 출력하고 아무것도 안 했다 |
+| 프로바이더 무관 경로에서 "Claude Code"라고 말함 | status, capture 실패, TUI 전환 확인, handOver 실패, `--provider` 도움말 |
+
+첫 번째는 `TestEveryCommandNamedInAMessageExists`가 막는다. 비테스트 소스를
+AST로 파싱해 **문자열 리터럴에서만** 명령 참조를 뽑고(주석의 낡은 이름은 낡은
+메모지만, 문자열의 낡은 이름은 사람이 따라 하는 안내다) cobra의 `Find`로
+해석한다 — 플래그 처리와 별칭이 실제 실행과 같아진다.
+
+두 번째는 `TestEverySettingsKeyIsReadBySomething`이 막는다. 표면에 있는 키는
+자기를 읽는 곳을 지목해야 한다. 이건 다른 어떤 테스트로도 안 잡힌다: 값을
+쓰고 다시 읽는 것은 완벽하게 성공하기 때문이다.
+
+### 13.4 이번에도 테스트가 먼저 틀렸다
+
+세션 프로필 테스트의 첫 판이 통과했다. `run`에 recorder를 안 걸어서
+`handOver`가 stub을 exec하고 **테스트 프로세스를 대체**했고, 그 exit 0이
+통과로 읽혔다 — §12에서 이미 한 번 당한 것과 같은 함정이다. recorder를 모든
+실행에 거는 헬퍼로 바꾸고 나서야 버그가 보였다.
+
+그래서 이번 묶음의 모든 수정은 **되돌렸을 때 실제로 실패하는지** 확인했다.
