@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/base64"
 	json "encoding/json/v2"
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/session"
 	"os"
 	"path/filepath"
@@ -57,6 +58,51 @@ func TestCodexAccountsAreManagedThroughTheSameCommands(t *testing.T) {
 		t.Fatalf("list exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "work@example.com")
+}
+
+// Switching is the command aaswap exists for, and it had never been exercised
+// for a second provider: Codex has no account-scoped config, and the switch
+// demanded an identity block out of one before it would write anything.
+func TestSwitchingBetweenCodexAccounts(t *testing.T) {
+	h := newHarness(t)
+	h.twoCodexAccounts(t)
+
+	// personal is live after storing both. Move to work.
+	if code := h.run("--provider", "codex", "switch", "work"); code != ExitOK {
+		t.Fatalf("switch exit = %d: %s", code, h.stderr())
+	}
+
+	// The bytes have to land in Codex's own file, and be work's.
+	data, err := os.ReadFile(h.switcher.Paths.CodexAuthPath())
+	if err != nil {
+		t.Fatalf("reading the live Codex credential: %v", err)
+	}
+	identity, ok := provider.CodexIdentity(string(data))
+	if !ok {
+		t.Fatalf("the live Codex credential carries no identity: %s", data)
+	}
+	if identity.Email != "work@example.com" {
+		t.Errorf("live account = %q, want work@example.com", identity.Email)
+	}
+
+	// And the roster agrees, or `list` and reality disagree from here on.
+	s, err := h.app.NewSwitcher("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster, err := s.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active, _ := roster.ActiveName(); active != "work" {
+		t.Errorf("active = %q, want work", active)
+	}
+
+	// Switching must not have written Claude's config file into the Codex home,
+	// nor touched the machine-scoped config.toml.
+	if _, err := os.Stat(filepath.Join(h.switcher.Paths.CodexHome(), ".claude.json")); err == nil {
+		t.Error("a Claude config was written into the Codex home")
+	}
 }
 
 // The two providers must not see each other's accounts. They are separate auth

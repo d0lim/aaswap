@@ -171,6 +171,10 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 	}
 	rollbackCreds := active.Value
 	rollbackConfig, hadConfig := readFileIfExists(s.Paths.GlobalConfigPath())
+	if _, hasConfig := s.spec().ConfigFile(); !hasConfig {
+		// Nothing to roll back: the switch below writes no config at all.
+		rollbackConfig, hadConfig = "", false
+	}
 
 	// This path skips the backup step, so the live credential it replaces would
 	// otherwise have no surviving copy anywhere. Stash it. For an unmanaged or
@@ -238,16 +242,24 @@ func (s *Switcher) switchFrom(roster *Roster, req SwitchRequest, live LiveIdenti
 			"as empty (an unreadable Keychain?); refusing to overwrite its backup",
 			apperr.ErrCredentialRead)
 	}
+	spec := s.spec()
+	_, hasAccountConfig := spec.ConfigFile()
 	originalConfig, hadConfig := readFileIfExists(s.Paths.GlobalConfigPath())
-	if !hadConfig {
-		return SwitchOutcome{}, fmt.Errorf("%w: Claude's config file was not found",
-			apperr.ErrConfig)
+	switch {
+	case !hasAccountConfig:
+		// This provider keeps no account-scoped config, so there is none to
+		// read, back up, splice or roll back. The credential is the whole
+		// login.
+		originalConfig, hadConfig = "", false
+	case !hadConfig:
+		return SwitchOutcome{}, fmt.Errorf("%w: %s's config file was not found",
+			apperr.ErrConfig, spec.Name)
 	}
 
 	rollback := &switchRollback{
 		configPath:     s.Paths.GlobalConfigPath(),
 		originalConfig: originalConfig,
-		hadConfig:      true,
+		hadConfig:      hadConfig,
 		originalCreds:  originalCreds,
 		store:          s,
 	}
@@ -412,7 +424,15 @@ func (s *Switcher) readTargetCredentials(accountNum, email string) (string, erro
 
 // readTargetConfig reads the target slot's stored config and its identity
 // block.
+//
+// Both are nil for a provider with no account-scoped config. That is not a
+// missing backup: the credential is the whole login, and there is nothing to
+// splice into anything. Demanding an identity block there refused every switch
+// the provider could otherwise perform.
 func (s *Switcher) readTargetConfig(accountNum, email string) (jsontext.Value, object, error) {
+	if _, ok := s.spec().ConfigFile(); !ok {
+		return nil, nil, nil
+	}
 	stored := s.ReadAccountConfig(accountNum, email)
 	if stored == "" {
 		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Re-add "+
@@ -439,6 +459,8 @@ func (s *Switcher) readTargetConfig(accountNum, email string) (jsontext.Value, o
 // spliceLiveConfig puts the target's identity into the live config, preserving
 // everything else in it.
 //
+// A no-op when the provider has no account-scoped config: see readTargetConfig.
+//
 // The live config holds the user's projects, MCP servers and settings. Only the
 // identity block belongs to the account, so only that is replaced. When the
 // live config cannot be read at all, its bytes are copied aside under a name
@@ -447,6 +469,12 @@ func (s *Switcher) readTargetConfig(accountNum, email string) (jsontext.Value, o
 // nothing local distinguishes that from a working install whose config just
 // tore.
 func (s *Switcher) spliceLiveConfig(targetOAuth jsontext.Value, targetConfig object) ([]string, error) {
+	if targetOAuth == nil && targetConfig == nil {
+		// No account-scoped config for this provider. Writing one would create
+		// a file the tool never reads, in a home where a same-named file may
+		// belong to something else entirely.
+		return nil, nil
+	}
 	path := s.Paths.GlobalConfigPath()
 
 	existing, present, err := readObject(path)
