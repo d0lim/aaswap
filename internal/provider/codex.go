@@ -17,6 +17,25 @@ type Identity struct {
 	OrganizationUUID string
 	OrganizationName string
 	AccountUUID      string
+
+	// Fingerprint is a digest of the credential this identity was read from.
+	//
+	// It names the GENERATION, not the account: a refresh changes it while the
+	// account stays the same. That makes it the answer to "has someone logged
+	// in outside aaswap", and — for a provider nobody has written a parser for
+	// — the account's name until a person picks a better one.
+	Fingerprint string
+}
+
+// Handle is what a person calls this account.
+//
+// The address when there is one, because a person recognises it; the
+// fingerprint otherwise. Empty only for an identity that is not one.
+func (i Identity) Handle() string {
+	if i.Email != "" {
+		return i.Email
+	}
+	return i.Fingerprint
 }
 
 // CodexIdentity reads who a Codex credential belongs to.
