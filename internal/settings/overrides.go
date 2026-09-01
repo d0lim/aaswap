@@ -2,7 +2,7 @@ package settings
 
 import "slices"
 
-// Overrides carries the auto-switch flags a user passed on the command line.
+// Overrides carries the policy flags a user passed on the command line.
 // A nil field means the flag was absent, which is what lets a flag beat
 // settings.json without a zero value silently doing the same.
 type Overrides struct {

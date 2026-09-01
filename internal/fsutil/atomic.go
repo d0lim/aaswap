@@ -21,7 +21,7 @@ const jsonIndent = "  "
 // WriteJSONAtomic writes data as indented JSON, atomically, with the backup
 // directory's 0600/0700 modes.
 //
-// Shared by settings.json, the auto-switch state file, the stash manifest, the
+// Shared by settings.json, the stash manifest, the
 // usage store and session config — every machine-local JSON artifact aaswap
 // owns.
 //

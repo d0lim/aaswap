@@ -8,7 +8,7 @@
 // shelf life, so one failed round trip blanked every account at once. Here a
 // failure updates only the error and backoff fields and never touches the
 // last-good measurement — stale-on-error. Every surface shares the table, so a
-// fetch made for the list command also serves the auto-switch engine, and each
+// fetch made for the list command also serves the dashboard, and each
 // learns from the other's requests.
 //
 // # What is persisted, and what is not

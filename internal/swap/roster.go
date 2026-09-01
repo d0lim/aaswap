@@ -47,7 +47,7 @@ type Account struct {
 	OrganizationName string `json:"organizationName,omitzero"`
 	Added            string `json:"added,omitzero"`
 	Kind             Kind   `json:"kind,omitzero"`
-	// Disabled excludes the slot from automatic selection while leaving it
+	// Disabled excludes the account from rotation while leaving it
 	// switchable by hand. Absent rather than false when off, matching how the
 	// record is written elsewhere.
 	Disabled bool `json:"disabled,omitzero"`

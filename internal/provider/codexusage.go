@@ -47,7 +47,7 @@ const rolloutScanLimit = 40
 // windows it last had have probably reset since.
 //
 // Reports false rather than a zero measurement when there is nothing to read.
-// Zero would render as "plenty left" and could send an auto-switch onto an
+// Zero would render as "plenty left" and could send a person onto an
 // account that is actually spent.
 func CodexUsage(codexHome string) (*usage.Result, time.Time, bool) {
 	for _, path := range recentRollouts(filepath.Join(codexHome, "sessions")) {
