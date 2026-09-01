@@ -69,9 +69,34 @@ func splitRunArgsAt(args []string, at int) (identifier string, claudeArgs []stri
 	return "", args
 }
 
+// errClaudeOnly explains why a command refuses a non-Claude provider.
+//
+// Session mode is Claude Code's shape end to end: the profile directory, the
+// env var that points at it, the binary launched into it, the credential
+// layout inside it, and the MCP mirroring. Launching `claude` because someone
+// asked for a Codex session is the worst available answer — it would run the
+// wrong tool as the wrong account and look like it worked.
+func errClaudeOnly(provider, what string) error {
+	return fmt.Errorf("%w: %s is Claude Code's session machinery and does not "+
+		"support %s yet. Use `aaswap --provider %s switch` to change that "+
+		"provider's active login instead",
+		apperr.ErrConfig, what, provider, provider)
+}
+
+// claudeOnly refuses a command that has no meaning outside Claude Code.
+func (a *App) claudeOnly(s *swap.Switcher, what string) error {
+	if s.Provider == "" || s.Provider == swap.ProviderClaude {
+		return nil
+	}
+	return errClaudeOnly(s.Provider, what)
+}
+
 func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []string, share session.ShareOptions) error {
 	s, err := a.switcher()
 	if err != nil {
+		return err
+	}
+	if err := a.claudeOnly(s, "session mode"); err != nil {
 		return err
 	}
 
@@ -327,6 +352,9 @@ func (a *App) runMap(identifier, dir string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.claudeOnly(s, "directory mapping"); err != nil {
+		return err
+	}
 	num, account, err := s.ResolveAccount(identifier)
 	if err != nil {
 		return err
@@ -351,6 +379,9 @@ func (a *App) runUnmap(dir string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.claudeOnly(s, "directory mapping"); err != nil {
+		return err
+	}
 	store := mappings.New(s.BackupRoot())
 	removed, err := store.Remove(dir)
 	if err != nil {
@@ -367,6 +398,9 @@ func (a *App) runUnmap(dir string) error {
 func (a *App) runMappings() error {
 	s, err := a.switcher()
 	if err != nil {
+		return err
+	}
+	if err := a.claudeOnly(s, "directory mapping"); err != nil {
 		return err
 	}
 	store := mappings.New(s.BackupRoot())
