@@ -7,6 +7,7 @@ import (
 	"github.com/d0lim/ccswap/internal/claudeapi"
 	"github.com/d0lim/ccswap/internal/credstore"
 	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/paths"
 	"github.com/d0lim/ccswap/internal/pollpolicy"
 	"github.com/d0lim/ccswap/internal/render"
 	"github.com/d0lim/ccswap/internal/swap"
@@ -37,6 +38,7 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 
 	if len(snapshot.Views) == 0 {
 		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: ccswap add"))
+		a.noteClaudeSwapStore(s.Paths)
 		return nil
 	}
 
@@ -594,4 +596,23 @@ func (a *App) purgeUnclaimed(s *swap.Switcher, entries map[string]*credstore.Sta
 // id begins with its timestamp.
 func sortedIDs(entries map[string]*credstore.StashEntry) []string {
 	return credstore.SortedStashIDs(entries)
+}
+
+// noteClaudeSwapStore points out a store left by the claude-swap project.
+//
+// Shown only when ccswap has no accounts of its own, which is the only moment
+// the suggestion is actionable — import-store refuses to merge into a populated
+// store, so nagging someone who already has accounts would offer a command that
+// cannot run.
+//
+// A note, never an automatic import: this names another tool's live credential
+// store, and moving one out from under its owner on a first run is not a
+// decision a listing gets to make.
+func (a *App) noteClaudeSwapStore(resolver *paths.Resolver) {
+	source, found := resolver.FindClaudeSwapStore()
+	if !found {
+		return
+	}
+	a.printer.Println(a.printer.Dimmed(
+		"Found a claude-swap store at " + source + " — `ccswap import-store` moves it over."))
 }

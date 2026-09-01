@@ -250,3 +250,43 @@ func copyFile(src, dst string, perm fs.FileMode) error {
 func isCrossDevice(err error) bool {
 	return errors.Is(err, syscall.EXDEV)
 }
+
+// AdoptStore moves a foreign store's directory tree into this resolver's backup
+// root, and reports where it came from.
+//
+// Moved, not copied. Both trees would hold the same OAuth refresh tokens, and a
+// refresh ROTATES the token — so whichever tool refreshed first would silently
+// invalidate the other copy, and the other would then report a live account as
+// dead. One store, one truth.
+//
+// Refuses when this resolver's root already holds a roster: merging two account
+// tables is a decision about which slot wins, and nothing here is entitled to
+// make it.
+func (r *Resolver) AdoptStore(source string) error {
+	target := r.BackupRoot()
+	if samePath(source, target) {
+		return fmt.Errorf("%w: the store is already ccswap's own", apperr.ErrConfig)
+	}
+	if exists(filepath.Join(target, RosterFileName)) {
+		return fmt.Errorf("%w: ccswap already has accounts at %s; "+
+			"remove or move that store first", apperr.ErrConfig, target)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		return fmt.Errorf("%w: preparing %s: %w", apperr.ErrConfig, target, err)
+	}
+	// A target with nothing but a cache and a log is not a store — it is what a
+	// single `ccswap list` leaves on a fresh machine, and it must not block an
+	// import.
+	if exists(target) {
+		if err := wipeThrowawayArtifacts(target); err != nil {
+			return fmt.Errorf("%w: clearing %s: %w", apperr.ErrConfig, target, err)
+		}
+		if err := os.Remove(target); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%w: %s is not empty: %w", apperr.ErrConfig, target, err)
+		}
+	}
+	if err := moveTree(source, target); err != nil {
+		return fmt.Errorf("%w: moving %s to %s: %w", apperr.ErrConfig, source, target, err)
+	}
+	return nil
+}

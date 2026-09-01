@@ -114,7 +114,7 @@ func TestCredentialsPath(t *testing.T) {
 // from one host.
 func TestBackupRoot(t *testing.T) {
 	home := t.TempDir()
-	xdgDefault := filepath.Join(home, ".local", "share", "claude-swap")
+	xdgDefault := filepath.Join(home, ".local", "share", BackupDirName)
 	legacy := filepath.Join(home, LegacyBackupDirName)
 
 	// Absolute for the HOST, not for the platform under test: the resolver's
@@ -129,13 +129,13 @@ func TestBackupRoot(t *testing.T) {
 		want     string
 	}{
 		{"linux without XDG_DATA_HOME", platform.Linux, "", xdgDefault},
-		{"linux with absolute XDG_DATA_HOME", platform.Linux, absXDG, filepath.Join(absXDG, "claude-swap")},
+		{"linux with absolute XDG_DATA_HOME", platform.Linux, absXDG, filepath.Join(absXDG, BackupDirName)},
 		// Per the XDG spec an empty or relative value must be ignored.
 		{"linux ignores empty XDG_DATA_HOME", platform.Linux, "", xdgDefault},
 		{"linux ignores relative XDG_DATA_HOME", platform.Linux, "relative/path", xdgDefault},
 		// systemd units and Dockerfiles set env vars without shell expansion,
 		// so a literal ~/foo has to resolve.
-		{"linux expands a leading tilde", platform.Linux, "~/custom-data", filepath.Join(home, "custom-data", "claude-swap")},
+		{"linux expands a leading tilde", platform.Linux, "~/custom-data", filepath.Join(home, "custom-data", BackupDirName)},
 		{"wsl uses the XDG layout", platform.WSL, "", xdgDefault},
 		{"macos uses the legacy layout", platform.MacOS, "", legacy},
 		{"windows uses the legacy layout", platform.Windows, "", legacy},

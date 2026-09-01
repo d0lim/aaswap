@@ -19,10 +19,17 @@ import (
 // Keychain service names.
 const (
 	// BackupService holds ccswap's own per-account backup credentials.
-	// Deliberately distinct from the legacy keyring service so old keyring
-	// items and new security(1) items can coexist during migration
-	// (safe write, verify, then delete).
-	BackupService = "claude-swap"
+	//
+	// ccswap's own service, not claude-swap's. The two projects evolve
+	// independently and a Keychain service is a flat namespace keyed by
+	// account name, so sharing one means either project's `remove` deletes
+	// the other's item for that slot. See ClaudeSwapBackupService.
+	BackupService = "ccswap"
+
+	// ClaudeSwapBackupService is where the claude-swap project keeps the same
+	// kind of item. Read only by the import command, which copies items across
+	// and leaves the originals alone.
+	ClaudeSwapBackupService = "claude-swap"
 
 	// ClaudeOAuthService is Claude Code's *active* OAuth credential. Claude
 	// Code reads it; ccswap reads and writes it when switching accounts.
