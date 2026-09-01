@@ -64,13 +64,40 @@ ccswap add
 
 ### Add more accounts
 
-Log in with another account, then:
+ccswap can't log you in — Claude Code owns that flow — so adding another account
+means logging in with it first. `--wait` turns that into one command instead of
+two: it tells you what to do and captures the account the moment the login
+lands.
+
+```bash
+ccswap add --wait
+```
+
+```
+Currently logged in as work@example.com [Acme] — already stored as account 1.
+
+  Log in with the account you want to add:
+
+      claude   then run  /login
+
+  Do not run /logout first — it can revoke the token stored for work@example.com.
+
+  Waiting… (Ctrl-C to stop)
+```
+
+Run `claude` in another terminal, `/login` with the other account, and come back
+to find it added. If you've already logged in with the new account, plain
+`ccswap add` captures it immediately:
 
 ```bash
 ccswap add
 ```
 
 Do not run `/logout` first: current Claude Code may revoke the refresh token stored for the account you are leaving.
+
+On a machine with no account logged in at all, a plain `ccswap add` in a
+terminal waits by itself — the alternative is an error whose only advice is to
+go and log in. Scripts and `--json` still get that error rather than a hang.
 
 ### Switch accounts
 
@@ -114,12 +141,25 @@ ccswap tui
      5h  ██▋░░░░░░░░░░░░░░░░░░░░░  11%   resets 18:02
      7d  ████▌░░░░░░░░░░░░░░░░░░░  19%   resets Jul 7 12:12
 
-   ↑↓ move  ·  enter switch  ·  d disable  ·  r refresh  ·  w watch  ·  q quit
+   ↑↓ move  ·  enter switch  ·  a add  ·  t token  ·  q quit  ·  ? help
 ```
 
-`w` turns on watch mode, which re-collects every 30 seconds. Switching asks
-before it replaces a live credential. It needs a terminal — in a script, use
-`ccswap list --json`.
+Accounts can be added without leaving the dashboard:
+
+| Key | |
+|---|---|
+| `a` | add the account you are logged in as (or refresh its slot, if it already has one) |
+| `n` | wait for a `/login` elsewhere, then add that account |
+| `t` | paste a setup token or managed API key |
+| `enter` | switch to the selected account |
+| `d` | hold an account out of rotation, or return it |
+| `r` / `w` | collect now / re-collect every 30 seconds |
+| `?` | every key, including the ones the footer drops on a narrow terminal |
+
+`n` is the dashboard's form of `ccswap add --wait`: it keeps watching while you
+run `/login` in another terminal and captures the account when it appears.
+Switching asks before it replaces a live credential. The dashboard needs a
+terminal — in a script, use `ccswap list --json`.
 
 Or let ccswap auto-pick by remaining quota — `ccswap switch --strategy best` (most quota left) or `--strategy next-available` (skip rate-limited accounts).
 
@@ -210,7 +250,9 @@ If an account's token expires, log back into Claude Code with that account and r
 ccswap add
 ```
 
-This will update the stored credentials without creating a duplicate.
+This will update the stored credentials without creating a duplicate. `ccswap
+add --wait` works here too: start it, log back in, and it refreshes the slot in
+place when the login lands.
 
 ### Other commands
 
@@ -221,6 +263,7 @@ ccswap config                    # Show or edit settings (see Configuration belo
 ccswap list                      # Show all accounts with 5h/7d usage and reset times
 ccswap list --token-status       # Add source-labelled OAuth token diagnostics
 ccswap status                    # Show current account
+ccswap add --wait                # Wait for a /login in Claude Code, then capture that account
 ccswap add --slot 3              # Add account to a specific slot (prompts before overwrite)
 ccswap add --alias dev           # Add account and give it a short alias
 ccswap remove 2                  # Remove an account
@@ -396,6 +439,9 @@ ccswap add-token --email user@example.com     # optional label override
 
 `--email` is optional; omitted values use `setup-token-{slot}@token.local`
 (or `api-key-{slot}@token.local` for API keys). No Anthropic API calls are made.
+
+The dashboard has the same thing behind `t`, which masks everything past the
+`sk-ant-oat01-` / `sk-ant-api03-` prefix and names the kind it detected.
 
 **API-key accounts.** An `sk-ant-api...` value registers a managed API-key account
 (the kind Claude Code uses after `/login` with a key) rather than an OAuth

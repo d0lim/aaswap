@@ -28,6 +28,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toggledMsg:
 		return m.handleToggled(msg)
 
+	case liveProbedMsg:
+		return m.handleLiveProbed(msg)
+
+	case addedMsg:
+		return m.handleAdded(msg)
+
+	case awaitTickMsg:
+		// Stops when the wait does. The marker is the only thing on screen
+		// that says the dashboard is still watching.
+		if m.awaitCancel == nil {
+			return m, nil
+		}
+		m.awaitFrame++
+		m.modal = m.waitingModal()
+		return m, awaitTickCmd()
+
 	case tickMsg:
 		if !m.watch {
 			return m, nil
@@ -50,6 +66,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey routes a keypress, giving whatever overlay is open first refusal.
 func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Ahead of every overlay, because an overlay that can swallow ctrl+c is a
+	// dashboard someone cannot get out of — and the waiting modal, which takes
+	// only esc, would be exactly that.
+	if key.String() == "ctrl+c" {
+		return m.quit()
+	}
+
 	switch {
 	case m.showHelp:
 		// Any key closes help. It is a reference, not a mode to get stuck in.
@@ -60,9 +83,8 @@ func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch key.String() {
-	case "ctrl+c", "q", "esc":
-		m.quitting = true
-		return m, tea.Quit
+	case "q", "esc":
+		return m.quit()
 
 	case "?":
 		m.showHelp = true
@@ -79,6 +101,15 @@ func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "d":
 		return m.toggleSelected()
+
+	case "a":
+		return m.askAdd()
+
+	case "n":
+		return m.startAwait()
+
+	case "t":
+		return m.askAddToken()
 
 	case "r":
 		if m.busy != "" {
@@ -98,11 +129,35 @@ func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// quit leaves the dashboard, ending anything still running for it.
+//
+// A wait is a goroutine polling the live config. Quitting without ending it
+// leaves it running for as long as the process does.
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	m.quitting = true
+	m.stopAwait()
+	return m, tea.Quit
+}
+
 // handleModalKey answers the open modal.
 func (m Model) handleModalKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	md := m.modal
-	if md.kind == modalNotice {
+	switch md.kind {
+	case modalNotice:
 		m.modal = nil
+		return m, nil
+	case modalInput:
+		return m.handleInputKey(key)
+	case modalWaiting:
+		// Only esc. Every other key is one a person pressed while reading the
+		// instructions, and cancelling a wait they meant to keep is not
+		// something to do on an ambiguous keystroke.
+		if key.String() == "esc" {
+			m.stopAwait()
+			m.modal = nil
+			m.status, m.statusErr = "Stopped waiting", false
+			return m, clearStatusCmd()
+		}
 		return m, nil
 	}
 
