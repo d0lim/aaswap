@@ -271,3 +271,13 @@ func (h *harness) sessionDir(t *testing.T, provider, name, email string) string 
 	}
 	return session.DirFor(s.BackupRoot(), name, email)
 }
+
+// stashUnclaimed preserves a credential that belongs to no managed account,
+// which is the state `account unclaimed` reports on.
+func (h *harness) stashUnclaimed(t *testing.T, credentials string) {
+	t.Helper()
+	if _, err := h.switcher.Creds.WriteUnclaimed(credentials,
+		credstore.StashEntry{Reason: "test"}, h.now); err != nil {
+		t.Fatal(err)
+	}
+}

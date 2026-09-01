@@ -572,5 +572,6 @@ func (a *App) notePredecessorStore(resolver *paths.Resolver) {
 		return
 	}
 	a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
-		"Found a %s store at %s — `aaswap adopt` moves it over.", found.Name, found.Root)))
+		"Found a %s store at %s — `aaswap account adopt` moves it over.",
+		found.Name, found.Root)))
 }

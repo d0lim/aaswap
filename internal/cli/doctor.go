@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/d0lim/aaswap/internal/paths"
 	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/spf13/cobra"
 )
@@ -65,6 +66,10 @@ type providerReport struct {
 	// Accounts is how many are stored, and LoggedIn whether one is live.
 	Accounts int  `json:"accounts"`
 	LoggedIn bool `json:"loggedIn"`
+	// Unclaimed counts credentials a switch preserved but could not file
+	// against any managed account. They are not lost, but nothing will use
+	// them either, so they need saying out loud somewhere.
+	Unclaimed int `json:"unclaimed"`
 
 	Capabilities map[string]capabilityReport `json:"capabilities"`
 }
@@ -72,6 +77,11 @@ type providerReport struct {
 type doctorPayload struct {
 	SchemaVersion int              `json:"schemaVersion"`
 	Providers     []providerReport `json:"providers"`
+	// Predecessor names a store left by an earlier version of this tool, empty
+	// when there is none. Reported rather than adopted: importing another
+	// installation's credentials is a decision, not a diagnostic.
+	Predecessor     string `json:"predecessor,omitzero"`
+	PredecessorPath string `json:"predecessorPath,omitzero"`
 }
 
 func (a *App) runDoctor() error {
@@ -80,12 +90,31 @@ func (a *App) runDoctor() error {
 		reports = append(reports, a.reportProvider(name))
 	}
 
+	payload := doctorPayload{SchemaVersion: 1, Providers: reports}
+	if resolver, err := a.resolver(); err == nil {
+		if found, ok := resolver.FindPredecessor(); ok {
+			payload.Predecessor, payload.PredecessorPath = found.Name, found.Root
+		}
+	}
+
 	if a.json {
-		a.emitJSON(doctorPayload{SchemaVersion: 1, Providers: reports})
+		a.emitJSON(payload)
 		return nil
 	}
-	a.printDoctor(reports)
+	a.printDoctor(payload)
 	return nil
+}
+
+// resolver is the path resolver, borrowed from any provider's switcher.
+//
+// Predecessor detection is about the machine rather than a provider, but only a
+// switcher carries a resolver, so one is asked for it.
+func (a *App) resolver() (*paths.Resolver, error) {
+	s, err := a.NewSwitcher(provider.Claude)
+	if err != nil {
+		return nil, err
+	}
+	return s.Paths, nil
 }
 
 // reportProvider builds one provider's row.
@@ -118,6 +147,9 @@ func (a *App) reportProvider(name string) providerReport {
 	if roster, err := s.RosterOrEmpty(); err == nil {
 		report.Accounts = len(roster.Names())
 	}
+	if entries, _ := s.Creds.ListUnclaimed(); entries != nil {
+		report.Unclaimed = len(entries)
+	}
 	_, report.LoggedIn = s.LiveIdentity()
 	return report
 }
@@ -134,8 +166,8 @@ func usageScopeName(spec provider.Spec) string {
 	}
 }
 
-func (a *App) printDoctor(reports []providerReport) {
-	for i, report := range reports {
+func (a *App) printDoctor(payload doctorPayload) {
+	for i, report := range payload.Providers {
 		if i > 0 {
 			a.printer.Println("")
 		}
@@ -168,5 +200,26 @@ func (a *App) printDoctor(reports []providerReport) {
 				"note: aaswap cannot tell whether a session is running against a "+
 					"profile, so it never replaces a profile's credential on its own."))
 		}
+
+		// Preserved-but-unfiled credentials are easy to never learn about:
+		// nothing lists them unless you already know the command. Naming the
+		// command here is the whole point — inspecting and dropping them stays
+		// where it is, because one of those destroys a credential and this
+		// command must not.
+		if report.Unclaimed > 0 {
+			a.printer.Println("  ", a.printer.Muted(fmt.Sprintf(
+				"note: %d preserved credential(s) belong to no managed account. "+
+					"Inspect with `aaswap --provider %s account unclaimed`.",
+				report.Unclaimed, report.Name)))
+		}
+	}
+
+	// A store left by an earlier name of this tool. Reported, never adopted on
+	// its own: copying another installation's credentials is a decision.
+	if payload.Predecessor != "" {
+		a.printer.Println("")
+		a.printer.Println(a.printer.Muted(fmt.Sprintf(
+			"Found a %s store at %s — `aaswap account adopt` moves it over.",
+			payload.Predecessor, payload.PredecessorPath)))
 	}
 }

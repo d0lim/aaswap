@@ -14,15 +14,18 @@ import (
 func (a *App) rootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "aaswap",
-		Short: "Switch between multiple Claude Code accounts",
-		Long: "aaswap manages several Claude Code logins on one machine: it stores each\n" +
+		Short: "Switch between multiple agent CLI accounts",
+		Long: "aaswap manages several agent CLI logins on one machine: it stores each\n" +
 			"account's credential, swaps the live login between them, and reports how\n" +
-			"much rate-limit headroom each one has left.",
+			"much rate-limit headroom each one has left.\n\n" +
+			"Claude Code is the default. Address another with --provider, and run\n" +
+			"`aaswap doctor` to see what is supported for each.",
 		Example: strings.Join([]string{
-			"  aaswap add                       # capture the account you are logged in as",
+			"  aaswap login                     # store the account you are logged in as",
 			"  aaswap list                      # show every account and its usage",
-			"  aaswap switch 2                  # activate account 2",
-			"  aaswap list --json               # the same listing, for a script",
+			"  aaswap switch work               # activate the account called work",
+			"  aaswap --provider codex list     # the same, for Codex",
+			"  aaswap doctor                    # what works for which provider",
 		}, "\n"),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -57,9 +60,6 @@ func (a *App) rootCommand() *cobra.Command {
 		a.configCommand(),
 		a.doctorCommand(),
 		a.upgradeCommand(),
-		// Destructive, and deliberately not buried: a command that erases every
-		// account is one people should find on purpose, not by accident.
-		a.purgeCommand(),
 
 		a.accountCommand(),
 		a.dirCommand(),
@@ -167,18 +167,36 @@ func (a *App) switchCommand() *cobra.Command {
 }
 
 func (a *App) removeCommand() *cobra.Command {
+	var all bool
 	cmd := &cobra.Command{
-		Use:     "remove NUM|EMAIL|ALIAS",
+		Use:     "remove [ACCOUNT]",
 		Aliases: []string{"rm"},
 		Short:   "Forget a managed account",
 		Long: "Removes aaswap's copy of the account: its stored credential, its stored\n" +
-			"config, and its roster entry. It does NOT log you out — the live login is\n" +
-			"Claude Code's, not aaswap's.",
-		Args: cobra.ExactArgs(1),
+			"config, and its roster entry. It does NOT log you out — the live login\n" +
+			"belongs to the provider's own tool, not to aaswap.\n\n" +
+			"--all forgets every account for this provider.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Erasing the whole store is what `purge` used to be. It is the
+			// same operation as removing one account, so it is the same verb
+			// with a flag rather than a second top-level command whose name
+			// does not say what it removes.
+			if all {
+				if len(args) > 0 {
+					return fmt.Errorf("%w: --all removes every account, so it cannot "+
+						"also be given one to remove", apperr.ErrValidation)
+				}
+				return a.runPurge(cmd)
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("%w: name an account to remove, or pass --all to "+
+					"remove every one", apperr.ErrValidation)
+			}
 			return a.runRemove(cmd, args[0])
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "forget every account for this provider")
 	silenceUsage(cmd)
 	return cmd
 }
@@ -220,20 +238,6 @@ func (a *App) renameCommand() *cobra.Command {
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.runRename(cmd, args[0], args[1])
-		},
-	}
-	silenceUsage(cmd)
-	return cmd
-}
-
-func (a *App) purgeCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "purge",
-		Short: "Forget every managed account",
-		Long:  "Removes aaswap's whole store. Your live login survives.",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.runPurge(cmd)
 		},
 	}
 	silenceUsage(cmd)

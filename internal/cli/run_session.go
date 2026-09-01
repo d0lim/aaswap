@@ -22,14 +22,17 @@ import (
 func (a *App) runCommand() *cobra.Command {
 	var share, shareHistory bool
 	cmd := &cobra.Command{
-		Use:   "run [NUM|EMAIL|ALIAS] [-- CLAUDE ARGS...]",
-		Short: "Launch Claude Code as one account, leaving the default login alone",
-		Long: "With no account, the working directory decides: `aaswap map` remembers which\n" +
-			"account a directory belongs to, and the nearest mapped ancestor wins.\n" +
-			"An unmapped directory launches Claude Code exactly as typing `claude` would.\n\n" +
-			"Everything after `--` is passed through to Claude Code.",
-		Example: "  aaswap run 2\n" +
+		Use:   "run [ACCOUNT] [-- TOOL ARGS...]",
+		Short: "Launch the provider's tool as one account, leaving the default login alone",
+		Long: "With no account, the working directory decides: `aaswap dir map` remembers\n" +
+			"which account a directory belongs to, and the nearest mapped ancestor wins.\n" +
+			"An unmapped directory launches the tool exactly as typing it would.\n\n" +
+			"Everything after `--` is passed through to the tool.\n\n" +
+			"Available for any provider that declares an isolated profile directory;\n" +
+			"`aaswap doctor` says which do.",
+		Example: "  aaswap run work\n" +
 			"  aaswap run work -- --resume\n" +
+			"  aaswap --provider codex run work\n" +
 			"  aaswap run                      # whichever account this directory maps to",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
