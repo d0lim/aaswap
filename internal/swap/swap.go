@@ -28,6 +28,7 @@
 package swap
 
 import (
+	"cmp"
 	"context"
 	"path/filepath"
 	"time"
@@ -166,10 +167,11 @@ type Switcher struct {
 func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 	root := r.BackupRoot()
 	client := claudeapi.New()
+	spec := providerpkg.MustLookup(cmp.Or(provider, ProviderClaude))
 	s := &Switcher{
 		Provider:    provider,
 		Paths:       r,
-		Creds:       credstore.NewForProvider(r, root, keychain.New(), provider),
+		Creds:       credstore.NewForProvider(r, root, keychain.New(), provider, liveLayoutFor(r, spec)),
 		Profiles:    profilesFor(provider, r.Platform),
 		Usage:       usagestore.New(r.CacheDir()),
 		Oracle:      client,
@@ -179,12 +181,21 @@ func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 		Now:         time.Now,
 		LockTimeout: lockfile.DefaultTimeout,
 	}
-	if provider == ProviderCodex {
-		// Codex's identity oracle and token refresher are Anthropic's, and
-		// pointing them at a Codex credential would ask the wrong server about
-		// the wrong token. Nil is the documented "do not check" for both.
+	// What the declaration says this provider can do decides what gets wired.
+	// Anthropic's oracle and refresher speak for Anthropic's tokens only, so a
+	// provider that does not declare itself refreshable gets neither: nil is
+	// the documented "do not check", and pointing them at another vendor's
+	// credential would ask the wrong server about the wrong token.
+	if !spec.Can(providerpkg.CapRefresh) {
 		s.Oracle, s.Refresher = nil, nil
-		s.Fetcher = s.codexUsageFetcher()
+	}
+	if scope, ok := spec.UsageScope(); !ok {
+		// No declared usage source. An absent fetcher reports every account as
+		// unknown, which is the honest answer and reads as "not exhausted"
+		// everywhere it matters.
+		s.Fetcher = nil
+	} else if scope == providerpkg.UsageLiveOnly {
+		s.Fetcher = s.liveOnlyUsageFetcher()
 	}
 	return s
 }
@@ -251,8 +262,32 @@ func (s *Switcher) withLock(fn func() error) error {
 // gets the file-only shape outright — passing it a Keychain would hand a
 // file-only tool a macOS constraint it does not have.
 func profilesFor(provider string, p platform.Platform) providerpkg.ProfileStore {
-	if provider == ProviderCodex {
+	// Only Claude keeps a profile credential anywhere but a file. Every other
+	// provider is file-only on every platform, so handing it a Keychain would
+	// give a file-only tool a macOS constraint it does not have.
+	if cmp.Or(provider, ProviderClaude) != ProviderClaude {
 		return providerpkg.NewClaudeProfiles(p, nil)
 	}
 	return providerpkg.NewClaudeProfiles(p, keychain.New())
+}
+
+// LiveLayout translates a provider's declaration into the two facts the
+// credential store needs about where its live login lives.
+//
+// The store sits below the provider package and cannot read a declaration
+// itself, so the translation happens here — the one place that has both.
+// Exported because anything assembling a Switcher by hand has to produce the
+// same layout production does, and deriving it a second way is how the two
+// drift.
+func LiveLayout(r *paths.Resolver, provider string) credstore.Layout {
+	return liveLayoutFor(r, providerpkg.MustLookup(cmp.Or(provider, ProviderClaude)))
+}
+
+func liveLayoutFor(r *paths.Resolver, spec providerpkg.Spec) credstore.Layout {
+	layout := credstore.Layout{Keychain: spec.Keychain}
+	if secrets := spec.SecretFiles(); len(secrets) > 0 {
+		layout.LivePath = r.ProviderCredentialsPath(
+			spec.Home.Env, spec.Home.Default, secrets[0].Path)
+	}
+	return layout
 }

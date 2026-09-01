@@ -68,7 +68,7 @@ func newFixture(t *testing.T) *fixture {
 		Manager: &Manager{
 			BackupRoot: root,
 			Platform:   platform.Linux,
-			Creds:      credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), "claude"),
+			Creds:      credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), "claude", credstore.Layout{Keychain: true}),
 			// A nil Keychain is the file-only shape, which is what Linux is
 			// and what every non-macOS host gets.
 			Profiles: provider.NewClaudeProfiles(platform.Linux, nil),

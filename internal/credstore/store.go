@@ -22,8 +22,11 @@ type Store struct {
 	// layout every store written before providers existed uses, and the
 	// upgrade reads through a store built that way.
 	provider string
-	kc       *keychain.Keychain
-	cap      *capability
+	// layout is how this provider's live credential is stored, derived from
+	// its declaration by the caller.
+	layout Layout
+	kc     *keychain.Keychain
+	cap    *capability
 
 	// lastActiveBackend records where the most recent active-credential write
 	// landed, "keychain" or "file", for the post-switch follow-up message.
@@ -35,7 +38,9 @@ type Store struct {
 // The Keychain handle is injectable so tests drive every branch with a fake
 // runner; production passes keychain.New().
 func New(r *paths.Resolver, backupRoot string, kc *keychain.Keychain) *Store {
-	return NewForProvider(r, backupRoot, kc, "")
+	// Claude's layout: the unscoped store is the pre-provider one, and that
+	// only ever held Claude's accounts.
+	return NewForProvider(r, backupRoot, kc, "", Layout{Keychain: true})
 }
 
 // NewForProvider builds a Store scoped to one auth domain.
@@ -49,7 +54,7 @@ func New(r *paths.Resolver, backupRoot string, kc *keychain.Keychain) *Store {
 // An empty provider selects the unscoped layout. That is not a default anyone
 // should choose: it is what a store written before providers existed looks
 // like, and it exists so the upgrade can read one.
-func NewForProvider(r *paths.Resolver, backupRoot string, kc *keychain.Keychain, provider string) *Store {
+func NewForProvider(r *paths.Resolver, backupRoot string, kc *keychain.Keychain, provider string, layout Layout) *Store {
 	dir := filepath.Join(backupRoot, "credentials")
 	if provider != "" {
 		dir = filepath.Join(dir, provider)
@@ -60,6 +65,7 @@ func NewForProvider(r *paths.Resolver, backupRoot string, kc *keychain.Keychain,
 		backupRoot:     backupRoot,
 		credentialsDir: dir,
 		provider:       provider,
+		layout:         layout,
 		kc:             kc,
 		cap:            newCapability(r.Platform),
 	}
@@ -76,7 +82,8 @@ func (s *Store) Unscoped() *Store {
 	if s.provider == "" {
 		return s
 	}
-	return NewForProvider(s.paths, s.backupRoot, s.kc, "")
+	// The pre-provider layout is Claude's, whatever this view is scoped to.
+	return NewForProvider(s.paths, s.backupRoot, s.kc, "", Layout{Keychain: true})
 }
 
 // CredentialsDir is where per-account .enc backups live.

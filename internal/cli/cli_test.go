@@ -92,7 +92,8 @@ func newHarness(t *testing.T) *harness {
 			FetchStagger: time.Millisecond,
 			Paths:        resolver,
 			Creds: credstore.NewForProvider(resolver, root,
-				keychain.NewWithRunner(refusingKeychain{}, 0), provider),
+				keychain.NewWithRunner(refusingKeychain{}, 0), provider,
+				swap.LiveLayout(resolver, provider)),
 			Usage:    usagestore.New(resolver.CacheDir()),
 			Settings: settings.Defaults(),
 		}

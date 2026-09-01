@@ -19,7 +19,8 @@ func codexStore(t *testing.T) (*Store, *paths.Resolver) {
 		t.Fatal(err)
 	}
 	kc := keychain.NewWithRunner(newFakeKeychain(), 0)
-	return NewForProvider(r, t.TempDir(), kc, "codex"), r
+	return NewForProvider(r, t.TempDir(), kc, "codex",
+		Layout{LivePath: r.CodexAuthPath()}), r
 }
 
 const codexAuth = `{"auth_mode":"chatgpt","tokens":{"id_token":"a.b.","access_token":"at"}}`

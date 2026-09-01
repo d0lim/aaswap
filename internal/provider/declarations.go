@@ -30,6 +30,8 @@ func claudeSpec() Spec {
 		},
 		Login:    &Login{Argv: []string{"claude", "/login"}},
 		Identity: claudeIdentity{},
+		// The only tool that keeps its live credential anywhere but a file.
+		Keychain: true,
 		// The only provider that can renew a credential without a new browser
 		// round trip: Anthropic publishes an OAuth token endpoint for it.
 		Refreshable: true,

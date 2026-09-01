@@ -57,7 +57,7 @@ func newFixture(t *testing.T) *fixture {
 	f.Switcher = &swap.Switcher{
 		FetchStagger: time.Millisecond,
 		Paths:        resolver,
-		Creds:        credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), swap.ProviderClaude),
+		Creds:        credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), swap.ProviderClaude, swap.LiveLayout(resolver, swap.ProviderClaude)),
 		Usage:        usagestore.New(resolver.CacheDir()),
 		Settings:     settings.Defaults(),
 	}

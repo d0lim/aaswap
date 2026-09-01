@@ -219,6 +219,16 @@ type Spec struct {
 	Session  *Session       // nil → `run` is unsupported here
 	Hazards  []Hazard
 
+	// Keychain says this provider's tool ALSO keeps its live credential in the
+	// macOS Keychain, so aaswap has to reconcile two stores that can disagree.
+	//
+	// Claude Code is the only one. Declaring it here rather than assuming it
+	// is what makes the file-only path the default: every other tool reads and
+	// writes a single file on every platform, and treating Claude's
+	// arrangement as normal is what kept the old implementation from
+	// generalising.
+	Keychain bool
+
 	// Refreshable says an expired credential can be renewed without a new
 	// login. A declared fact rather than an implementation: the renewal needs
 	// an HTTP client, which belongs to the layer that owns the network, and a
@@ -399,4 +409,24 @@ func validPath(path string) error {
 		return fmt.Errorf("the path escapes the directory")
 	}
 	return nil
+}
+
+// ConfigFile is the account-scoped config that sits BESIDE the credential, if
+// this provider has one.
+//
+// A declared identity file that is not itself the secret. Claude has one —
+// ~/.claude.json holds the address while .credentials.json holds the token — and
+// Codex does not, because its auth.json is both at once.
+//
+// That difference is why capture cannot be a path swap: with a separate config
+// there are two files to keep in step and a window between reading them, and
+// with one file there is neither. Callers ask this rather than the provider's
+// name so a provider added later lands on whichever side it belongs to.
+func (s Spec) ConfigFile() (File, bool) {
+	for _, file := range s.IdentityFiles() {
+		if !file.Role.Has(RoleSecret) {
+			return file, true
+		}
+	}
+	return File{}, false
 }

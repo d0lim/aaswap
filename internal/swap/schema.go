@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/d0lim/aaswap/internal/apperr"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
 )
 
 // SchemaVersion is the account table's current format.
@@ -32,11 +33,28 @@ const (
 )
 
 // Providers lists every addressable provider, in the order they are shown.
-var Providers = []string{ProviderClaude, ProviderCodex}
+//
+// Read from the declarations rather than repeated here: a second list is a
+// second place to forget, and the failure it produces is a provider a person
+// can name but no command can act on.
+func Providers() []string { return providerpkg.Names() }
 
 // KnownProvider reports whether a name is one this build can manage.
-func KnownProvider(name string) bool {
-	return slices.Contains(Providers, name)
+func KnownProvider(name string) bool { return providerpkg.Known(name) }
+
+// ProviderHomeEnvs is every environment variable that relocates some
+// provider's home directory.
+//
+// The path resolver captures these so a declaration is all it takes to have a
+// new provider's home override honoured.
+func ProviderHomeEnvs() []string {
+	var out []string
+	for _, name := range providerpkg.Names() {
+		if spec, ok := providerpkg.Lookup(name); ok && spec.Home.Env != "" {
+			out = append(out, spec.Home.Env)
+		}
+	}
+	return out
 }
 
 // File is sequence.json in full.

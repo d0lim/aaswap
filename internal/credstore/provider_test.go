@@ -19,7 +19,8 @@ func linuxStore(t *testing.T, root, provider string) *Store {
 	if provider == "" {
 		return New(r, root, kc)
 	}
-	return NewForProvider(r, root, kc, provider)
+	return NewForProvider(r, root, kc, provider, Layout{Keychain: provider != "codex",
+		LivePath: r.ProviderCredentialsPath("CODEX_HOME", ".codex", "auth.json")})
 }
 
 // Two providers can hold the same person's account under the same name: one

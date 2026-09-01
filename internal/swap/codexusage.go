@@ -45,8 +45,9 @@ func (c codexFetcher) FetchUsageForAccount(_ context.Context, req claudeapi.Fetc
 	return claudeapi.UsageOutcome{Usage: result}
 }
 
-// codexUsageFetcher builds the fetcher for this switcher's Codex store.
-func (s *Switcher) codexUsageFetcher() UsageFetcher {
+// liveOnlyUsageFetcher builds the fetcher for a provider that can only speak
+// for whoever is logged in now.
+func (s *Switcher) liveOnlyUsageFetcher() UsageFetcher {
 	active := ""
 	if identity, ok := s.LiveIdentity(); ok {
 		if roster, err := s.RosterOrEmpty(); err == nil {

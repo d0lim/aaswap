@@ -109,7 +109,9 @@ func providerFromEnv() string {
 }
 
 func defaultSwitcher(provider string) (*swap.Switcher, error) {
-	resolver, err := paths.FromEnv()
+	// Every provider's home variable, so one this build knows only by
+	// declaration still has its home honoured.
+	resolver, err := paths.FromEnv(swap.ProviderHomeEnvs()...)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +218,7 @@ func (a *App) switcher() (*swap.Switcher, error) {
 	// empty section and report no accounts.
 	if !swap.KnownProvider(name) {
 		return nil, fmt.Errorf("%w: %q is not a provider this build manages. Known: %s",
-			apperr.ErrValidation, name, strings.Join(swap.Providers, ", "))
+			apperr.ErrValidation, name, strings.Join(swap.Providers(), ", "))
 	}
 	s, err := a.NewSwitcher(name)
 	if err != nil {

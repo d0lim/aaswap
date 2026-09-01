@@ -251,23 +251,27 @@ func (s *Switcher) captureVerified(ctx context.Context, identity LiveIdentity) (
 // Read as bytes rather than parsed and re-serialized: this is the user's file,
 // and a slot must restore exactly what was captured.
 func (s *Switcher) ReadLiveConfig() (string, error) {
-	if s.provider() == ProviderCodex {
-		// Codex has no per-account config to capture. Its auth.json holds the
-		// credential AND the identity, and config.toml holds settings that
-		// belong to the machine rather than to whoever is logged in — swapping
-		// those would carry one account's model choice onto another.
+	spec := s.spec()
+	config, ok := s.configFileFor(spec)
+	if !ok {
+		// This provider declares no account-scoped config to capture. Its
+		// credential carries whatever identity it has, and anything else in its
+		// home is machine-scoped — swapping that would carry one account's
+		// model choice onto another.
 		//
 		// An empty object rather than an empty string, because the layers above
-		// treat "has a stored config" as half of "is switchable", and a Codex
-		// account with a credential IS switchable.
+		// read "has a stored config" as half of "is switchable", and an account
+		// with a credential IS switchable.
 		return "{}", nil
 	}
-	data, err := os.ReadFile(s.Paths.GlobalConfigPath())
+	data, err := os.ReadFile(config)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("%w: Claude's config file was not found", apperr.ErrConfig)
+			return "", fmt.Errorf("%w: %s's config file was not found",
+				apperr.ErrConfig, spec.Name)
 		}
-		return "", fmt.Errorf("%w: reading Claude's config: %w", apperr.ErrConfig, err)
+		return "", fmt.Errorf("%w: reading %s's config: %w",
+			apperr.ErrConfig, spec.Name, err)
 	}
 	return string(data), nil
 }

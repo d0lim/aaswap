@@ -35,7 +35,8 @@ func codexFixture(t *testing.T) *fixture {
 		Provider: ProviderCodex,
 		Paths:    r,
 		Creds: credstore.NewForProvider(r, root,
-			keychain.NewWithRunner(refusingKeychain{}, 0), ProviderCodex),
+			keychain.NewWithRunner(refusingKeychain{}, 0), ProviderCodex,
+			LiveLayout(r, ProviderCodex)),
 		Usage:    usagestore.New(r.CacheDir()),
 		Settings: settings.Defaults(),
 	}
@@ -146,7 +147,7 @@ func TestTheCodexFetcherReportsTheLiveAccountsRecordedQuota(t *testing.T) {
 	roster.Insert("spare", &Account{Email: "other@example.com"})
 	f.seedRoster(roster)
 
-	fetcher := f.codexUsageFetcher()
+	fetcher := f.liveOnlyUsageFetcher()
 
 	live := fetcher.FetchUsageForAccount(t.Context(), claudeapi.FetchRequest{AccountNum: "work"})
 	if live.Usage == nil || live.Usage.SevenDay == nil || live.Usage.SevenDay.Pct != 73 {
@@ -174,7 +175,7 @@ func TestTheCodexFetcherAttributesNothingWithNoLiveLogin(t *testing.T) {
 	roster.Insert("work", &Account{Email: "work@example.com"})
 	f.seedRoster(roster)
 
-	got := f.codexUsageFetcher().FetchUsageForAccount(t.Context(),
+	got := f.liveOnlyUsageFetcher().FetchUsageForAccount(t.Context(),
 		claudeapi.FetchRequest{AccountNum: "work"})
 	if got.Usage != nil {
 		t.Errorf("attributed %+v with nobody logged in", got.Usage)

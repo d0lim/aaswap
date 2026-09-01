@@ -37,15 +37,23 @@ func TestCredentialPathFollowsTheProvider(t *testing.T) {
 	home := t.TempDir()
 	r := New(home, platform.MacOS)
 
-	if got, want := r.ProviderCredentialsPath("claude"), r.CredentialsPath(); got != want {
+	if got, want := r.ProviderCredentialsPath(ClaudeConfigDirEnv, ".claude",
+		".credentials.json"), r.CredentialsPath(); got != want {
 		t.Errorf("claude credential path = %q, want %q", got, want)
 	}
-	if got, want := r.ProviderCredentialsPath("codex"), r.CodexAuthPath(); got != want {
+	if got, want := r.ProviderCredentialsPath(CodexHomeEnv, ".codex",
+		"auth.json"), r.CodexAuthPath(); got != want {
 		t.Errorf("codex credential path = %q, want %q", got, want)
 	}
-	// An unknown provider falls back to the default rather than an empty path:
-	// an empty path is a read of the current directory.
-	if got := r.ProviderCredentialsPath("nonsense"); got != r.CredentialsPath() {
-		t.Errorf("unknown provider path = %q, want the default", got)
+	// A provider whose env var this build has never heard of still resolves,
+	// which is what makes adding one a declaration rather than a code change.
+	if got, want := r.ProviderCredentialsPath("GROK_HOME", ".grok", "auth.json"),
+		filepath.Join(home, ".grok", "auth.json"); got != want {
+		t.Errorf("undeclared-provider path = %q, want %q", got, want)
+	}
+	// A declaration naming no secret falls back to the default rather than an
+	// empty path: an empty path is a read of the current directory.
+	if got := r.ProviderCredentialsPath("", "", ""); got != r.CredentialsPath() {
+		t.Errorf("path with no declared secret = %q, want the default", got)
 	}
 }
