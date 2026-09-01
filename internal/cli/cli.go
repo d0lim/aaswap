@@ -212,7 +212,8 @@ func (a *App) emitJSON(payload any) {
 	_, _ = a.Out.Write(append(data, '\n'))
 }
 
-// switcher builds the switcher for a command, applying this run's overrides.
+// switcher builds the switcher for a command, for the provider this invocation
+// addresses.
 func (a *App) switcher() (*swap.Switcher, error) {
 	name := cmp.Or(a.provider, providerFromEnv(), swap.ProviderClaude)
 	// Refused before anything reads a store: a typo must not quietly create an
@@ -221,6 +222,14 @@ func (a *App) switcher() (*swap.Switcher, error) {
 		return nil, fmt.Errorf("%w: %q is not a provider this build manages. Known: %s",
 			apperr.ErrValidation, name, strings.Join(swap.Providers(), ", "))
 	}
+	return a.switcherFor(name)
+}
+
+// switcherFor builds the switcher for a NAMED provider, for the one command
+// whose subject is not the provider the invocation addresses: adopting a
+// predecessor store, which held only Claude Code accounts whatever the caller
+// was pointed at.
+func (a *App) switcherFor(name string) (*swap.Switcher, error) {
 	s, err := a.NewSwitcher(name)
 	if err != nil {
 		return nil, err
