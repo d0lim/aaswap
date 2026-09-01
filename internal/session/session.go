@@ -124,14 +124,34 @@ func isAlphanumeric(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
-// DirFor is a slot's profile directory.
+// DirFor is an account's profile directory, for one provider.
 //
-// The profile contains Claude Code's own per-process records, so a full path
-// looks like <backup>/sessions/2-user_example.com/sessions/1234.json. That
-// nesting is intentional: the inner one is Claude Code's.
-func DirFor(backupRoot, accountNum, email string) string {
-	return filepath.Join(backupRoot, "sessions", accountNum+"-"+SlugifyEmail(email))
+// The profile contains the tool's own per-process records, so a full path looks
+// like <backup>/sessions/2-user_example.com/sessions/1234.json. That nesting is
+// intentional: the inner one is the tool's.
+//
+// Scoped by provider because a profile is a whole synthetic HOME. One address at
+// two tools is the ordinary case for one person, and an unscoped path gave both
+// the same directory — two live credentials and two sets of shared links under
+// one manifest. The declarations overlap where it matters: Claude and Codex both
+// call `skills` and `history.jsonl` shareable, and `sessions` is Claude Code's
+// per-process record directory while Codex declares it as history pointing at
+// the rollout files aaswap reads its quota from.
+//
+// Claude keeps the unsuffixed path. Profiles outlive a change here — they hold a
+// copy of a credential and a manifest of links aaswap created — and moving them
+// would orphan both with nothing left to clean them up.
+func DirFor(backupRoot, provider, accountNum, email string) string {
+	parts := []string{backupRoot, "sessions"}
+	if provider != "" && provider != claudeProvider {
+		parts = append(parts, provider)
+	}
+	return filepath.Join(append(parts, accountNum+"-"+SlugifyEmail(email))...)
 }
+
+// claudeProvider owns the unsuffixed path. A profile directory always carries an
+// address, so <account>-<email> can never collide with a bare provider name.
+const claudeProvider = "claude"
 
 // StaleMarkerFor is where a profile's stale marker is written.
 func StaleMarkerFor(sessionDir string) string {
@@ -252,7 +272,7 @@ type Manager struct {
 
 // Dir is a slot's profile directory.
 func (m *Manager) Dir(accountNum, email string) string {
-	return DirFor(m.BackupRoot, accountNum, email)
+	return DirFor(m.BackupRoot, m.spec().Name, accountNum, email)
 }
 
 // spec is this manager's provider declaration, defaulting to Claude's.
