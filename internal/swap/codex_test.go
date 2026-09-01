@@ -181,3 +181,30 @@ func TestTheCodexFetcherAttributesNothingWithNoLiveLogin(t *testing.T) {
 		t.Errorf("attributed %+v with nobody logged in", got.Usage)
 	}
 }
+
+// A stored credential is not a Claude credential.
+//
+// The static sentinel used to decide "has usable credentials" by parsing a
+// Claude OAuth token out of the stored blob. A Codex credential has no such
+// field, so a perfectly good login reported "no credentials" — which sends a
+// person to re-add an account that is already there.
+func TestACodexAccountWithACredentialIsNotReportedEmpty(t *testing.T) {
+	f := codexFixture(t)
+	f.codexLogin("one@example.com", "acct-1", "plus")
+	if _, err := f.Add(t.Context(), AddRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := f.TakeSnapshot(t.Context(), CollectRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Views) != 1 {
+		t.Fatalf("views = %d, want the one account", len(snapshot.Views))
+	}
+	view := snapshot.Views[0]
+	if got := f.staticSentinel(view); got == SentinelNoCredentials {
+		t.Errorf("the account reads as having no credential, but %d bytes are "+
+			"stored for it", len(view.Credentials))
+	}
+}

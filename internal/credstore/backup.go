@@ -71,10 +71,19 @@ func (s *Store) backupUsername(name, email string) string {
 // usesFileBackupBackend reports whether backup *writes* go to files rather than
 // the Keychain.
 //
-// Linux, WSL, Windows and unknown platforms always use files. macOS uses the
-// Keychain while it is usable and falls back to files when it is not (headless,
-// SSH, a locked login keychain). Backup *reads* are .enc-wins regardless.
+// A provider that does not declare a Keychain always uses files, on every
+// platform. Storing a Codex token there would cost a 5-second security(1) round
+// trip per write, risk a prompt, and put a file-only tool's credential in a
+// place nothing else about that tool knows to look.
+//
+// Otherwise: Linux, WSL, Windows and unknown platforms always use files. macOS
+// uses the Keychain while it is usable and falls back to files when it is not
+// (headless, SSH, a locked login keychain). Backup *reads* are .enc-wins
+// regardless.
 func (s *Store) usesFileBackupBackend() bool {
+	if !s.layout.Keychain && !s.legacy() {
+		return true
+	}
 	return !s.cap.useKeychain()
 }
 

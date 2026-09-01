@@ -9,6 +9,7 @@ import (
 	"github.com/d0lim/aaswap/internal/claudeapi"
 	"github.com/d0lim/aaswap/internal/credstore"
 	"github.com/d0lim/aaswap/internal/pollpolicy"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/settings"
 	"github.com/d0lim/aaswap/internal/usage"
 	"github.com/d0lim/aaswap/internal/usagestore"
@@ -251,11 +252,20 @@ func (s *Switcher) staticSentinel(view AccountView) string {
 		// A managed API-key account has no subscription quota to fetch.
 		return SentinelAPIKey
 	}
-	if view.Credentials != "" && claudeapi.AccessToken(view.Credentials) != "" {
-		// An expired ACTIVE token is deliberately NOT static: the fetch path
-		// refreshes it under Claude Code's own lock protocol, so the collect
-		// pass must reach it rather than short-circuit here.
-		return ""
+	if view.Credentials != "" {
+		if scope, declared := s.spec().UsageScope(); declared && scope == providerpkg.UsageLiveOnly {
+			// Usage comes from records this machine already keeps, not from an
+			// endpoint reached with this token. Nothing about the credential's
+			// SHAPE decides whether a measurement exists, so parsing it here
+			// would report a perfectly good login as having no credential.
+			return ""
+		}
+		if claudeapi.AccessToken(view.Credentials) != "" {
+			// An expired ACTIVE token is deliberately NOT static: the fetch
+			// path refreshes it under Claude Code's own lock protocol, so the
+			// collect pass must reach it rather than short-circuit here.
+			return ""
+		}
 	}
 	if view.Unreadable {
 		// THIS slot's own read, not a process-wide flag — one slot's clean read
