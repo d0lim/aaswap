@@ -136,7 +136,7 @@ func (a *App) runImport(source string, force bool) error {
 
 	if a.json {
 		type row struct {
-			Number  string   `json:"number"`
+			Name    string   `json:"name"`
 			Email   string   `json:"email"`
 			Outcome string   `json:"outcome"`
 			Notes   []string `json:"notes,omitzero"`
@@ -144,7 +144,7 @@ func (a *App) runImport(source string, force bool) error {
 		rows := make([]row, len(result.Accounts))
 		for i, account := range result.Accounts {
 			rows[i] = row{
-				Number: account.Number, Email: account.Email,
+				Name: account.Name, Email: account.Email,
 				Outcome: string(account.Outcome), Notes: account.Notes,
 			}
 		}
@@ -159,7 +159,7 @@ func (a *App) runImport(source string, force bool) error {
 		transfer.Skipped:   "Skipped",
 	}
 	for _, account := range result.Accounts {
-		line := fmt.Sprintf("%s (slot %s)", account.Email, account.Number)
+		line := fmt.Sprintf("%s (slot %s)", account.Email, account.Name)
 		if account.Outcome == transfer.Skipped {
 			a.printer.Println(a.printer.Dimmed(verbs[account.Outcome] + " " + line))
 		} else {

@@ -56,7 +56,7 @@ func (s *Switcher) LiveState() (LiveState, error) {
 func liveState(roster *Roster, identity LiveIdentity, loggedIn bool) LiveState {
 	state := LiveState{Identity: identity, LoggedIn: loggedIn}
 	if loggedIn {
-		state.Slot, _ = roster.FindSlot(identity.Identity())
+		state.Slot, _ = roster.FindName(identity.Identity())
 	}
 	return state
 }

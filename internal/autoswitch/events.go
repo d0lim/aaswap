@@ -45,7 +45,7 @@ type Event struct {
 	// A decision not to switch, a quarantine, or a failure.
 	Reason  string `json:"reason,omitzero"`
 	Detail  string `json:"detail,omitzero"`
-	Number  string `json:"number,omitzero"`
+	Name    string `json:"number,omitzero"`
 	Email   string `json:"email,omitzero"`
 	Message string `json:"message,omitzero"`
 	// Transient marks a failure the engine will retry. False means it will keep
@@ -91,9 +91,9 @@ func (e Event) Human() string {
 		return "no switch: " + e.Reason
 	case KindQuarantine:
 		return fmt.Sprintf("account %s (%s) quarantined: %s. Log in with it and run "+
-			"`aaswap add --slot %s` to bring it back", e.Number, e.Email, e.Reason, e.Number)
+			"`aaswap add --slot %s` to bring it back", e.Name, e.Email, e.Reason, e.Name)
 	case KindUnquarantine:
-		return fmt.Sprintf("account %s (%s) is back in rotation (%s)", e.Number, e.Email, e.Reason)
+		return fmt.Sprintf("account %s (%s) is back in rotation (%s)", e.Name, e.Email, e.Reason)
 	case KindAllExhausted:
 		if e.EarliestResetAt != "" {
 			return "every account is exhausted; the earliest reset is " + e.EarliestResetAt
@@ -119,10 +119,7 @@ func (e Event) humanPoll() string {
 	if e.Active == nil {
 		return "poll: no active account"
 	}
-	activeNum := ""
-	if e.Active.Number != nil {
-		activeNum = fmt.Sprint(*e.Active.Number)
-	}
+	activeNum := e.Active.Name
 
 	var used string
 	switch headroom, known := e.HeadroomPct[activeNum]; {
@@ -204,10 +201,10 @@ func refLabel(ref *jsonout.AccountRef) string {
 	if ref == nil {
 		return "(none)"
 	}
-	if ref.Number == nil {
+	if ref.Name == "" {
 		return ref.Email
 	}
-	return fmt.Sprintf("account %d (%s)", *ref.Number, ref.Email)
+	return fmt.Sprintf("%s (%s)", ref.Name, ref.Email)
 }
 
 // pctLabel renders a percentage without claiming precision it does not have.

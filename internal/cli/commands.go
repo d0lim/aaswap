@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
@@ -49,9 +48,7 @@ func (a *App) rootCommand() *cobra.Command {
 		a.removeCommand(),
 		a.disableCommand(),
 		a.enableCommand(),
-		a.aliasCommand(),
-		a.swapCommand(),
-		a.moveCommand(),
+		a.renameCommand(),
 		a.purgeCommand(),
 		a.configCommand(),
 		a.unclaimedCommand(),
@@ -131,8 +128,7 @@ func (a *App) switchCommand() *cobra.Command {
 }
 
 func (a *App) addCommand() *cobra.Command {
-	var slot int
-	var alias string
+	var name string
 	var wait bool
 	cmd := &cobra.Command{
 		Use:   "add",
@@ -147,11 +143,10 @@ func (a *App) addCommand() *cobra.Command {
 			"only advice is to go and log in.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.runAdd(cmd, slot, alias, wait)
+			return a.runAdd(cmd, name, wait)
 		},
 	}
-	cmd.Flags().IntVar(&slot, "slot", 0, "store the account in a specific slot")
-	cmd.Flags().StringVar(&alias, "alias", "", "give the account a short name")
+	cmd.Flags().StringVar(&name, "name", "", "give the account a name")
 	cmd.Flags().BoolVar(&wait, "wait", false,
 		"wait for a /login in Claude Code, then capture that account")
 	silenceUsage(cmd)
@@ -203,42 +198,15 @@ func (a *App) enableCommand() *cobra.Command {
 	return cmd
 }
 
-func (a *App) aliasCommand() *cobra.Command {
-	var unset bool
+func (a *App) renameCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "alias [NUM|EMAIL] [NAME]",
-		Short: "Name an account, or list the names",
-		Args:  cobra.MaximumNArgs(2),
+		Use:   "rename ACCOUNT NAME",
+		Short: "Give an account a different name",
+		Long: "The name is where the account's credential and config are filed, not a\n" +
+			"label on top of them, so this moves stored material. Nothing else changes.",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runAlias(cmd, args, unset)
-		},
-	}
-	cmd.Flags().BoolVar(&unset, "unset", false, "remove the account's alias")
-	silenceUsage(cmd)
-	return cmd
-}
-
-func (a *App) swapCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "swap NUM|EMAIL|ALIAS NUM|EMAIL|ALIAS",
-		Short: "Exchange two accounts' slot numbers",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runSwapSlots(cmd, args[0], args[1])
-		},
-	}
-	silenceUsage(cmd)
-	return cmd
-}
-
-func (a *App) moveCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "move NUM|EMAIL|ALIAS SLOT",
-		Short: "Move an account to another slot number",
-		Long:  "When the destination is occupied, the two accounts exchange places.",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runMove(cmd, args[0], args[1])
+			return a.runRename(cmd, args[0], args[1])
 		},
 	}
 	silenceUsage(cmd)
@@ -289,12 +257,7 @@ func resolveTarget(s *swap.Switcher, roster *swap.Roster, identifier string) (st
 			apperr.ErrAccountNotFound, identifier)
 	}
 	if _, exists := roster.Accounts[num]; !exists {
-		return "", fmt.Errorf("%w: account %s does not exist", apperr.ErrAccountNotFound, num)
+		return "", fmt.Errorf("%w: %s does not exist", apperr.ErrAccountNotFound, num)
 	}
 	return num, nil
-}
-
-func atoi(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
 }

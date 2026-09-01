@@ -76,7 +76,7 @@ func (f *fixture) seed(num, email, credentials, config string) {
 	}
 	roster.Insert(num, &swap.Account{
 		Email: email, UUID: "acct-" + num, Added: swap.Timestamp(f.now),
-	}, f.now)
+	})
 	if err := f.WriteRoster(roster); err != nil {
 		f.t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestExportSlimsByDefault(t *testing.T) {
 		t.Fatalf("accounts = %+v", result.Envelope.Accounts)
 	}
 	entry := result.Envelope.Accounts[0]
-	if entry.Number != 1 || entry.Email != "one@example.com" || entry.UUID != "acct-1" {
+	if entry.Name != "1" || entry.Email != "one@example.com" || entry.UUID != "acct-1" {
 		t.Errorf("entry = %+v", entry)
 	}
 
@@ -218,7 +218,7 @@ func TestTheActiveNumberIsCarriedOnlyWhenPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	roster.SetActive("2", f.now)
+	roster.SetActive("2")
 	if err := f.WriteRoster(roster); err != nil {
 		t.Fatal(err)
 	}
@@ -227,8 +227,8 @@ func TestTheActiveNumberIsCarriedOnlyWhenPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Envelope.ActiveAccountNumber == nil || *result.Envelope.ActiveAccountNumber != 2 {
-		t.Errorf("activeAccountNumber = %v, want 2", result.Envelope.ActiveAccountNumber)
+	if result.Envelope.ActiveAccount == "" {
+		t.Errorf("activeAccount = %q, want the active name", result.Envelope.ActiveAccount)
 	}
 
 	// Exporting only slot 1 leaves the active account out of the payload.
@@ -236,9 +236,9 @@ func TestTheActiveNumberIsCarriedOnlyWhenPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Envelope.ActiveAccountNumber != nil {
+	if result.Envelope.ActiveAccount != "" {
 		t.Errorf("activeAccountNumber = %v, want nothing — that slot is not in the payload",
-			*result.Envelope.ActiveAccountNumber)
+			result.Envelope.ActiveAccount)
 	}
 }
 
@@ -272,7 +272,7 @@ func TestAPIKeyAccountsRoundTrip(t *testing.T) {
 	if len(imported.Accounts) != 1 {
 		t.Fatalf("imported = %+v", imported.Accounts)
 	}
-	stored, _ := into.Creds.ReadAccount(imported.Accounts[0].Number, "key@token.local")
+	stored, _ := into.Creds.ReadAccount(imported.Accounts[0].Name, "key@token.local")
 	if stored != "sk-ant-api03-abcdef" {
 		t.Errorf("the restored credential is %q", stored)
 	}
@@ -280,15 +280,15 @@ func TestAPIKeyAccountsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if roster.Accounts[imported.Accounts[0].Number].AuthKind() != swap.KindAPIKey {
+	if roster.Accounts[imported.Accounts[0].Name].AuthKind() != swap.KindAPIKey {
 		t.Error("the restored account lost its kind")
 	}
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
 	from := newFixture(t)
-	from.seed("1", "one@example.com", oauthCreds, fullConfig)
-	from.seed("3", "three@example.com", oauthCreds,
+	from.seed("work", "one@example.com", oauthCreds, fullConfig)
+	from.seed("spare", "three@example.com", oauthCreds,
 		`{"oauthAccount":{"emailAddress":"three@example.com"}}`)
 
 	result, err := Export(from.Switcher, ExportRequest{}, "test")
@@ -309,15 +309,18 @@ func TestExportImportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The slot numbers are kept, so a shell history full of `aaswap switch 3`
+	// The names are kept, so a shell history full of `aaswap switch work`
 	// keeps working on the new machine.
-	if roster.Accounts["1"].Email != "one@example.com" || roster.Accounts["3"].Email != "three@example.com" {
+	if roster.Accounts["work"] == nil || roster.Accounts["spare"] == nil {
+		t.Fatalf("roster = %+v, want the exported names kept", roster.Accounts)
+	}
+	if roster.Accounts["work"].Email != "one@example.com" || roster.Accounts["spare"].Email != "three@example.com" {
 		t.Errorf("roster = %+v", roster.Accounts)
 	}
-	if value, _ := to.Creds.ReadAccount("1", "one@example.com"); !strings.Contains(value, "claudeAiOauth") {
+	if value, _ := to.Creds.ReadAccount("work", "one@example.com"); !strings.Contains(value, "claudeAiOauth") {
 		t.Errorf("the restored credential is %q", value)
 	}
-	if config := to.ReadAccountConfig("1", "one@example.com"); !strings.Contains(config, "one@example.com") {
+	if config := to.ReadAccountConfig("work", "one@example.com"); !strings.Contains(config, "one@example.com") {
 		t.Errorf("the restored config is %q", config)
 	}
 }
@@ -333,7 +336,7 @@ func TestValidationHappensBeforeAnyWrite(t *testing.T) {
 	}
 	// A second account that will not validate.
 	result.Envelope.Accounts = append(result.Envelope.Accounts, ExportedAccount{
-		Number: 2, Email: "not an email", Config: result.Envelope.Accounts[0].Config,
+		Name: "two", Email: "not an email", Config: result.Envelope.Accounts[0].Config,
 		Credentials: result.Envelope.Accounts[0].Credentials,
 	})
 
@@ -354,7 +357,7 @@ func TestValidationHappensBeforeAnyWrite(t *testing.T) {
 // and has to be constrained before any path is built from it.
 func TestImportRejections(t *testing.T) {
 	valid := ExportedAccount{
-		Number: 1, Email: "one@example.com",
+		Name: "n1", Email: "one@example.com",
 		Config:      []byte(`{"oauthAccount":{"emailAddress":"one@example.com"}}`),
 		Credentials: []byte(`{"claudeAiOauth":{"accessToken":"a"}}`),
 	}
@@ -401,13 +404,6 @@ func TestImportRejections(t *testing.T) {
 			wantErr: "invalid or missing email",
 		},
 		{
-			name: "a slot number of zero",
-			envelope: Envelope{Version: 1, Accounts: []ExportedAccount{
-				func() ExportedAccount { e := valid; e.Number = 0; return e }(),
-			}},
-			wantErr: "invalid slot number",
-		},
-		{
 			name: "a config with no identity",
 			envelope: Envelope{Version: 1, Accounts: []ExportedAccount{
 				func() ExportedAccount { e := valid; e.Config = []byte(`{"projects":{}}`); return e }(),
@@ -429,24 +425,17 @@ func TestImportRejections(t *testing.T) {
 			wantErr: "not a managed API key",
 		},
 		{
-			name: "an invalid alias",
-			envelope: Envelope{Version: 1, Accounts: []ExportedAccount{
-				func() ExportedAccount { e := valid; e.Alias = "has spaces"; return e }(),
-			}},
-			wantErr: "alias",
-		},
-		{
 			name:     "the same account twice",
 			envelope: Envelope{Version: 1, Accounts: []ExportedAccount{valid, valid}},
 			wantErr:  "names one@example.com twice",
 		},
 		{
-			name: "the same alias twice",
+			name: "the same name twice",
 			envelope: Envelope{Version: 1, Accounts: []ExportedAccount{
-				func() ExportedAccount { e := valid; e.Alias = "work"; return e }(),
+				func() ExportedAccount { e := valid; e.Name = "work"; return e }(),
 				func() ExportedAccount {
 					e := withEmail(valid, "two@example.com")
-					e.Number, e.Alias = 2, "work"
+					e.Name = "work"
 					return e
 				}(),
 			}},
@@ -481,7 +470,7 @@ func TestImportSkipsExistingAccounts(t *testing.T) {
 	f.seed("1", "one@example.com", `{"claudeAiOauth":{"accessToken":"local"}}`, fullConfig)
 
 	envelope := Envelope{Version: 1, Accounts: []ExportedAccount{{
-		Number: 1, Email: "one@example.com",
+		Name: "n1", Email: "one@example.com",
 		Config:      []byte(fullConfig),
 		Credentials: []byte(`{"claudeAiOauth":{"accessToken":"imported"}}`),
 	}}}
@@ -524,7 +513,7 @@ func TestAQuarantinedSlotIsHealedWithoutForce(t *testing.T) {
 	}
 
 	envelope := Envelope{Version: 1, Accounts: []ExportedAccount{{
-		Number: 1, Email: "one@example.com",
+		Name: "n1", Email: "one@example.com",
 		Config:      []byte(fullConfig),
 		Credentials: []byte(`{"claudeAiOauth":{"accessToken":"fresh","refreshToken":"r"}}`),
 	}}}
@@ -559,7 +548,7 @@ func TestForcingTheCondemnedGenerationSaysSo(t *testing.T) {
 	}
 
 	envelope := Envelope{Version: 1, Accounts: []ExportedAccount{{
-		Number: 1, Email: "one@example.com",
+		Name: "n1", Email: "one@example.com",
 		Config: []byte(fullConfig), Credentials: []byte(condemned),
 	}}}
 	result, err := Import(f.Switcher, encode(t, envelope), true)
@@ -574,48 +563,43 @@ func TestForcingTheCondemnedGenerationSaysSo(t *testing.T) {
 
 // An alias already held by a different local account is dropped rather than
 // failing the transfer.
-func TestACollidingAliasIsDropped(t *testing.T) {
+func TestACollidingNameIsDropped(t *testing.T) {
 	f := newFixture(t)
-	f.seed("1", "local@example.com", oauthCreds, fullConfig)
+	f.seed("work", "local@example.com", oauthCreds, fullConfig)
+
+	envelope := Envelope{Version: 1, Accounts: []ExportedAccount{{
+		Name: "two", Email: "imported@example.com",
+		Config:      []byte(`{"oauthAccount":{"emailAddress":"imported@example.com"}}`),
+		Credentials: []byte(`{"claudeAiOauth":{"accessToken":"a"}}`),
+	}}}
+	result, err := Import(f.Switcher, encode(t, envelope), false)
+	if err != nil {
+		t.Fatalf("a colliding name failed the whole transfer: %v", err)
+	}
+
 	roster, err := f.RosterOrEmpty()
 	if err != nil {
 		t.Fatal(err)
 	}
-	roster.Accounts["1"].Alias = "work"
-	if err := f.WriteRoster(roster); err != nil {
-		t.Fatal(err)
+	// The local account keeps the name; the import lands under another one
+	// rather than overwriting an unrelated account.
+	if roster.Accounts["work"].Email != "local@example.com" {
+		t.Errorf("%q is now %s, want the local account to keep it",
+			"work", roster.Accounts["work"].Email)
 	}
-
-	envelope := Envelope{Version: 1, Accounts: []ExportedAccount{{
-		Number: 2, Email: "imported@example.com", Alias: "work",
-		Config:      []byte(`{"oauthAccount":{"emailAddress":"imported@example.com"}}`),
-		Credentials: []byte(`{"claudeAiOauth":{"accessToken":"a"}}`),
-	}}}
-	result, err := Import(f.Switcher, encode(t, envelope), false)
-	if err != nil {
-		t.Fatalf("a colliding alias failed the whole transfer: %v", err)
-	}
-
-	roster, err = f.RosterOrEmpty()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if roster.Accounts["1"].Alias != "work" {
-		t.Error("the local account lost its alias")
-	}
-	if roster.Accounts[result.Accounts[0].Number].Alias != "" {
-		t.Error("the colliding alias was imported anyway")
+	if got := result.Accounts[0].Name; got == "work" {
+		t.Error("the import took a name that was already held")
 	}
 }
 
-// An occupied slot number sends the import to a free one rather than
-// overwriting an unrelated account.
-func TestAnOccupiedSlotGetsANewNumber(t *testing.T) {
+// An occupied name sends the import to a free one rather than overwriting an
+// unrelated account.
+func TestAnOccupiedNameGetsAnotherOne(t *testing.T) {
 	f := newFixture(t)
 	f.seed("1", "local@example.com", oauthCreds, fullConfig)
 
 	envelope := Envelope{Version: 1, Accounts: []ExportedAccount{{
-		Number: 1, Email: "imported@example.com",
+		Name: "n1", Email: "imported@example.com",
 		Config:      []byte(`{"oauthAccount":{"emailAddress":"imported@example.com"}}`),
 		Credentials: []byte(`{"claudeAiOauth":{"accessToken":"a"}}`),
 	}}}
@@ -623,7 +607,7 @@ func TestAnOccupiedSlotGetsANewNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Accounts[0].Number == "1" {
+	if result.Accounts[0].Name == "1" {
 		t.Error("an unrelated account was overwritten")
 	}
 	roster, err := f.RosterOrEmpty()

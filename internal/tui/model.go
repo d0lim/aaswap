@@ -145,7 +145,7 @@ func switchCmd(s *swap.Switcher, target, email string) tea.Cmd {
 		if err != nil {
 			return switchedMsg{to: target, email: email, err: err}
 		}
-		return switchedMsg{to: outcome.To.Number, email: outcome.To.Email}
+		return switchedMsg{to: outcome.To.Name, email: outcome.To.Email}
 	}
 }
 

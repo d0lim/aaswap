@@ -62,7 +62,7 @@ func (s *Switcher) IsSwitchable(roster *Roster, accountNum string) bool {
 // never costs its stored login.
 func (s *Switcher) SwitchableNumbers(roster *Roster) []string {
 	var out []string
-	for _, num := range roster.Numbers() {
+	for _, num := range roster.Names() {
 		if roster.Accounts[num].Disabled {
 			continue
 		}
@@ -76,7 +76,7 @@ func (s *Switcher) SwitchableNumbers(roster *Roster) []string {
 // DisabledNumbers lists the slots the user has held out of rotation.
 func (s *Switcher) DisabledNumbers(roster *Roster) []string {
 	var out []string
-	for _, num := range roster.Numbers() {
+	for _, num := range roster.Names() {
 		if roster.Accounts[num].Disabled {
 			out = append(out, num)
 		}
@@ -104,7 +104,6 @@ func (s *Switcher) SetDisabled(identifier string, disabled bool) (num, email str
 		}
 		changed = true
 		account.Disabled = disabled
-		roster.LastUpdated = Timestamp(s.now())
 		return s.WriteRoster(roster)
 	})
 	if err != nil {
@@ -126,7 +125,7 @@ func (s *Switcher) CurrentNumber(roster *Roster) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return roster.FindSlot(live.Identity())
+	return roster.FindName(live.Identity())
 }
 
 // HasLiveLogin reports whether the machine carries any live account identity.

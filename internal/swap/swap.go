@@ -83,6 +83,14 @@ type UsageFetcher interface {
 // runtime audit hook: there is no ambient path into the developer's real store
 // to guard against, because every path in is a field.
 type Switcher struct {
+	// Provider names the auth domain this switcher operates on. Empty means
+	// Claude, which is what every store written before providers existed holds.
+	//
+	// One switcher per provider rather than a provider argument on every
+	// method: the active account is per provider, and a call that could be
+	// about either would have to be told which on every hop.
+	Provider string
+
 	// Paths answers every "where does that file live" question.
 	Paths *paths.Resolver
 

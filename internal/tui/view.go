@@ -113,7 +113,7 @@ func (m Model) accountList() string {
 // windows or the single reason it has none.
 func (m Model) accountBlock(index int, view swap.AccountView) string {
 	st := m.styles
-	entry := m.snapshot.Entries[view.Number]
+	entry := m.snapshot.Entries[view.Name]
 
 	cursor := "  "
 	if index == m.cursor {
@@ -133,10 +133,7 @@ func (m Model) accountBlock(index int, view swap.AccountView) string {
 		email = st.emailOn.Render(view.Account.Email)
 	}
 
-	head := fmt.Sprintf("%s%s %s %s", cursor, marker, st.slot.Render(view.Number), email)
-	if alias := view.Account.Alias; alias != "" {
-		head += st.muted.Render("  (" + alias + ")")
-	}
+	head := fmt.Sprintf("%s%s %s %s", cursor, marker, st.slot.Render(view.Name), email)
 	if view.Account.Disabled {
 		head += st.muted.Render("  out of rotation")
 	}

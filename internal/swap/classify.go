@@ -120,7 +120,7 @@ func (s *Switcher) PrefetchProvenance(ctx context.Context, roster *Roster) Prove
 	if !ok {
 		return provenance
 	}
-	slot, managed := roster.FindSlot(identity.Identity())
+	slot, managed := roster.FindName(identity.Identity())
 	if !managed {
 		return provenance
 	}
@@ -232,7 +232,7 @@ func (s *Switcher) attributeSlot(roster *Roster, resolved *claudeapi.Identity) s
 
 	slot := ""
 	if resolved.Email != "" {
-		if num, ok := roster.FindSlot(Identity{
+		if num, ok := roster.FindName(Identity{
 			Email:            resolved.Email,
 			OrganizationUUID: resolved.OrganizationUUID,
 		}); ok {
@@ -252,7 +252,7 @@ func (s *Switcher) attributeSlot(roster *Roster, resolved *claudeapi.Identity) s
 		// Fall back to the account uuid, scoped by organization, in case a
 		// slot's stored address is stale or synthesized — an add-token
 		// placeholder, for instance.
-		for _, num := range roster.Numbers() {
+		for _, num := range roster.Names() {
 			account := roster.Accounts[num]
 			if account.UUID != "" && account.UUID == resolvedUUID &&
 				account.OrganizationUUID == resolved.OrganizationUUID {

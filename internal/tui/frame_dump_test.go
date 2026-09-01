@@ -18,12 +18,12 @@ func TestDumpFrame(t *testing.T) {
 	}
 	m := fixture(t,
 		[]swap.AccountView{
-			{Number: "1", IsActive: true, Account: &swap.Account{
-				Email: "work@example.com", Alias: "work", OrganizationName: "Acme"}},
-			{Number: "2", Account: &swap.Account{Email: "spare@example.com"}},
-			{Number: "3", Account: &swap.Account{Email: "burned@example.com", Disabled: true}},
-			{Number: "4", Account: &swap.Account{Email: "dead@example.com"}},
-			{Number: "5", Account: &swap.Account{Email: "key@example.com"}},
+			{Name: "1", IsActive: true, Account: &swap.Account{
+				Email: "work@example.com", OrganizationName: "Acme"}},
+			{Name: "2", Account: &swap.Account{Email: "spare@example.com"}},
+			{Name: "3", Account: &swap.Account{Email: "burned@example.com", Disabled: true}},
+			{Name: "4", Account: &swap.Account{Email: "dead@example.com"}},
+			{Name: "5", Account: &swap.Account{Email: "key@example.com"}},
 		},
 		map[string]usagestore.Entry{
 			"1": {FetchedAt: testNow, LastGood: &usage.Result{

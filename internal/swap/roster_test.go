@@ -3,47 +3,43 @@ package swap
 import (
 	json "encoding/json/v2"
 	"os"
-	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/d0lim/aaswap/internal/testutil"
 )
 
-func TestAnAbsentRosterIsAnEmptyStart(t *testing.T) {
+func TestAnAbsentStoreIsAnEmptyStart(t *testing.T) {
 	f := newFixture(t)
-	roster, ok, err := f.ReadRoster()
+	_, found, _, err := f.readStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok || roster != nil {
-		t.Errorf("ReadRoster = (%+v, %v), want nothing at all", roster, ok)
+	if found {
+		t.Error("a store that was never written reported as found")
 	}
 
-	// The caller that tolerates a fresh install gets an empty roster, not an
-	// error.
-	empty, err := f.RosterOrEmpty()
+	roster, err := f.RosterOrEmpty()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(empty.Accounts) != 0 || len(empty.Numbers()) != 0 {
-		t.Errorf("RosterOrEmpty = %+v, want empty", empty)
+	if len(roster.Accounts) != 0 {
+		t.Errorf("accounts = %v, want none", roster.Accounts)
 	}
 }
 
-// A torn roster read as "no accounts" is what let the next write rebuild the
-// roster from nothing, overwriting a live credential backup on the way. It must
-// be an error, never an empty start.
-func TestAnUnreadableRosterIsAnErrorNotAnEmptyStart(t *testing.T) {
+// A torn table read as "no accounts" is what let the next write rebuild it from
+// nothing, overwriting a live credential backup on the way. It must be an
+// error, never an empty start.
+func TestAnUnreadableStoreIsAnErrorNotAnEmptyStart(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
 	}{
-		{"truncated mid-write", `{"accounts":{"1":{"email":"a@exam`},
-		{"a JSON array", `[1,2,3]`},
-		{"a bare number", `123`},
-		{"a bare string", `"hello"`},
-		{"literal null", `null`},
+		{"truncated mid-object", `{"providers":`},
+		{"not an object", `[1,2,3]`},
+		{"literally null", `null`},
 		{"empty", ``},
 	}
 	for _, tt := range tests {
@@ -52,324 +48,331 @@ func TestAnUnreadableRosterIsAnErrorNotAnEmptyStart(t *testing.T) {
 			if err := os.WriteFile(f.RosterPath(), []byte(tt.content), 0o600); err != nil {
 				t.Fatal(err)
 			}
-
-			if _, _, err := f.ReadRoster(); err == nil {
-				t.Error("an unreadable roster read as usable")
+			if _, _, _, err := f.readStore(); err == nil {
+				t.Error("an unreadable table read as an empty start")
 			}
 			if _, err := f.RosterOrEmpty(); err == nil {
-				t.Error("an unreadable roster read as an empty start")
-			}
-			// And nothing overwrote it.
-			after, err := os.ReadFile(f.RosterPath())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(after) != tt.content {
-				t.Errorf("the unreadable roster was modified: %q", after)
+				t.Error("RosterOrEmpty invented an empty roster over an unreadable file")
 			}
 		})
 	}
 }
 
-// A roster written by a newer release must survive being read and rewritten by
-// an older one — which happens routinely while two implementations share a
-// machine.
+// A table written by a newer release must survive being read and rewritten by
+// an older one — which happens routinely while two releases share a machine.
 func TestUnknownFieldsSurviveARewrite(t *testing.T) {
 	f := newFixture(t)
-	const original = `{
-  "activeAccountNumber": 2,
-  "lastUpdated": "2026-01-01T00:00:00Z",
-  "sequence": [1, 2],
-  "accounts": {
-    "1": {"email": "a@example.com", "futureAccountField": {"nested": [1, 2]}},
-    "2": {"email": "b@example.com", "organizationUuid": "org-2"}
-  },
-  "futureTopLevelField": "keep me"
-}`
+	const original = `{"schemaVersion":2,"futureTopLevel":{"a":1},
+	  "providers":{"claude":{"active":"work","order":["work"],
+	    "accounts":{"work":{"email":"one@example.com","futureField":{"x":1}}}}}}`
 	if err := os.WriteFile(f.RosterPath(), []byte(original), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	roster := f.roster()
-	roster.Accounts["1"].Alias = "work"
-	f.seedRoster(roster)
+	roster, err := f.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.WriteRoster(roster); err != nil {
+		t.Fatal(err)
+	}
 
 	raw := f.rawRoster()
-	if raw["futureTopLevelField"] != "keep me" {
-		t.Errorf("a top-level field this version does not know was dropped: %v", raw)
+	if _, present := raw["futureTopLevel"]; !present {
+		t.Errorf("an unknown top-level field was dropped: %v", raw)
 	}
-	accounts := raw["accounts"].(map[string]any)
-	one := accounts["1"].(map[string]any)
-	if _, present := one["futureAccountField"]; !present {
-		t.Errorf("an account field this version does not know was dropped: %v", one)
+	data, err := os.ReadFile(f.RosterPath())
+	if err != nil {
+		t.Fatal(err)
 	}
-	nested := one["futureAccountField"].(map[string]any)["nested"]
-	if !reflect.DeepEqual(nested, []any{1.0, 2.0}) {
-		t.Errorf("the unknown field's value changed: %v", nested)
-	}
-	// The known edit landed.
-	if one["alias"] != "work" {
-		t.Errorf("alias = %v, want the edit", one["alias"])
+	if !strings.Contains(string(data), "futureField") {
+		t.Errorf("an unknown account field was dropped:\n%s", data)
 	}
 }
 
-// A slot that exists must never become invisible because the ordering list
-// forgot it — a roster edited by hand, or a write interrupted between the two.
-func TestNumbersIncludeSlotsMissingFromTheSequence(t *testing.T) {
+// A provider this build does not implement must survive a write aimed at
+// another one. Its accounts' credentials are still on disk, and dropping the
+// section is what would leave nothing naming them.
+func TestWritingOneProviderLeavesTheOthersAlone(t *testing.T) {
 	f := newFixture(t)
-	if err := os.WriteFile(f.RosterPath(), []byte(`{
-	  "sequence": [2],
-	  "accounts": {
-	    "1": {"email": "a@example.com"},
-	    "2": {"email": "b@example.com"},
-	    "10": {"email": "j@example.com"}
-	  }
-	}`), 0o600); err != nil {
+	const original = `{"schemaVersion":2,"providers":{
+	  "claude":{"order":[],"accounts":{}},
+	  "codex":{"active":"work","order":["work"],
+	    "accounts":{"work":{"email":"one@example.com"}}}}}`
+	if err := os.WriteFile(f.RosterPath(), []byte(original), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	got := f.roster().Numbers()
-	// The sequence's own order first, then the strays in numeric order.
-	if want := []string{"2", "1", "10"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("Numbers = %v, want %v", got, want)
-	}
-}
-
-// A sequence entry naming a slot that is gone must not produce a phantom
-// account.
-func TestNumbersSkipStaleSequenceEntries(t *testing.T) {
-	f := newFixture(t)
-	if err := os.WriteFile(f.RosterPath(), []byte(
-		`{"sequence":[1,2,3],"accounts":{"2":{"email":"b@example.com"}}}`), 0o600); err != nil {
+	roster, err := f.RosterOrEmpty()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := f.roster().Numbers(); !reflect.DeepEqual(got, []string{"2"}) {
-		t.Errorf("Numbers = %v, want only the slot that exists", got)
-	}
-}
-
-// Reusing a number a user just removed would make "account 3" mean a different
-// account than it did a minute ago, in a shell history full of `aaswap switch 3`.
-func TestNextNumberDoesNotReuseAFreedSlot(t *testing.T) {
-	f := newFixture(t)
-	roster := newRoster(f.now)
-	for _, num := range []string{"1", "2", "3"} {
-		roster.Insert(num, &Account{Email: num + "@example.com"}, f.now)
-	}
-	roster.Remove("2", f.now)
-
-	if got := roster.NextNumber(); got != 4 {
-		t.Errorf("NextNumber = %d, want 4 — never the freed 2", got)
-	}
-	// And an empty roster starts at one.
-	if got := newRoster(f.now).NextNumber(); got != 1 {
-		t.Errorf("NextNumber on an empty roster = %d, want 1", got)
-	}
-}
-
-func TestInsertKeepsTheSequenceOrdered(t *testing.T) {
-	f := newFixture(t)
-	roster := newRoster(f.now)
-	for _, num := range []string{"3", "1", "10", "2"} {
-		roster.Insert(num, &Account{Email: num + "@example.com"}, f.now)
-	}
-	if want := []int{1, 2, 3, 10}; !reflect.DeepEqual(roster.Sequence, want) {
-		t.Errorf("Sequence = %v, want %v", roster.Sequence, want)
-	}
-	// Re-inserting the same slot does not duplicate it.
-	roster.Insert("2", &Account{Email: "new@example.com"}, f.now)
-	if want := []int{1, 2, 3, 10}; !reflect.DeepEqual(roster.Sequence, want) {
-		t.Errorf("Sequence = %v after a re-insert, want %v", roster.Sequence, want)
-	}
-}
-
-// The active pointer must not outlive the slot it names, or the next read
-// reports an account that no longer exists.
-func TestRemovingTheActiveSlotClearsThePointer(t *testing.T) {
-	f := newFixture(t)
-	roster := newRoster(f.now)
-	roster.Insert("1", &Account{Email: "a@example.com"}, f.now)
-	roster.Insert("2", &Account{Email: "b@example.com"}, f.now)
-	roster.SetActive("2", f.now)
-
-	roster.Remove("2", f.now)
-	if num, ok := roster.Active(); ok {
-		t.Errorf("Active = %q, want nothing after the slot was removed", num)
-	}
-	// Removing a different slot leaves the pointer alone.
-	roster.SetActive("1", f.now)
-	roster.Remove("9", f.now)
-	if num, ok := roster.Active(); !ok || num != "1" {
-		t.Errorf("Active = (%q, %v), want slot 1", num, ok)
-	}
-}
-
-// A pointer at a slot that vanished behind the roster's back reports nothing,
-// rather than sending every caller looking for an account that is gone.
-func TestActiveIgnoresAPointerAtAMissingSlot(t *testing.T) {
-	f := newFixture(t)
-	if err := os.WriteFile(f.RosterPath(), []byte(
-		`{"activeAccountNumber":7,"sequence":[1],"accounts":{"1":{"email":"a@example.com"}}}`), 0o600); err != nil {
+	roster.Insert("mine", &Account{Email: "mine@example.com"})
+	if err := f.WriteRoster(roster); err != nil {
 		t.Fatal(err)
 	}
-	if num, ok := f.roster().Active(); ok {
-		t.Errorf("Active = %q, want nothing", num)
+
+	data, err := os.ReadFile(f.RosterPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file File
+	if err := json.Unmarshal(data, &file); err != nil {
+		t.Fatal(err)
+	}
+	codex := file.Providers["codex"]
+	if codex == nil || codex.Accounts["work"] == nil {
+		t.Fatalf("the codex section did not survive:\n%s", data)
+	}
+	if codex.Active != "work" {
+		t.Errorf("codex active = %q, want it untouched", codex.Active)
+	}
+}
+
+// An account that exists must never become invisible because the ordering list
+// forgot it — a table edited by hand, or a write interrupted between the two.
+func TestNamesIncludeAccountsMissingFromTheOrder(t *testing.T) {
+	roster := newRoster()
+	roster.Accounts["one"] = &Account{Email: "one@example.com"}
+	roster.Accounts["two"] = &Account{Email: "two@example.com"}
+	roster.Order = []string{"two"}
+
+	if got := roster.Names(); !slices.Equal(got, []string{"two", "one"}) {
+		t.Errorf("Names() = %v, want the forgotten account appended", got)
+	}
+}
+
+// An order entry naming an account that is gone must not produce a phantom.
+func TestNamesSkipStaleOrderEntries(t *testing.T) {
+	roster := newRoster()
+	roster.Accounts["one"] = &Account{Email: "one@example.com"}
+	roster.Order = []string{"one", "ghost"}
+
+	if got := roster.Names(); !slices.Equal(got, []string{"one"}) {
+		t.Errorf("Names() = %v, want only the account that exists", got)
+	}
+}
+
+func TestInsertAppendsToTheOrder(t *testing.T) {
+	roster := newRoster()
+	for _, name := range []string{"b", "a", "c"} {
+		roster.Insert(name, &Account{Email: name + "@example.com"})
+	}
+	// Insertion order, not alphabetical: this list is the rotation order, and
+	// an account added last should not jump ahead of one added first.
+	if !slices.Equal(roster.Order, []string{"b", "a", "c"}) {
+		t.Errorf("order = %v, want insertion order", roster.Order)
+	}
+	roster.Insert("a", &Account{Email: "a@example.com"})
+	if !slices.Equal(roster.Order, []string{"b", "a", "c"}) {
+		t.Errorf("order = %v after a re-insert, want no duplicate", roster.Order)
+	}
+}
+
+// The active pointer must not outlive the account it names, or the next read
+// reports something that no longer exists.
+func TestRemovingTheActiveAccountClearsThePointer(t *testing.T) {
+	roster := newRoster()
+	roster.Insert("one", &Account{Email: "one@example.com"})
+	roster.Insert("two", &Account{Email: "two@example.com"})
+	roster.SetActive("one")
+
+	roster.Remove("one")
+	if _, ok := roster.ActiveName(); ok {
+		t.Error("the pointer survived the account it named")
+	}
+	if slices.Contains(roster.Order, "one") {
+		t.Errorf("order = %v, want the removed account gone", roster.Order)
+	}
+
+	roster.SetActive("two")
+	roster.Remove("gone")
+	if name, ok := roster.ActiveName(); !ok || name != "two" {
+		t.Errorf("ActiveName() = (%q, %v), want two", name, ok)
+	}
+}
+
+// A pointer at an account that vanished behind the roster's back reports
+// nothing, rather than sending every caller looking for something gone.
+func TestActiveIgnoresAPointerAtAMissingAccount(t *testing.T) {
+	roster := newRoster()
+	roster.Insert("one", &Account{Email: "one@example.com"})
+	roster.Active = "ghost"
+
+	if name, ok := roster.ActiveName(); ok {
+		t.Errorf("ActiveName() = (%q, true), want nothing", name)
+	}
+}
+
+// A rename has to carry the pointer and the order entry with the account, or
+// the store names one thing and points at another.
+func TestRenameCarriesTheOrderAndThePointer(t *testing.T) {
+	roster := newRoster()
+	roster.Insert("one", &Account{Email: "one@example.com"})
+	roster.Insert("two", &Account{Email: "two@example.com"})
+	roster.SetActive("one")
+
+	roster.Rename("one", "work")
+
+	if _, gone := roster.Accounts["one"]; gone {
+		t.Error("the old name survived")
+	}
+	if roster.Accounts["work"].Email != "one@example.com" {
+		t.Errorf("accounts = %v", roster.Accounts)
+	}
+	if !slices.Equal(roster.Order, []string{"work", "two"}) {
+		t.Errorf("order = %v, want the rename in place", roster.Order)
+	}
+	if name, _ := roster.ActiveName(); name != "work" {
+		t.Errorf("active = %q, want it renamed too", name)
 	}
 }
 
 // Email alone is not identity: the same address exists across a personal
 // account and its organizations, and those are different accounts with
 // different quotas.
-func TestFindSlotMatchesOnTheWholeComposite(t *testing.T) {
-	f := newFixture(t)
-	roster := newRoster(f.now)
-	roster.Insert("1", &Account{Email: "a@example.com"}, f.now)
-	roster.Insert("2", &Account{Email: "a@example.com", OrganizationUUID: "org-2"}, f.now)
+func TestFindNameMatchesOnTheWholeComposite(t *testing.T) {
+	roster := newRoster()
+	roster.Insert("personal", &Account{Email: "same@example.com"})
+	roster.Insert("acme", &Account{Email: "same@example.com", OrganizationUUID: "org-1"})
 
-	tests := []struct {
-		identity Identity
-		want     string
-		wantOK   bool
-	}{
-		{Identity{Email: "a@example.com"}, "1", true},
-		{Identity{Email: "a@example.com", OrganizationUUID: "org-2"}, "2", true},
-		{Identity{Email: "a@example.com", OrganizationUUID: "org-9"}, "", false},
-		{Identity{Email: "b@example.com"}, "", false},
+	if got, ok := roster.FindName(Identity{Email: "same@example.com"}); !ok || got != "personal" {
+		t.Errorf("FindName(personal) = (%q, %v)", got, ok)
 	}
-	for _, tt := range tests {
-		got, ok := roster.FindSlot(tt.identity)
-		if got != tt.want || ok != tt.wantOK {
-			t.Errorf("FindSlot(%+v) = (%q, %v), want (%q, %v)", tt.identity, got, ok, tt.want, tt.wantOK)
-		}
+	if got, ok := roster.FindName(Identity{
+		Email: "same@example.com", OrganizationUUID: "org-1"}); !ok || got != "acme" {
+		t.Errorf("FindName(org) = (%q, %v)", got, ok)
+	}
+	if _, ok := roster.FindName(Identity{
+		Email: "same@example.com", OrganizationUUID: "org-2"}); ok {
+		t.Error("an unknown organization matched")
 	}
 }
 
+// A name already held has to be avoided rather than overwritten.
+func TestNameForAvoidsWhatIsTaken(t *testing.T) {
+	roster := newRoster()
+	roster.Insert("work", &Account{Email: "work@example.com"})
+
+	if got := roster.NameFor("work@other.com"); got != "work-2" {
+		t.Errorf("NameFor = %q, want work-2", got)
+	}
+	if got := roster.NameFor("fresh@example.com"); got != "fresh" {
+		t.Errorf("NameFor = %q, want fresh", got)
+	}
+}
+
+// Anything other than the API-key marker reads as OAuth, including a value from
+// a future release: treating an unrecognized kind as an API key would suppress
+// the usage the account actually reports.
 func TestAuthKindDefaultsToOAuth(t *testing.T) {
 	tests := []struct {
-		name    string
-		account *Account
-		want    Kind
+		kind Kind
+		want Kind
 	}{
-		{"an explicit API key", &Account{Kind: KindAPIKey}, KindAPIKey},
-		{"an explicit OAuth record", &Account{Kind: KindOAuth}, KindOAuth},
-		// Every record written before kinds existed.
-		{"no kind at all", &Account{}, KindOAuth},
-		{"a nil record", nil, KindOAuth},
-		// A value from a future release reads as OAuth: treating an
-		// unrecognized kind as an API key would suppress the usage the slot
-		// actually reports.
-		{"a kind this version does not know", &Account{Kind: "future_kind"}, KindOAuth},
+		{"", KindOAuth},
+		{KindOAuth, KindOAuth},
+		{KindAPIKey, KindAPIKey},
+		{"something-newer", KindOAuth},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.account.AuthKind(); got != tt.want {
-				t.Errorf("AuthKind = %q, want %q", got, tt.want)
-			}
-		})
+		if got := (&Account{Kind: tt.kind}).AuthKind(); got != tt.want {
+			t.Errorf("AuthKind(%q) = %q, want %q", tt.kind, got, tt.want)
+		}
+	}
+	if got := (*Account)(nil).AuthKind(); got != KindOAuth {
+		t.Errorf("a nil account's AuthKind = %q", got)
 	}
 }
 
-// The file's shape is a cross-implementation contract.
-func TestTheRosterOnDiskShape(t *testing.T) {
+// The file's shape is a contract with every other release that reads it.
+func TestTheStoreOnDiskShape(t *testing.T) {
 	f := newFixture(t)
-	roster := newRoster(f.now)
-	roster.Insert("1", &Account{
-		Email:            "a@example.com",
+	roster := newRoster()
+	roster.Insert("work", &Account{
+		Email:            "one@example.com",
 		UUID:             "acct-1",
 		OrganizationUUID: "org-1",
 		OrganizationName: "Example",
 		Added:            Timestamp(f.now),
-		Alias:            "work",
-	}, f.now)
-	roster.SetActive("1", f.now)
-	f.seedRoster(roster)
+	})
+	roster.SetActive("work")
+	if err := f.WriteRoster(roster); err != nil {
+		t.Fatal(err)
+	}
 
 	raw := f.rawRoster()
-	if raw["activeAccountNumber"] != 1.0 {
-		t.Errorf("activeAccountNumber = %v, want the number 1", raw["activeAccountNumber"])
+	if raw["schemaVersion"] != float64(SchemaVersion) {
+		t.Errorf("schemaVersion = %v, want %d", raw["schemaVersion"], SchemaVersion)
 	}
-	if raw["lastUpdated"] != "2026-06-15T12:00:00Z" {
-		t.Errorf("lastUpdated = %v", raw["lastUpdated"])
+	providers, ok := raw["providers"].(map[string]any)
+	if !ok {
+		t.Fatalf("providers = %v, want an object", raw["providers"])
 	}
-	if !reflect.DeepEqual(raw["sequence"], []any{1.0}) {
-		t.Errorf("sequence = %v", raw["sequence"])
+	claude, ok := providers[ProviderClaude].(map[string]any)
+	if !ok {
+		t.Fatalf("providers.claude = %v, want an object", providers[ProviderClaude])
 	}
-	one := raw["accounts"].(map[string]any)["1"].(map[string]any)
+	if claude["active"] != "work" {
+		t.Errorf("active = %v, want \"work\"", claude["active"])
+	}
+	if order, _ := claude["order"].([]any); len(order) != 1 || order[0] != "work" {
+		t.Errorf("order = %v", claude["order"])
+	}
+	account, ok := claude["accounts"].(map[string]any)["work"].(map[string]any)
+	if !ok {
+		t.Fatalf("accounts = %v", claude["accounts"])
+	}
 	for key, want := range map[string]any{
-		"email": "a@example.com", "uuid": "acct-1",
-		"organizationUuid": "org-1", "organizationName": "Example",
-		"added": "2026-06-15T12:00:00Z", "alias": "work",
+		"email":            "one@example.com",
+		"uuid":             "acct-1",
+		"organizationUuid": "org-1",
+		"organizationName": "Example",
 	} {
-		if one[key] != want {
-			t.Errorf("accounts.1.%s = %v, want %v", key, one[key], want)
+		if account[key] != want {
+			t.Errorf("%s = %v, want %v", key, account[key], want)
 		}
 	}
-	// A slot that is neither disabled nor an API key writes neither key —
-	// matching how the record is written elsewhere.
-	for _, key := range []string{"disabled", "kind"} {
-		if _, present := one[key]; present {
-			t.Errorf("%q was written for a default record: %v", key, one)
-		}
+	// The name is the key, so it must not also be a field: two spellings of one
+	// fact is how they come to disagree.
+	if _, present := account["alias"]; present {
+		t.Errorf("the account carries an alias field: %v", account)
+	}
+	if _, present := account["name"]; present {
+		t.Errorf("the account repeats its own key as a field: %v", account)
 	}
 }
 
-// An empty roster writes empty arrays and maps, not nulls: the Python reader
-// indexes them.
-func TestAnEmptyRosterWritesEmptyContainers(t *testing.T) {
+// An empty store writes empty containers, not nulls: a reader indexes them.
+func TestAnEmptyStoreWritesEmptyContainers(t *testing.T) {
 	f := newFixture(t)
-	f.seedRoster(&Roster{})
-
-	raw := f.rawRoster()
-	if !reflect.DeepEqual(raw["sequence"], []any{}) {
-		t.Errorf("sequence = %v, want an empty array", raw["sequence"])
+	if err := f.WriteRoster(newRoster()); err != nil {
+		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(raw["accounts"], map[string]any{}) {
-		t.Errorf("accounts = %v, want an empty object", raw["accounts"])
+	claude := f.rawRoster()["providers"].(map[string]any)[ProviderClaude].(map[string]any)
+	if claude["order"] == nil {
+		t.Error("order wrote as null")
 	}
-	if raw["activeAccountNumber"] != nil {
-		t.Errorf("activeAccountNumber = %v, want null", raw["activeAccountNumber"])
+	if claude["accounts"] == nil {
+		t.Error("accounts wrote as null")
 	}
 }
 
-// The roster is a file people open in an editor.
-func TestTheRosterIsIndentedAndOwnerOnly(t *testing.T) {
+// The table is a file people open in an editor, and it names their accounts.
+func TestTheStoreIsIndentedAndOwnerOnly(t *testing.T) {
 	f := newFixture(t)
-	f.seedAccounts(map[string]*Account{"1": {Email: "a@example.com"}})
+	roster := newRoster()
+	roster.Insert("work", &Account{Email: "one@example.com"})
+	if err := f.WriteRoster(roster); err != nil {
+		t.Fatal(err)
+	}
 
 	data, err := os.ReadFile(f.RosterPath())
 	if err != nil {
 		t.Fatal(err)
 	}
-	var check map[string]any
-	if err := json.Unmarshal(data, &check); err != nil {
-		t.Fatalf("sequence.json is not a valid JSON object: %v\n%s", err, data)
+	if !strings.Contains(string(data), "\n  ") {
+		t.Errorf("the table is not indented:\n%s", data)
 	}
-	text := string(data)
-	if !hasLine(text, `  "sequence": [`) {
-		t.Errorf("sequence.json is not indented two spaces:\n%s", text)
-	}
-	if text[len(text)-1] != '\n' {
-		t.Error("sequence.json has no trailing newline")
-	}
-
 	testutil.AssertPerm(t, f.RosterPath(), 0o600)
-}
-
-func hasLine(text, line string) bool {
-	return slices.Contains(splitLines(text), line)
-}
-
-func splitLines(text string) []string {
-	var out []string
-	start := 0
-	for i := range len(text) {
-		if text[i] == '\n' {
-			out = append(out, text[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(text) {
-		out = append(out, text[start:])
-	}
-	return out
 }

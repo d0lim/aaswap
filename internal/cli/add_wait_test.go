@@ -52,16 +52,16 @@ func TestAddWaitCapturesTheLoginThatLands(t *testing.T) {
 	// The instructions have to name the thing to go and do, and the hazard of
 	// doing it the obvious wrong way.
 	wantContains(t, h.stdout(),
-		"one@example.com", "already stored as account 1",
+		"one@example.com", "already stored as 1",
 		"/login", "Do not run /logout first", "Waiting",
-		"two@example.com", "Added", "Account 2")
+		"two@example.com", "Added")
 
 	roster, err := h.switcher.RosterOrEmpty()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if account := roster.Accounts["2"]; account == nil || account.Email != "two@example.com" {
-		t.Errorf("slot 2 holds %+v, want two@example.com", account)
+	if account := roster.Accounts["two"]; account == nil || account.Email != "two@example.com" {
+		t.Errorf("accounts = %v, want one called \"two\"", roster.Names())
 	}
 }
 
@@ -85,7 +85,7 @@ func TestAddWaitEndsOnAReLoginAndRefreshesInPlace(t *testing.T) {
 	}
 	<-landed
 
-	wantContains(t, h.stdout(), "Updated credentials for", "Account 2", "two@example.com")
+	wantContains(t, h.stdout(), "Updated credentials for", "two@example.com")
 
 	roster, err := h.switcher.RosterOrEmpty()
 	if err != nil {

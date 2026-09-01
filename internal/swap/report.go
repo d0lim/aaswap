@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 
 	"github.com/d0lim/aaswap/internal/claudeapi"
 	"github.com/d0lim/aaswap/internal/jsonout"
@@ -56,16 +55,13 @@ func (s *Switcher) ListPayload(snapshot *Snapshot) jsonout.ListPayload {
 	payload := jsonout.ListPayload{SchemaVersion: jsonout.SchemaVersion}
 
 	for _, view := range snapshot.Views {
-		entry := snapshot.Entries[view.Number]
-		number, _ := strconv.Atoi(view.Number)
+		entry := snapshot.Entries[view.Name]
 		if view.IsActive {
-			active := number
-			payload.ActiveAccountNumber = &active
+			payload.ActiveAccount = view.Name
 		}
 
 		status, projected := jsonout.UsageFields(decisionOf(entry), entry.FetchedAt, now)
 		row := jsonout.AccountRow{
-			Number:           number,
 			Email:            view.Account.Email,
 			OrganizationName: view.Account.OrganizationName,
 			OrganizationUUID: view.Account.OrganizationUUID,
@@ -73,7 +69,7 @@ func (s *Switcher) ListPayload(snapshot *Snapshot) jsonout.ListPayload {
 			Active:           view.IsActive,
 			UsageStatus:      status,
 			Usage:            projected,
-			Alias:            view.Account.Alias,
+			Name:             view.Name,
 			Disabled:         view.Account.Disabled,
 		}
 		row.SetFreshness(entry.LastGood, entry.FetchedAt, entry.Age, now)
@@ -99,7 +95,7 @@ func (s *Switcher) StatusPayload(snapshot *Snapshot) jsonout.StatusPayload {
 		return payload
 	}
 
-	slot, managed := snapshot.Roster.FindSlot(live.Identity())
+	slot, managed := snapshot.Roster.FindName(live.Identity())
 	if !managed {
 		payload.Active = &jsonout.ActiveStatus{Email: live.Email, Managed: false}
 		return payload
@@ -107,18 +103,16 @@ func (s *Switcher) StatusPayload(snapshot *Snapshot) jsonout.StatusPayload {
 
 	account := snapshot.Roster.Accounts[slot]
 	entry := snapshot.Entries[slot]
-	number, _ := strconv.Atoi(slot)
 	now := s.now()
 	status, projected := jsonout.UsageFields(decisionOf(entry), entry.FetchedAt, now)
 
 	active := &jsonout.ActiveStatus{
-		Number:           &number,
 		Email:            live.Email,
 		OrganizationName: account.OrganizationName,
 		OrganizationUUID: account.OrganizationUUID,
 		IsOrganization:   account.OrganizationUUID != "",
 		Managed:          true,
-		Alias:            account.Alias,
+		Name:             slot,
 		UsageStatus:      status,
 		Usage:            projected,
 	}
@@ -256,9 +250,9 @@ func DuplicateAccountWarnings(views []AccountView) []string {
 					out = append(out, fmt.Sprintf(
 						"Accounts %s and %s hold the same credential (%s) — one slot's backup "+
 							"was overwritten. Log in with the missing account and re-add it: "+
-							"aaswap add --slot N", other, view.Number, view.Account.Email))
+							"aaswap add --slot N", other, view.Name, view.Account.Email))
 				} else {
-					byFingerprint[fp] = view.Number
+					byFingerprint[fp] = view.Name
 				}
 			}
 		}
@@ -268,12 +262,12 @@ func DuplicateAccountWarnings(views []AccountView) []string {
 			continue
 		}
 		key := accountKey{uuid: view.Account.UUID, org: view.Account.OrganizationUUID}
-		if other, seen := byIdentity[key]; seen && other != view.Number {
+		if other, seen := byIdentity[key]; seen && other != view.Name {
 			out = append(out, fmt.Sprintf(
 				"Accounts %s and %s both authenticate as %s — remove or re-login one of them.",
-				other, view.Number, view.Account.Email))
+				other, view.Name, view.Account.Email))
 		} else if !seen {
-			byIdentity[key] = view.Number
+			byIdentity[key] = view.Name
 		}
 	}
 	return out
@@ -298,7 +292,7 @@ func LockstepUsageWarnings(views []AccountView, entries map[string]usagestore.En
 	var out []string
 
 	for _, view := range views {
-		decision, known := entries[view.Number].DecisionValue()
+		decision, known := entries[view.Name].DecisionValue()
 		if !known || decision.Usage == nil {
 			continue
 		}
@@ -317,9 +311,9 @@ func LockstepUsageWarnings(views []AccountView, entries map[string]usagestore.En
 			out = append(out, fmt.Sprintf(
 				"Accounts %s and %s report identical usage and reset times — they may be "+
 					"the same account. If it persists, log in with the missing account and "+
-					"re-add it: aaswap add --slot N", other, view.Number))
+					"re-add it: aaswap add --slot N", other, view.Name))
 		} else {
-			seen[key] = view.Number
+			seen[key] = view.Name
 		}
 	}
 	return out

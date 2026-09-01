@@ -5,7 +5,6 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
@@ -41,7 +40,7 @@ const (
 
 // ImportedAccount reports one account's fate.
 type ImportedAccount struct {
-	Number  string
+	Name    string
 	Email   string
 	Outcome ImportOutcome
 	// Notes carry anything the user needs to know about this account —
@@ -92,8 +91,8 @@ func Import(s *swap.Switcher, data []byte, force bool) (ImportResult, error) {
 			return result, err
 		}
 		result.Accounts = append(result.Accounts, account)
-		if envelope.ActiveAccountNumber != nil && entry.Number == *envelope.ActiveAccountNumber {
-			result.ActiveSlot = account.Number
+		if envelope.ActiveAccount != "" && entry.Name == envelope.ActiveAccount {
+			result.ActiveSlot = account.Name
 		}
 	}
 	return result, nil
@@ -124,13 +123,12 @@ func parseEnvelope(data []byte) (Envelope, error) {
 
 // validated is one account, checked and normalized.
 type validated struct {
-	Number           int
+	Name             string
 	Email            string
 	UUID             string
 	OrganizationUUID string
 	OrganizationName string
 	Added            string
-	Alias            string
 	Kind             swap.Kind
 	Credentials      string
 	Config           string
@@ -138,17 +136,14 @@ type validated struct {
 
 // validateAll checks every account before any is written.
 func validateAll(envelope Envelope, roster *swap.Roster) ([]validated, error) {
-	// An alias already used here belongs to the local account that has it.
-	localAliases := map[string]swap.Identity{}
-	for _, num := range roster.Numbers() {
-		account := roster.Accounts[num]
-		if account.Alias != "" {
-			localAliases[strings.ToLower(account.Alias)] = account.Identity()
-		}
+	// A name already used here belongs to the local account that has it.
+	localNames := map[string]swap.Identity{}
+	for _, name := range roster.Names() {
+		localNames[name] = roster.Accounts[name].Identity()
 	}
 
 	seenIdentities := map[swap.Identity]bool{}
-	seenAliases := map[string]bool{}
+	seenNames := map[string]bool{}
 	out := make([]validated, 0, len(envelope.Accounts))
 
 	for _, raw := range envelope.Accounts {
@@ -164,17 +159,17 @@ func validateAll(envelope Envelope, roster *swap.Roster) ([]validated, error) {
 		}
 		seenIdentities[identity] = true
 
-		if entry.Alias != "" {
-			if seenAliases[entry.Alias] {
+		if entry.Name != "" {
+			if seenNames[entry.Name] {
 				return nil, fmt.Errorf("%w: the export uses the alias %q twice",
-					apperr.ErrTransfer, entry.Alias)
+					apperr.ErrTransfer, entry.Name)
 			}
-			seenAliases[entry.Alias] = true
+			seenNames[entry.Name] = true
 			// An alias already held by a DIFFERENT local account is dropped
 			// rather than refused: the accounts are what the user asked to
 			// import, and a name collision is not worth failing the transfer.
-			if owner, taken := localAliases[entry.Alias]; taken && owner != identity {
-				entry.Alias = ""
+			if owner, taken := localNames[entry.Name]; taken && owner != identity {
+				entry.Name = ""
 			}
 		}
 		out = append(out, entry)
@@ -189,13 +184,8 @@ func validateOne(raw ExportedAccount) (validated, error) {
 		return validated{}, fmt.Errorf("%w: an imported account has an invalid or missing "+
 			"email address: %q", apperr.ErrTransfer, raw.Email)
 	}
-	if raw.Number < 1 {
-		return validated{}, fmt.Errorf("%w: the imported account %s has an invalid slot "+
-			"number: %d", apperr.ErrTransfer, raw.Email, raw.Number)
-	}
 
 	entry := validated{
-		Number:           raw.Number,
 		Email:            raw.Email,
 		UUID:             raw.UUID,
 		OrganizationUUID: raw.OrganizationUUID,
@@ -204,13 +194,15 @@ func validateOne(raw ExportedAccount) (validated, error) {
 		Kind:             swap.KindOAuth,
 	}
 
-	if raw.Alias != "" {
-		alias, err := swap.NormalizeAlias(raw.Alias)
-		if err != nil {
-			return validated{}, fmt.Errorf("%w: the alias for %s is invalid: %w",
-				apperr.ErrTransfer, raw.Email, err)
+	// A name the local rules refuse is dropped rather than refused: an import
+	// that fails over a label would strand the credential it carried.
+	if raw.Name != "" {
+		if name, err := swap.NormalizeName(raw.Name); err == nil {
+			entry.Name = name
 		}
-		entry.Alias = alias
+	}
+	if entry.Name == "" {
+		entry.Name = swap.NameForEmail(raw.Email)
 	}
 
 	// The config must be an object carrying an identity, or a switch to this
@@ -270,7 +262,7 @@ func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force boo
 	outcome := Imported
 	var notes []string
 
-	if existing, found := roster.FindSlot(identity); found {
+	if existing, found := roster.FindName(identity); found {
 		stored := s.Usage.Entries(map[string]usagestore.Identity{existing: usageIdentity}, nil)[existing]
 		switch {
 		case force:
@@ -297,17 +289,17 @@ func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force boo
 				"the import replaced it")
 		default:
 			return ImportedAccount{
-				Number: existing, Email: entry.Email, Outcome: Skipped,
+				Name: existing, Email: entry.Email, Outcome: Skipped,
 				Notes: []string{"it already exists here — use --force to overwrite it"},
 			}, nil
 		}
 		target = existing
 	} else {
-		// Prefer the slot number the export used, so a machine-to-machine
-		// transfer keeps the numbers people have in their shell history.
-		target = strconv.Itoa(entry.Number)
+		// Prefer the name the export used, so a machine-to-machine transfer
+		// keeps the handles people have in their shell history.
+		target = entry.Name
 		if _, taken := roster.Accounts[target]; taken {
-			target = strconv.Itoa(roster.NextNumber())
+			target = roster.NameFor(entry.Email)
 		}
 	}
 
@@ -337,18 +329,17 @@ func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force boo
 		OrganizationUUID: entry.OrganizationUUID,
 		OrganizationName: entry.OrganizationName,
 		Added:            added,
-		Alias:            entry.Alias,
 	}
 	if entry.Kind == swap.KindAPIKey {
 		record.Kind = swap.KindAPIKey
 	}
-	roster.Insert(target, record, s.Now())
+	roster.Insert(target, record)
 	if err := s.WriteRoster(roster); err != nil {
 		return ImportedAccount{}, err
 	}
 
 	return ImportedAccount{
-		Number: target, Email: entry.Email, Outcome: outcome, Notes: notes,
+		Name: target, Email: entry.Email, Outcome: outcome, Notes: notes,
 	}, nil
 }
 

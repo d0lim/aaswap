@@ -84,9 +84,9 @@ func (f *fixture) seedRoster(roster *Roster) {
 // config backup so it is switchable.
 func (f *fixture) seedAccounts(accounts map[string]*Account) *Roster {
 	f.t.Helper()
-	roster := newRoster(f.now)
+	roster := newRoster()
 	for num, account := range accounts {
-		roster.Insert(num, account, f.now)
+		roster.Insert(num, account)
 		if err := f.Creds.WriteAccount(num, account.Email, `{"claudeAiOauth":{"accessToken":"tok-`+num+`"}}`); err != nil {
 			f.t.Fatal(err)
 		}
@@ -176,7 +176,7 @@ func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
 		want string
 	}{
 		{
-			name: "add-token registers a new slot",
+			name: "add-token registers a new account",
 			act: func(f *fixture) {
 				if _, err := f.AddToken(AddTokenRequest{
 					Token: "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -185,7 +185,7 @@ func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
 					f.t.Fatal(err)
 				}
 			},
-			want: "1",
+			want: "token",
 		},
 		{
 			// Only when the credential actually CHANGED. A switch that finds
@@ -217,7 +217,7 @@ func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
 			tt.act(f)
 
 			if !slices.Contains(announced, tt.want) {
-				t.Errorf("announced %v, want it to include account %s", announced, tt.want)
+				t.Errorf("announced %v, want it to include %q", announced, tt.want)
 			}
 		})
 	}

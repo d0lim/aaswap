@@ -27,7 +27,6 @@ import (
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
@@ -51,21 +50,20 @@ type Envelope struct {
 	// envelope in their own encryption can mark it, and so import refuses
 	// ciphertext with an explanation rather than a parse error.
 	Encrypted bool `json:"encrypted"`
-	// ActiveAccountNumber is carried only when that slot is actually in the
+	// ActiveAccount is carried only when that account is actually in the
 	// payload, so an import never points at an account that is not there.
-	ActiveAccountNumber *int              `json:"activeAccountNumber"`
-	Accounts            []ExportedAccount `json:"accounts"`
+	ActiveAccount string            `json:"activeAccount,omitzero"`
+	Accounts      []ExportedAccount `json:"accounts"`
 }
 
 // ExportedAccount is one account in an envelope.
 type ExportedAccount struct {
-	Number           int    `json:"number"`
+	Name             string `json:"name"`
 	Email            string `json:"email"`
 	UUID             string `json:"uuid"`
 	OrganizationUUID string `json:"organizationUuid"`
 	OrganizationName string `json:"organizationName"`
 	Added            string `json:"added"`
-	Alias            string `json:"alias,omitzero"`
 	// Kind marks an API-key account, whose credential is a raw string rather
 	// than an object.
 	Kind string `json:"kind,omitzero"`
@@ -179,14 +177,14 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 		}
 		numbers = []string{num}
 	} else {
-		numbers = roster.Numbers()
+		numbers = roster.Names()
 	}
 
 	// The live store holds fresher tokens than a backup for whichever account
 	// is active, so that one is exported from the live store.
 	liveSlot := ""
 	if live, ok := s.LiveIdentity(); ok {
-		if num, managed := roster.FindSlot(live.Identity()); managed {
+		if num, managed := roster.FindName(live.Identity()); managed {
 			liveSlot = num
 		}
 	}
@@ -219,11 +217,10 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 
 	// Carried only when that slot is actually in the payload: pointing at an
 	// account the import cannot find would be worse than saying nothing.
-	if activeNum, ok := roster.Active(); ok {
+	if activeName, ok := roster.ActiveName(); ok {
 		for _, entry := range result.Envelope.Accounts {
-			if strconv.Itoa(entry.Number) == activeNum {
-				number := entry.Number
-				result.Envelope.ActiveAccountNumber = &number
+			if entry.Name == activeName {
+				result.Envelope.ActiveAccount = activeName
 				break
 			}
 		}
@@ -265,19 +262,17 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 			// backup.
 			return ExportedAccount{}, fmt.Sprintf(
 				"account %s (%s): no stored credential or config — re-add with: "+
-					"aaswap add --slot %s", num, account.Email, num), nil
+					"aaswap add --name %s", num, account.Email, num), nil
 		}
 	}
 
-	number, _ := strconv.Atoi(num)
 	entry := ExportedAccount{
-		Number:           number,
+		Name:             num,
 		Email:            account.Email,
 		UUID:             account.UUID,
 		OrganizationUUID: account.OrganizationUUID,
 		OrganizationName: account.OrganizationName,
 		Added:            account.Added,
-		Alias:            account.Alias,
 	}
 
 	configValue := jsontext.Value(config)

@@ -188,7 +188,7 @@ func TestAFailedAddIsReported(t *testing.T) {
 func TestAnUnverifiedAddSaysSo(t *testing.T) {
 	m := twoAccounts(t)
 	next, _ := m.handleAdded(addedMsg{outcome: swap.AddOutcome{
-		Number: "3", Email: "new@example.com", Unverified: "the lookup did not resolve",
+		Name: "3", Email: "new@example.com", Unverified: "the lookup did not resolve",
 	}})
 	model := next.(Model)
 	if model.modal == nil || model.modal.kind != modalNotice {

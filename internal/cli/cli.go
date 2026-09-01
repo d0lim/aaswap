@@ -114,7 +114,6 @@ func (a *App) Execute(ctx context.Context, args []string) int {
 	}
 
 	root := a.rootCommand()
-	args = translateLegacyFlags(args)
 	a.configureLogging(hasFlag(args, "--debug"), hasFlag(args, "--json"))
 	root.SetArgs(args)
 	root.SetOut(a.Out)
@@ -206,6 +205,20 @@ func (a *App) switcher() (*swap.Switcher, error) {
 	s.OnBackupWritten = func(accountNum, email string) {
 		a.invalidateSessionProfile(s, accountNum, email)
 	}
+
+	// Before any command touches the store. A table written by an older release
+	// addresses accounts by slot number and files their credentials the same
+	// way; every command below assumes names. Doing it here rather than inside
+	// each command means there is exactly one place where the two shapes meet.
+	moved, err := s.EnsureUpgraded()
+	if err != nil {
+		return nil, err
+	}
+	if moved > 0 && !a.json {
+		a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+			"Upgraded %d account(s) to the current store format. They are addressed "+
+				"by name now — run `aaswap list` to see them.", moved)))
+	}
 	return s, nil
 }
 
@@ -220,7 +233,7 @@ func (a *App) invalidateSessionProfile(s *swap.Switcher, accountNum, email strin
 	switch outcome {
 	case session.MarkFailed:
 		a.errs.Warning(fmt.Sprintf(
-			"account %s's credential changed but its session profile could not be "+
+			"%s's credential changed but its session profile could not be "+
 				"invalidated; `aaswap run %s` may keep using the superseded one until "+
 				"you remove the profile: %v", accountNum, accountNum, err))
 	case session.Marked:
