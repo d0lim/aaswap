@@ -152,3 +152,54 @@ func supported(t *testing.T, raw any) bool {
 	value, _ := detail["supported"].(bool)
 	return value
 }
+
+// Preserved-but-unfiled credentials are easy to never learn about: nothing
+// lists them unless you already know the command exists.
+func TestDoctorSurfacesUnclaimedCredentials(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"one": "one@example.com"})
+	h.stashUnclaimed(t, "orphan-credential")
+
+	if code := h.run("doctor", "--json"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	for _, entry := range h.decodeJSON()["providers"].([]any) {
+		row := entry.(map[string]any)
+		if row["name"] != provider.Claude {
+			continue
+		}
+		count, _ := row["unclaimed"].(float64)
+		if count < 1 {
+			t.Errorf("unclaimed = %v, want the preserved credential counted", row["unclaimed"])
+		}
+		return
+	}
+	t.Fatal("claude was not in the report")
+}
+
+// The prose report has to name the command that inspects them, or knowing the
+// count is no help.
+func TestDoctorNamesTheUnclaimedCommand(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"one": "one@example.com"})
+	h.stashUnclaimed(t, "orphan-credential")
+
+	if code := h.run("doctor"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "account unclaimed")
+}
+
+// Nothing preserved means nothing said. A note that fires on a clean store is
+// noise, and noise is what makes the real one invisible.
+func TestDoctorSaysNothingAboutAnEmptyStash(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"one": "one@example.com"})
+
+	if code := h.run("doctor"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	if strings.Contains(h.stdout(), "preserved credential") {
+		t.Errorf("the report warns about a stash that is empty:\n%s", h.stdout())
+	}
+}

@@ -250,7 +250,7 @@ func TestDestructiveCommandsAskFirst(t *testing.T) {
 		args []string
 	}{
 		{"remove", []string{"account", "remove", "1"}},
-		{"purge", []string{"purge"}},
+		{"remove --all", []string{"account", "remove", "--all"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -287,7 +287,7 @@ func TestNoWayToAskIsARefusal(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com"})
 	h.app.In = nil
 
-	if code := h.run("purge"); code != ExitOK {
+	if code := h.run("account", "remove", "--all"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	roster, err := h.switcher.RosterOrEmpty()
@@ -295,7 +295,7 @@ func TestNoWayToAskIsARefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(roster.Accounts) != 1 {
-		t.Error("a purge ran with nobody to confirm it")
+		t.Error("every account was removed with nobody to confirm it")
 	}
 }
 
@@ -396,12 +396,26 @@ func TestConfigRejectsBadInput(t *testing.T) {
 	}
 }
 
-func TestConfigPath(t *testing.T) {
+// Which file the settings came from is part of listing them, not a command of
+// its own: one line is not worth a verb.
+func TestConfigListNamesTheFile(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("config", "path"); code != ExitOK {
+	if code := h.run("config", "list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "settings.json")
+
+	if code := h.run("config", "list", "--json"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	payload := h.decodeJSON()
+	path, _ := payload["path"].(string)
+	if !strings.Contains(path, "settings.json") {
+		t.Errorf("path = %q, want the settings file", path)
+	}
+	if _, ok := payload["settings"].([]any); !ok {
+		t.Errorf("the payload carries no settings: %v", payload)
+	}
 }
 
 // The model setting decides which per-model weekly windows a listing counts.
@@ -902,4 +916,42 @@ func TestRenameRefusesAHeldName(t *testing.T) {
 		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
 	}
 	wantContains(t, h.stderr(), "already")
+}
+
+// --all and an account name are two different requests, and doing either one
+// silently when both were given would remove more or less than was asked.
+func TestRemoveRefusesAllTogetherWithAnAccount(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+	h.app.Confirm = func(string) bool { return true }
+
+	if code := h.run("account", "remove", "--all", "1"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	}
+	roster, err := h.switcher.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Accounts) != 1 {
+		t.Error("a refused removal changed the roster anyway")
+	}
+}
+
+// Naming nothing at all is a request that cannot be carried out, and must not
+// become "remove everything".
+func TestRemoveWithNoAccountRefuses(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+	h.app.Confirm = func(string) bool { return true }
+
+	if code := h.run("account", "remove"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	}
+	roster, err := h.switcher.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Accounts) != 1 {
+		t.Error("removing with no argument removed something")
+	}
 }
