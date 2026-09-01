@@ -117,6 +117,11 @@ func TestBackupRoot(t *testing.T) {
 	xdgDefault := filepath.Join(home, ".local", "share", "claude-swap")
 	legacy := filepath.Join(home, LegacyBackupDirName)
 
+	// Absolute for the HOST, not for the platform under test: the resolver's
+	// own IsAbs runs on this machine, and a Windows runner reads "/opt/xdg" as
+	// relative and drops it — which is the branch this row exists to avoid.
+	absXDG := filepath.Join(filepath.VolumeName(home)+string(filepath.Separator), "opt", "xdg")
+
 	tests := []struct {
 		name     string
 		platform platform.Platform
@@ -124,7 +129,7 @@ func TestBackupRoot(t *testing.T) {
 		want     string
 	}{
 		{"linux without XDG_DATA_HOME", platform.Linux, "", xdgDefault},
-		{"linux with absolute XDG_DATA_HOME", platform.Linux, "/opt/xdg", filepath.Join("/opt/xdg", "claude-swap")},
+		{"linux with absolute XDG_DATA_HOME", platform.Linux, absXDG, filepath.Join(absXDG, "claude-swap")},
 		// Per the XDG spec an empty or relative value must be ignored.
 		{"linux ignores empty XDG_DATA_HOME", platform.Linux, "", xdgDefault},
 		{"linux ignores relative XDG_DATA_HOME", platform.Linux, "relative/path", xdgDefault},

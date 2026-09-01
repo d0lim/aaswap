@@ -3,7 +3,6 @@ package swap
 import (
 	"context"
 	json "encoding/json/v2"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/realiti4/claude-swap/internal/claudeapi"
 	"github.com/realiti4/claude-swap/internal/jsonout"
+	"github.com/realiti4/claude-swap/internal/testutil"
 	"github.com/realiti4/claude-swap/internal/usage"
 	"github.com/realiti4/claude-swap/internal/usagestore"
 )
@@ -248,14 +248,8 @@ func TestAHealedStrikeIsClearedFromTheStore(t *testing.T) {
 // is the shape a locked Keychain or a momentary lock takes on a file store.
 func (f *fixture) unreadableBackup(num, email string) {
 	f.t.Helper()
-	if os.Geteuid() == 0 {
-		f.t.Skip("running as root, where a mode cannot make a file unreadable")
-	}
-	path := filepath.Join(f.Creds.CredentialsDir(), ".creds-"+num+"-"+email+".enc")
-	if err := os.Chmod(path, 0o000); err != nil {
-		f.t.Fatal(err)
-	}
-	f.t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	testutil.MakeUnreadable(f.t, filepath.Join(f.Creds.CredentialsDir(),
+		".creds-"+num+"-"+email+".enc"))
 }
 
 // The active slot's dead verdict consults a second source, and an unreadable

@@ -16,6 +16,8 @@ import (
 	"github.com/realiti4/claude-swap/internal/keychain"
 	"github.com/realiti4/claude-swap/internal/paths"
 	"github.com/realiti4/claude-swap/internal/platform"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -180,9 +182,7 @@ func TestBootstrapSeedsAProfile(t *testing.T) {
 		if info.IsDir() {
 			want = 0o700
 		}
-		if perm := info.Mode().Perm(); perm != want {
-			t.Errorf("%s has mode %o, want %o", path, perm, want)
-		}
+		testutil.AssertPermInfo(t, path, info, want)
 	}
 
 	config := readConfig(t, filepath.Join(dir, ".claude.json"))
@@ -618,4 +618,66 @@ func readConfig(t *testing.T, path string) map[string]any {
 		t.Fatalf("%s is not a JSON object: %v\n%s", path, err, data)
 	}
 	return out
+}
+
+// Profiles outlive the rename from cswap to ccswap, and every marker is named
+// after the command. An old spelling that goes unseen is not a lost file but a
+// behavior change: the stale marker stops deferring an invalidation, the share
+// manifest stops naming the links ccswap may remove, and the mirror marker lets
+// the one-time MCP migration run a second time against already-mirrored
+// servers.
+func TestMarkersWrittenUnderTheOldNameAreAdopted(t *testing.T) {
+	for _, current := range []string{
+		StaleMarkerSuffix, ShareManifest, MCPMirrorMarker, MCPDisplacedStash,
+	} {
+		t.Run(current, func(t *testing.T) {
+			dir := t.TempDir()
+			legacy := filepath.Join(dir, strings.Replace(current, ".ccswap-", ".cswap-", 1))
+			if legacy == filepath.Join(dir, current) {
+				t.Fatalf("%q does not carry the command name, so the test proves nothing", current)
+			}
+			if err := os.WriteFile(legacy, []byte(`{"kept":true}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			path := filepath.Join(dir, current)
+			AdoptLegacyMarker(path)
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("the marker was not adopted under its current name: %v", err)
+			}
+			if string(data) != `{"kept":true}` {
+				t.Errorf("contents = %q, want the original bytes carried over", data)
+			}
+			if _, err := os.Lstat(legacy); err == nil {
+				t.Error("the old spelling survived, so the profile carries both names")
+			}
+		})
+	}
+}
+
+// Adoption must never overwrite a marker that already exists under the current
+// name: the current one is what this ccswap wrote, and a leftover old file is
+// by definition the older truth.
+func TestAdoptionNeverOverwritesACurrentMarker(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ShareManifest)
+	legacy := filepath.Join(dir, strings.Replace(ShareManifest, ".ccswap-", ".cswap-", 1))
+	if err := os.WriteFile(path, []byte("current"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	AdoptLegacyMarker(path)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "current" {
+		t.Errorf("contents = %q, want the current marker left alone", data)
+	}
 }

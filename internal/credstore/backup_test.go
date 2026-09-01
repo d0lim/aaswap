@@ -11,6 +11,7 @@ import (
 	"github.com/realiti4/claude-swap/internal/keychain"
 	"github.com/realiti4/claude-swap/internal/paths"
 	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 // fakeKeychain is an in-memory stand-in for security(1), with per-service
@@ -294,21 +295,11 @@ func TestAbsentBackupIsNotUnreadable(t *testing.T) {
 // The .enc is the only backend off macOS and wins over the Keychain on macOS, so
 // its own read failure must reach the verdict on every platform.
 func TestUnreadableEncIsNotAbsent(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("chmod-based permission denial is not meaningful on Windows")
-	}
-	if os.Geteuid() == 0 {
-		t.Skip("running as root; permission bits do not deny access")
-	}
 	for _, p := range []platform.Platform{platform.MacOS, platform.Linux} {
 		t.Run(p.String(), func(t *testing.T) {
 			s, _ := newTestStore(t, p)
 			writeEnc(t, s, "1", "a@example.com", "unreachable")
-			path := s.backupEncPath("1", "a@example.com")
-			if err := os.Chmod(path, 0o000); err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+			testutil.MakeUnreadable(t, s.backupEncPath("1", "a@example.com"))
 
 			got, unreadable := s.ReadAccount("1", "a@example.com")
 			if got != "" {
@@ -324,18 +315,9 @@ func TestUnreadableEncIsNotAbsent(t *testing.T) {
 // An unsearchable credentials directory must not be byte-identical to a
 // genuinely absent backup.
 func TestUnsearchableCredentialsDirIsUnreadable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("chmod-based permission denial is not meaningful on Windows")
-	}
-	if os.Geteuid() == 0 {
-		t.Skip("running as root; permission bits do not deny access")
-	}
 	s, _ := newTestStore(t, platform.Linux)
 	writeEnc(t, s, "1", "a@example.com", "unreachable")
-	if err := os.Chmod(s.CredentialsDir(), 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(s.CredentialsDir(), 0o700) })
+	testutil.MakeUnreadable(t, s.CredentialsDir())
 
 	if _, unreadable := s.ReadAccount("1", "a@example.com"); !unreadable {
 		t.Error("an unsearchable credentials directory read as a genuinely absent backup")
