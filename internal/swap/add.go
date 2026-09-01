@@ -67,8 +67,8 @@ func (s *Switcher) Add(ctx context.Context, req AddRequest) (AddOutcome, error) 
 
 	identity, ok := s.LiveIdentity()
 	if !ok {
-		return AddOutcome{}, fmt.Errorf("%w: no active Claude account found. Log in first",
-			apperr.ErrConfig)
+		return AddOutcome{}, fmt.Errorf("%w: no active %s account found. Log in first",
+			apperr.ErrConfig, s.spec().DisplayName())
 	}
 
 	var outcome AddOutcome

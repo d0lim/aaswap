@@ -6,6 +6,7 @@ import (
 
 	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/buildinfo"
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
@@ -44,8 +45,12 @@ func (a *App) rootCommand() *cobra.Command {
 	// The dimension, as a flag with a default — the shape gh uses for hosts.
 	// A namespace would double the help tree and make every shared command
 	// exist twice.
+	// The list comes from the registry, not from here: a provider is added by
+	// declaring it, and a hardcoded list would leave the new one working but
+	// undiscoverable.
 	root.PersistentFlags().StringVar(&a.provider, "provider", "",
-		"the auth domain to address: claude or codex (default claude)")
+		fmt.Sprintf("the auth domain to address: %s (default %s)",
+			strings.Join(provider.Names(), ", "), swap.ProviderClaude))
 
 	// What stays at the top level is what gets typed daily. What moves into a
 	// group is what gets typed once a month — and grouping is what keeps a

@@ -108,7 +108,8 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 
 	live, ok := s.LiveIdentity()
 	if !ok {
-		a.printer.Println(a.printer.Bold("Status: "), a.printer.Dimmed("no active Claude account"))
+		a.printer.Println(a.printer.Bold("Status: "),
+			a.printer.Dimmed(fmt.Sprintf("no active %s account", s.Spec().DisplayName())))
 		return nil
 	}
 	slot, managed := snapshot.Roster.FindName(live.Identity())

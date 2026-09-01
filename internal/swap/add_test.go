@@ -319,7 +319,7 @@ func TestAFailedAddChangesNothing(t *testing.T) {
 		{
 			name:    "no live login at all",
 			break_:  func(f *fixture) { f.clearLiveIdentity() },
-			wantErr: []string{"no active Claude account", "Log in first"},
+			wantErr: []string{"no active Claude Code account", "Log in first"},
 		},
 		{
 			name:    "no credential to capture",
