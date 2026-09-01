@@ -2,8 +2,10 @@ package swap
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/d0lim/aaswap/internal/apperr"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
 )
 
 // EnsureUpgraded brings a version 1 store up to the current schema, moving the
@@ -50,9 +52,19 @@ func (s *Switcher) EnsureUpgraded() (int, error) {
 		// Read through the pre-provider layout, write through the scoped one.
 		// That asymmetry IS the upgrade: the material does not move because a
 		// name changed, it moves because where a name is filed changed.
+		//
+		// The destination is CLAUDE's, not this switcher's. A version 1 store
+		// predates providers, so every account in it is Claude's — and writing
+		// them where the triggering command happened to point filed a whole
+		// Claude store as another provider's, which the next switch then wrote
+		// into that provider's credential file.
 		legacy := s.Creds.Unscoped()
+		target := s.Creds.Scoped(LegacyProvider, liveLayoutFor(s.Paths,
+			providerpkg.MustLookup(LegacyProvider)))
+		configsDir := filepath.Join(s.BackupRoot(), configsDirName, LegacyProvider)
 		for _, rename := range renames {
-			if err := s.copyStoredFrom(legacy, rename.Number, rename.Name, rename.Email); err != nil {
+			if err := s.copyStoredFrom(legacy, target, configsDir,
+				rename.Number, rename.Name, rename.Email); err != nil {
 				return fmt.Errorf("%w: upgrading %s (%s) to the current format failed, "+
 					"and nothing was changed: %w", apperr.ErrMigration,
 					rename.Number, rename.Email, err)
@@ -64,7 +76,7 @@ func (s *Switcher) EnsureUpgraded() (int, error) {
 		// Published. Everything below is now unreferenced, and a failure to
 		// remove it costs disk rather than correctness.
 		for _, rename := range renames {
-			s.dropStoredFrom(legacy, rename.Number, rename.Email)
+			s.dropStoredFrom(legacy, rename.Number, rename.Email, true)
 		}
 		moved = len(renames)
 		return nil

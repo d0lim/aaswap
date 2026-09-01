@@ -86,6 +86,20 @@ func (s *Store) Unscoped() *Store {
 	return NewForProvider(s.paths, s.backupRoot, s.kc, "", Layout{Keychain: true})
 }
 
+// Scoped returns a view of the same store filed under a different provider.
+//
+// For the upgrade, which reads a pre-provider store and has to write it where
+// its accounts belong — Claude's — rather than where the command that triggered
+// it happens to be pointed. The keychain handle is shared: it is the same
+// process talking to the same keychain, and a second one would probe it again
+// for no new information.
+func (s *Store) Scoped(provider string, layout Layout) *Store {
+	if provider == s.provider {
+		return s
+	}
+	return NewForProvider(s.paths, s.backupRoot, s.kc, provider, layout)
+}
+
 // legacy reports that this store reads and writes the PRE-VAULT on-disk shape:
 // one flat .creds-<name>-<email>.enc per account, unscoped by provider.
 //

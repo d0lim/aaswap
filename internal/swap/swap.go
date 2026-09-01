@@ -227,19 +227,22 @@ func (s *Switcher) LockPath() string {
 	return filepath.Join(s.BackupRoot(), LockFileName)
 }
 
+// configsDirName holds one directory per provider of captured configs.
+const configsDirName = "configs"
+
 // ConfigsDir holds each account's captured config, scoped to this provider.
 //
 // Scoped for the same reason the credentials are: two providers can hold one
 // person's account under one name, and a shared directory would give whichever
 // wrote last both accounts' configs.
 func (s *Switcher) ConfigsDir() string {
-	return filepath.Join(s.BackupRoot(), "configs", s.provider())
+	return filepath.Join(s.BackupRoot(), configsDirName, s.provider())
 }
 
 // legacyConfigsDir is where a store written before providers existed kept
 // captured configs. Read by the upgrade, and by nothing else.
 func (s *Switcher) legacyConfigsDir() string {
-	return filepath.Join(s.BackupRoot(), "configs")
+	return filepath.Join(s.BackupRoot(), configsDirName)
 }
 
 // withLock runs fn under the store lock.

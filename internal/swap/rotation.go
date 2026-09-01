@@ -21,11 +21,30 @@ func (s *Switcher) ConfigBackupPath(accountNum, email string) string {
 // ReadAccountConfig reads an account's captured config, returning empty when
 // there is none.
 func (s *Switcher) ReadAccountConfig(accountNum, email string) string {
-	data, err := os.ReadFile(s.ConfigBackupPath(accountNum, email))
+	return s.readConfigIn(s.ConfigsDir(), accountNum, email)
+}
+
+// readConfigIn reads a captured config out of a given directory, so the upgrade
+// can write into Claude's rather than the addressed provider's.
+func (s *Switcher) readConfigIn(dir, accountNum, email string) string {
+	data, err := os.ReadFile(filepath.Join(dir,
+		filepath.Base(s.ConfigBackupPath(accountNum, email))))
 	if err != nil {
 		return ""
 	}
 	return string(data)
+}
+
+// writeConfigIn stores a captured config in a given directory.
+func (s *Switcher) writeConfigIn(dir, accountNum, email, config string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("%w: creating the configs directory: %w", apperr.ErrConfig, err)
+	}
+	path := filepath.Join(dir, filepath.Base(s.ConfigBackupPath(accountNum, email)))
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		return fmt.Errorf("%w: writing %s: %w", apperr.ErrConfig, path, err)
+	}
+	return nil
 }
 
 // readLegacyConfig reads a captured config from the pre-provider layout, for
@@ -50,14 +69,7 @@ func (s *Switcher) WriteAccountConfig(accountNum, email, config string) error {
 	if _, hasConfig := s.spec().ConfigFile(); !hasConfig {
 		return nil
 	}
-	if err := os.MkdirAll(s.ConfigsDir(), 0o700); err != nil {
-		return fmt.Errorf("%w: creating the configs directory: %w", apperr.ErrConfig, err)
-	}
-	path := s.ConfigBackupPath(accountNum, email)
-	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
-		return fmt.Errorf("%w: writing %s: %w", apperr.ErrConfig, path, err)
-	}
-	return nil
+	return s.writeConfigIn(s.ConfigsDir(), accountNum, email, config)
 }
 
 // IsSwitchable reports whether an account can be activated without storing it
