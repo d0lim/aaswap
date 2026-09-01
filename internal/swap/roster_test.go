@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/testutil"
+	"github.com/d0lim/ccswap/internal/testutil"
 )
 
 func TestAnAbsentRosterIsAnEmptyStart(t *testing.T) {

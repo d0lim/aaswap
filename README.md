@@ -1,4 +1,4 @@
-# claude-swap
+# ccswap
 
 Multi-account switcher for Claude Code. Switch between Claude accounts without
 logging out, or let it switch for you before you hit a rate limit. See every
@@ -15,25 +15,25 @@ package index.
 ### Homebrew
 
 ```bash
-brew install realiti4/tap/claude-swap
+brew install d0lim/tap/ccswap
 ```
 
 ### Go
 
 ```bash
-go install github.com/realiti4/claude-swap/cmd/ccswap@latest
+go install github.com/d0lim/ccswap/cmd/ccswap@latest
 ```
 
 ### Download a binary
 
-Grab the build for your platform from the [releases page](https://github.com/realiti4/claude-swap/releases),
+Grab the build for your platform from the [releases page](https://github.com/d0lim/ccswap/releases),
 unpack it, and put `ccswap` somewhere on your `PATH`.
 
 ### From source
 
 ```bash
-git clone https://github.com/realiti4/claude-swap.git
-cd claude-swap
+git clone https://github.com/d0lim/ccswap.git
+cd ccswap
 make build          # produces ./ccswap
 ```
 
@@ -117,13 +117,13 @@ ccswap tui
 before it replaces a live credential. It needs a terminal — in a script, use
 `ccswap list --json`.
 
-Or let claude-swap auto-pick by remaining quota — `ccswap switch --strategy best` (most quota left) or `--strategy next-available` (skip rate-limited accounts).
+Or let ccswap auto-pick by remaining quota — `ccswap switch --strategy best` (most quota left) or `--strategy next-available` (skip rate-limited accounts).
 
 **Note:** You usually don't need to restart — on Linux/Windows the new account is picked up automatically, and on macOS after the Keychain cache expires. To apply it instantly, restart Claude Code or reopen the VS Code extension tab. See [Tips](#tips) for the per-platform details.
 
 ### Automatic switching
 
-Let claude-swap watch your usage and switch for you. When the active account's 5-hour or 7-day window reaches the threshold (default 90%), it switches to the account with the most quota left — before you hit the limit, and safe to run while Claude Code is working:
+Let ccswap watch your usage and switch for you. When the active account's 5-hour or 7-day window reaches the threshold (default 90%), it switches to the account with the most quota left — before you hit the limit, and safe to run while Claude Code is working:
 
 ```bash
 ccswap auto                     # foreground loop, polls every 60s
@@ -228,8 +228,8 @@ ccswap alias                     # List all aliases
 ccswap move 2 1                  # Assign an account to a slot (relocates to an empty slot, swaps if taken)
 ccswap unclaimed                 # List stashed credential entries (slot + why they were stashed)
 ccswap unclaimed --purge ID      # Drop one (deletes its bytes; recover with /login + `ccswap add`)
-ccswap upgrade                   # Upgrade claude-swap to the latest version
-ccswap purge                     # Remove all claude-swap data
+ccswap upgrade                   # Upgrade ccswap to the latest version
+ccswap purge                     # Remove all ccswap data
 ```
 
 The original flag spellings (`ccswap --switch`, `ccswap --list`, ...) keep working.
@@ -386,7 +386,7 @@ ccswap purge
 Then remove the binary:
 
 ```bash
-brew uninstall claude-swap    # if installed from the tap
+brew uninstall ccswap    # if installed from the tap
 rm "$(command -v ccswap)"      # if installed any other way
 ```
 

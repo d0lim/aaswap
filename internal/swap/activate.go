@@ -8,13 +8,13 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/credstore"
-	"github.com/realiti4/claude-swap/internal/fsutil"
-	"github.com/realiti4/claude-swap/internal/lockfile"
-	"github.com/realiti4/claude-swap/internal/pollpolicy"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/lockfile"
+	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // AccountRef names one side of a switch.

@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/paths"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/paths"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // The derivation is pinned against Claude Code's own: ccswap and Claude Code must

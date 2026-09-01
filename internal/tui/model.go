@@ -6,8 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/realiti4/claude-swap/internal/render"
-	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/d0lim/ccswap/internal/render"
+	"github.com/d0lim/ccswap/internal/swap"
 )
 
 // WatchInterval is how often watch mode re-collects.

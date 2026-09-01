@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/jsonout"
-	"github.com/realiti4/claude-swap/internal/settings"
-	"github.com/realiti4/claude-swap/internal/usage"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/settings"
+	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // Snapshot is one collect pass's result: the roster, each slot's view, and the

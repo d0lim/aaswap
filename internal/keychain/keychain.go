@@ -8,7 +8,7 @@
 // call — which is what a keyring library does — anchors the item's access
 // control to the *calling binary*. Every `ccswap upgrade` would then produce a
 // new binary that macOS does not recognize as the item's creator, and the user
-// gets a "claude-swap wants to use your keychain" prompt. security(1) never
+// gets a "ccswap wants to use your keychain" prompt. security(1) never
 // changes, so creator == reader and there is no prompt.
 //
 // The read/write/delete shapes mirror Claude Code's own implementation

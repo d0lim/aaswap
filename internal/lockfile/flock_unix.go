@@ -23,7 +23,7 @@ func unlock(f *os.File) error {
 
 // isLockContention reports whether err means "another holder has it", as
 // opposed to a real failure. flock signals contention with EWOULDBLOCK
-// (== EAGAIN on every platform claude-swap supports).
+// (== EAGAIN on every platform ccswap supports).
 func isLockContention(err error) bool {
 	return errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN)
 }

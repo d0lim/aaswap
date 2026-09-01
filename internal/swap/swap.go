@@ -32,13 +32,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/credstore"
-	"github.com/realiti4/claude-swap/internal/keychain"
-	"github.com/realiti4/claude-swap/internal/lockfile"
-	"github.com/realiti4/claude-swap/internal/paths"
-	"github.com/realiti4/claude-swap/internal/settings"
-	"github.com/realiti4/claude-swap/internal/usagestore"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/ccswap/internal/keychain"
+	"github.com/d0lim/ccswap/internal/lockfile"
+	"github.com/d0lim/ccswap/internal/paths"
+	"github.com/d0lim/ccswap/internal/settings"
+	"github.com/d0lim/ccswap/internal/usagestore"
 )
 
 // RosterFileName is the roster's name inside the backup root.
@@ -48,7 +48,7 @@ const RosterFileName = "sequence.json"
 // operations that matter — adding, removing, relocating, switching — touch the
 // roster and the credential backups together, and a per-slot lock would let two
 // of them interleave into a roster that names credentials nobody wrote.
-const LockFileName = ".claude-swap.lock"
+const LockFileName = ".ccswap.lock"
 
 // IdentityOracle resolves an access token to the account it belongs to.
 //

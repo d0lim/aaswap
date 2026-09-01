@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // ShareOptions selects what a profile mirrors from the default one.

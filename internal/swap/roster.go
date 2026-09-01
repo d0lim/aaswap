@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/fsutil"
 )
 
 // TimestampLayout is how the roster stamps times: UTC, second resolution, no

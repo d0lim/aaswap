@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/jsonout"
-	"github.com/realiti4/claude-swap/internal/session"
-	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/session"
+	"github.com/d0lim/ccswap/internal/swap"
 )
 
 // freshenVerdict is what happened when the engine tried to make a candidate's

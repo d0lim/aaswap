@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 var now = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)

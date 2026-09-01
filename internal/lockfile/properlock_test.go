@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // fastOpts keeps the lock protocol's shape while collapsing its timings, so the

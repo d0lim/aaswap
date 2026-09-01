@@ -23,12 +23,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/jsonout"
-	"github.com/realiti4/claude-swap/internal/paths"
-	"github.com/realiti4/claude-swap/internal/render"
-	"github.com/realiti4/claude-swap/internal/settings"
-	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/jsonout"
+	"github.com/d0lim/ccswap/internal/paths"
+	"github.com/d0lim/ccswap/internal/render"
+	"github.com/d0lim/ccswap/internal/settings"
+	"github.com/d0lim/ccswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 

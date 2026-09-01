@@ -21,8 +21,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/pace"
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/pace"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 // SchemaVersion is the payload contract's version. Bumped only on a breaking

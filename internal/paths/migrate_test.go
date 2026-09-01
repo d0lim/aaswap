@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // migrateFixture builds a Linux resolver over a temp home and returns it
@@ -96,9 +96,9 @@ func TestMigrateCollisionRefuses(t *testing.T) {
 			// collision — only an all-throwaway target may be wiped.
 			name: "real data alongside throwaway artifacts",
 			targetFiles: map[string]string{
-				"sequence.json":   `{"src": "target"}`,
-				"claude-swap.log": "noise",
-				"cache/probe":     "{}",
+				"sequence.json": `{"src": "target"}`,
+				"ccswap.log":    "noise",
+				"cache/probe":   "{}",
 			},
 		},
 	}
@@ -134,8 +134,8 @@ func TestMigrateWipesThrowawayOnlyTarget(t *testing.T) {
 	r, legacy, target := migrateFixture(t)
 	writeFile(t, filepath.Join(legacy, "sequence.json"), `{"src": "legacy"}`)
 	writeFile(t, filepath.Join(target, "cache", "update_check.json"), "{}")
-	writeFile(t, filepath.Join(target, "claude-swap.log"), "noise")
-	writeFile(t, filepath.Join(target, "claude-swap.log.1"), "rotated")
+	writeFile(t, filepath.Join(target, "ccswap.log"), "noise")
+	writeFile(t, filepath.Join(target, "ccswap.log.1"), "rotated")
 
 	moved, err := r.MigrateLegacyBackupDir(target)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestMigrateWipesThrowawayOnlyTarget(t *testing.T) {
 	if got := readFile(t, filepath.Join(target, "sequence.json")); got != `{"src": "legacy"}` {
 		t.Errorf("sequence.json = %q, want the legacy contents", got)
 	}
-	for _, gone := range []string{"cache", "claude-swap.log", "claude-swap.log.1"} {
+	for _, gone := range []string{"cache", "ccswap.log", "ccswap.log.1"} {
 		if exists_(filepath.Join(target, gone)) {
 			t.Errorf("throwaway artifact %q survived", gone)
 		}
@@ -290,8 +290,8 @@ func TestIsThrowaway(t *testing.T) {
 		want bool
 	}{
 		{"cache", true},
-		{"claude-swap.log", true},
-		{"claude-swap.log.1", true},
+		{"ccswap.log", true},
+		{"ccswap.log.1", true},
 		{"sequence.json", false},
 		{"settings.json", false},
 		{"credentials", false},

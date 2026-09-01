@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // LegacyKeyringService is the service name the third-party keyring library used
@@ -166,7 +166,7 @@ func runMacOSKeyringToSecurity(
 
 	if migrated > 0 {
 		fmt.Fprintf(os.Stderr,
-			"claude-swap: migrated %d macOS credential(s) from the legacy keyring "+
+			"ccswap: migrated %d macOS credential(s) from the legacy keyring "+
 				"into the Keychain\n", migrated)
 	}
 	if failed > 0 {

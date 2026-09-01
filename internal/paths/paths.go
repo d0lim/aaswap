@@ -1,5 +1,5 @@
 // Package paths resolves where Claude Code keeps its config and credentials,
-// and where claude-swap keeps its backups.
+// and where ccswap keeps its backups.
 //
 // The resolution rules mirror Claude Code's own so ccswap reads and writes the
 // very same files (from the claude-code source):
@@ -10,8 +10,8 @@
 //     .claude.json sits at the home directory by default, not inside .claude/.
 //   - Credentials: <config-home>/.credentials.json.
 //
-// The claude-swap backup root follows the XDG Base Directory Specification on
-// Linux and WSL ($XDG_DATA_HOME/claude-swap) and keeps the legacy
+// The ccswap backup root follows the XDG Base Directory Specification on
+// Linux and WSL ($XDG_DATA_HOME/ccswap) and keeps the legacy
 // ~/.claude-swap-backup on macOS and Windows.
 //
 // # Why a Resolver instead of package functions
@@ -37,8 +37,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/platform"
 )
 
 // LegacyBackupDirName is the pre-XDG backup directory, still the layout used on
@@ -78,7 +78,7 @@ func New(home string, p platform.Platform) *Resolver {
 }
 
 // FromEnv builds a Resolver from the process environment. This is the only
-// place in claude-swap that reads these variables.
+// place in ccswap that reads these variables.
 //
 // In a test binary it panics rather than return a Resolver pointing at the
 // developer's real account store — see [guardRealStore].
@@ -157,7 +157,7 @@ func (r *Resolver) LegacyBackupRoot() string {
 	return filepath.Join(r.Home, LegacyBackupDirName)
 }
 
-// BackupRoot returns claude-swap's backup root for this platform.
+// BackupRoot returns ccswap's backup root for this platform.
 //
 // Per the XDG spec, XDG_DATA_HOME is ignored when unset, empty, or not
 // absolute. A leading ~ is expanded so values like "~/data" — set through

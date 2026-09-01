@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // throwawayNames and throwawayPrefixes are entries any prior ccswap run may have
@@ -20,7 +20,7 @@ import (
 // because wiping them loses no real state.
 var (
 	throwawayNames    = []string{"cache"}
-	throwawayPrefixes = []string{"claude-swap.log"}
+	throwawayPrefixes = []string{"ccswap.log"}
 )
 
 // MigrateLegacyBackupDir moves ~/.claude-swap-backup to target when the layout

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/autoswitch"
+	"github.com/d0lim/ccswap/internal/autoswitch"
 	"github.com/spf13/cobra"
 )
 

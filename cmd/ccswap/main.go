@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/realiti4/claude-swap/internal/cli"
+	"github.com/d0lim/ccswap/internal/cli"
 )
 
 func main() {

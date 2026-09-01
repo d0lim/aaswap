@@ -3,8 +3,8 @@ package usagestore
 import (
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/pollpolicy"
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 // earliestReset is when the soonest window that gates this account rolls over,

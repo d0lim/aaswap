@@ -4,7 +4,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/pollpolicy"
 )
 
 // planOversleeps reports whether a scheduled poll deadline could not have come

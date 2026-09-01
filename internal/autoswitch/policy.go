@@ -21,8 +21,8 @@ package autoswitch
 import (
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/claudeapi"
-	"github.com/realiti4/claude-swap/internal/pollpolicy"
+	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/pollpolicy"
 )
 
 // StateFileName holds the engine's memory between runs.

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/apperr"
 )
 
 // writeSettings drops a raw settings.json into a fresh backup root.

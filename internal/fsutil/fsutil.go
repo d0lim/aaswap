@@ -1,4 +1,4 @@
-// Package fsutil holds filesystem primitives with no other claude-swap
+// Package fsutil holds filesystem primitives with no other ccswap
 // dependencies.
 //
 // Deliberately a leaf package: settings, credentials, mappings and session all
@@ -114,7 +114,7 @@ func readText(path string, p policy) (string, error) {
 }
 
 // ReplaceFile renames src over dst, retrying past transient Windows sharing
-// failures. This is the publish step of every atomic write in claude-swap.
+// failures. This is the publish step of every atomic write in ccswap.
 func ReplaceFile(src, dst string) error {
 	return replaceFile(src, dst, defaultPolicy())
 }

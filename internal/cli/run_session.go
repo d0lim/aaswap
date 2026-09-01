@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/mappings"
-	"github.com/realiti4/claude-swap/internal/session"
-	"github.com/realiti4/claude-swap/internal/swap"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/mappings"
+	"github.com/d0lim/ccswap/internal/session"
+	"github.com/d0lim/ccswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 

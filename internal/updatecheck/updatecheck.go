@@ -19,11 +19,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/fsutil"
+	"github.com/d0lim/ccswap/internal/fsutil"
 )
 
 // ReleasesURL is where the latest release is published.
-const ReleasesURL = "https://api.github.com/repos/realiti4/claude-swap/releases/latest"
+const ReleasesURL = "https://api.github.com/repos/d0lim/ccswap/releases/latest"
 
 // CacheTTL is how long a check is reused.
 //
@@ -56,9 +56,9 @@ const (
 func (m Method) UpgradeCommand() string {
 	switch m {
 	case Homebrew:
-		return "brew upgrade claude-swap"
+		return "brew upgrade ccswap"
 	case GoInstall:
-		return "go install github.com/realiti4/claude-swap/cmd/ccswap@latest"
+		return "go install github.com/d0lim/ccswap/cmd/ccswap@latest"
 	}
 	return ""
 }
@@ -168,7 +168,7 @@ func (c *Checker) fetch(ctx context.Context) (version, url string) {
 		return "", ""
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "claude-swap")
+	req.Header.Set("User-Agent", "ccswap")
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -280,7 +280,7 @@ func parseVersion(v string) ([]int, bool) {
 
 // Notice is what to tell the user when a newer version exists.
 func Notice(latest, current string, method Method) string {
-	notice := fmt.Sprintf("A newer claude-swap is available (%s); you are on %s.", latest, current)
+	notice := fmt.Sprintf("A newer ccswap is available (%s); you are on %s.", latest, current)
 	if command := method.UpgradeCommand(); command != "" {
 		return notice + " Upgrade with: " + command
 	}

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/realiti4/claude-swap/internal/usage"
+	"github.com/d0lim/ccswap/internal/usage"
 )
 
 // rawWindow is one legacy account-wide window as the endpoint reports it.

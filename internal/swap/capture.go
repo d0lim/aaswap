@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/realiti4/claude-swap/internal/apperr"
-	"github.com/realiti4/claude-swap/internal/claudeapi"
+	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/ccswap/internal/claudeapi"
 )
 
 // CaptureResult is the credential a capture read, plus what could not be

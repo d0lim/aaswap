@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/realiti4/claude-swap/internal/buildinfo"
-	"github.com/realiti4/claude-swap/internal/updatecheck"
+	"github.com/d0lim/ccswap/internal/buildinfo"
+	"github.com/d0lim/ccswap/internal/updatecheck"
 	"github.com/spf13/cobra"
 )
 
