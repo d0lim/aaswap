@@ -39,6 +39,11 @@ func (a *App) rootCommand() *cobra.Command {
 	root.PersistentFlags().BoolVarP(&a.assumeYes, "yes", "y", false,
 		"answer every confirmation with yes")
 	root.PersistentFlags().Bool("debug", false, "enable debug logging")
+	// The dimension, as a flag with a default — the shape gh uses for hosts.
+	// A namespace would double the help tree and make every shared command
+	// exist twice.
+	root.PersistentFlags().StringVar(&a.provider, "provider", "",
+		"the auth domain to address: claude or codex (default claude)")
 
 	// What stays at the top level is what gets typed daily. What moves into a
 	// group is what gets typed once a month — and grouping is what keeps a
