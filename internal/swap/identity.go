@@ -41,6 +41,25 @@ func (l LiveIdentity) Identity() Identity {
 	return Identity{Email: l.Email, OrganizationUUID: l.OrganizationUUID}
 }
 
+// SameAccount reports whether two live reads describe the same ACCOUNT.
+//
+// Every field except the fingerprint, which identifies the credential
+// GENERATION rather than the account. A token refresh landing between two reads
+// changes it while the account is unchanged, and counting that as drift refuses
+// the re-login of the very account being captured.
+//
+// The exception is a provider with no address: there the fingerprint is the only
+// identifying field there is, so a changed one has to read as a different
+// account. aaswap genuinely cannot tell the two apart, and refusing is the safe
+// side of that.
+func (l LiveIdentity) SameAccount(other LiveIdentity) bool {
+	if l.Email == "" || other.Email == "" {
+		return l == other
+	}
+	l.Fingerprint, other.Fingerprint = "", ""
+	return l == other
+}
+
 // DisplayTag is how an account's org context reads to a person.
 func (l LiveIdentity) DisplayTag() string { return displayTag(l.OrganizationName) }
 
@@ -129,12 +148,12 @@ func (s *Switcher) LiveIdentityMatches(identity Identity) bool {
 // account's identity on another's credential — labelled as one account,
 // containing another.
 //
-// The comparison is against the WHOLE triple that was read, never a rebuild
+// The comparison is against the WHOLE identity that was read, never a rebuild
 // from its parts: a rebuild describes no real account, so the guard would never
 // match and would refuse every time rather than only on a race.
 func (s *Switcher) RejectIdentityDrift(verified LiveIdentity) error {
 	now, ok := s.LiveIdentity()
-	if ok && now == verified {
+	if ok && now.SameAccount(verified) {
 		return nil
 	}
 	current := "unknown"
