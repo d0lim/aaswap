@@ -78,19 +78,3 @@ func (a *App) printWaitProgress(state swap.LiveState) {
 	a.printer.Println(a.printer.Dimmed("  Now logged in as "), state.Identity.Email,
 		a.printer.Muted(" ["+state.Identity.DisplayTag()+"]"))
 }
-
-// shouldWaitForLogin reports whether an `add` with nothing to capture should
-// wait instead of failing.
-//
-// Only when a person is there to act on it. With no live login `add` has
-// exactly one outcome — an error telling the reader to go log in — and a
-// terminal that can print that can equally well wait for them to do it. A
-// script gets the error it has always got: --json is a machine asking, and a
-// pipe has no one to instruct.
-func (a *App) shouldWaitForLogin(s *swap.Switcher) bool {
-	if a.json || !isTerminal(a.Out) {
-		return false
-	}
-	_, loggedIn := s.LiveIdentity()
-	return !loggedIn
-}

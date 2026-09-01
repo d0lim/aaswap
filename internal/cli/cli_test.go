@@ -104,6 +104,7 @@ func (h *harness) run(args ...string) int {
 		Out: &h.out, Err: &h.err, In: h.app.In,
 		NewSwitcher: h.app.NewSwitcher,
 		Confirm:     h.app.Confirm,
+		Choose:      h.app.Choose,
 		awaitTuning: h.app.awaitTuning,
 	}
 	return app.Execute(h.t.Context(), args)

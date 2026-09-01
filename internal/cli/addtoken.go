@@ -8,37 +8,8 @@ import (
 
 	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/swap"
-	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
-
-// addTokenCommand registers a raw token as an account.
-func (a *App) addTokenCommand() *cobra.Command {
-	var name string
-	var email string
-	cmd := &cobra.Command{
-		Use:   "add-token [TOKEN]",
-		Short: "Register a setup token or API key without logging in first",
-		Long: "For a headless machine, or a token handed over from somewhere else:\n" +
-			"there is no prior Claude Code login here to capture. The kind is detected\n" +
-			"from the value, and nothing is sent anywhere to find out.\n\n" +
-			"Give \"-\" to read the token from stdin, or nothing to be prompted without\n" +
-			"it appearing in your shell history.",
-		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			token := ""
-			if len(args) == 1 {
-				token = args[0]
-			}
-			return a.runAddToken(token, email, name)
-		},
-	}
-	cmd.Flags().StringVar(&name, "name", "", "give the account a name")
-	cmd.Flags().StringVar(&email, "email", "",
-		"label the account with an address (a placeholder is synthesized otherwise)")
-	silenceUsage(cmd)
-	return cmd
-}
 
 func (a *App) runAddToken(token, email, name string) error {
 	token, err := a.readToken(token)

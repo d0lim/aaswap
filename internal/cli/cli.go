@@ -62,6 +62,11 @@ type App struct {
 	// Confirm asks a yes-or-no question. Nil falls back to reading In.
 	Confirm func(prompt string) bool
 
+	// Choose asks a multiple-choice question, returning the key chosen. Nil
+	// falls back to reading In — and, because a non-nil Choose is by
+	// definition someone to ask, setting it makes the App interactive.
+	Choose func(prompt string, options []Choice) string
+
 	printer *render.Printer
 	errs    *render.Printer
 
