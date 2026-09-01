@@ -267,10 +267,13 @@ func (s *Switcher) ReadLiveConfig() (string, error) {
 		// home is machine-scoped — swapping that would carry one account's
 		// model choice onto another.
 		//
-		// An empty object rather than an empty string, because the layers above
-		// read "has a stored config" as half of "is switchable", and an account
-		// with a credential IS switchable.
-		return "{}", nil
+		// Empty, and the layers above ask the declaration rather than reading a
+		// placeholder. This used to return "{}" so that "has a stored config"
+		// would keep standing in for "is switchable" — which meant the answer
+		// was carried by a file written on every capture and read by nothing, and
+		// anything that failed to write it produced accounts that reported as
+		// unswitchable and refused to export.
+		return "", nil
 	}
 	data, err := os.ReadFile(config)
 	if err != nil {

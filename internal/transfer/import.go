@@ -76,11 +76,12 @@ func Import(s *swap.Switcher, data []byte, force bool) (ImportResult, error) {
 	if err != nil {
 		return ImportResult{}, err
 	}
-	// Whether a stored config must carry an identity block is a property of the
-	// provider, not of the archive: for a provider whose credential IS the
-	// identity document there is nothing to require.
-	_, needsIdentity := s.Spec().ConfigFile()
-	entries, err := validateAll(envelope, roster, needsIdentity)
+	// Whether an account HAS a stored config, and so whether that config must
+	// carry an identity block, is a property of the provider rather than of the
+	// archive: for a provider whose credential IS the identity document there is
+	// nothing to carry and nothing to require.
+	_, hasConfig := s.Spec().ConfigFile()
+	entries, err := validateAll(envelope, roster, hasConfig)
 	if err != nil {
 		return ImportResult{}, err
 	}
@@ -181,7 +182,7 @@ func (v validated) identity() swap.Identity {
 }
 
 // validateAll checks every account before any is written.
-func validateAll(envelope Envelope, roster *swap.Roster, needsIdentity bool) ([]validated, error) {
+func validateAll(envelope Envelope, roster *swap.Roster, hasConfig bool) ([]validated, error) {
 	// A name already used here belongs to the local account that has it.
 	localNames := map[string]swap.Identity{}
 	for _, name := range roster.Names() {
@@ -193,7 +194,7 @@ func validateAll(envelope Envelope, roster *swap.Roster, needsIdentity bool) ([]
 	out := make([]validated, 0, len(envelope.Accounts))
 
 	for _, raw := range envelope.Accounts {
-		entry, err := validateOne(raw, needsIdentity)
+		entry, err := validateOne(raw, hasConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -225,9 +226,9 @@ func validateAll(envelope Envelope, roster *swap.Roster, needsIdentity bool) ([]
 
 // validateOne checks one account's fields BEFORE any filename is built from
 // them.
-func validateOne(raw ExportedAccount, needsIdentity bool) (validated, error) {
+func validateOne(raw ExportedAccount, hasConfig bool) (validated, error) {
 	switch {
-	case raw.Email != "" || needsIdentity:
+	case raw.Email != "" || hasConfig:
 		// An address is present, or this provider produces them and its
 		// absence means the archive is malformed. Either way it has to be one.
 		if !emailPattern.MatchString(raw.Email) {
@@ -264,27 +265,30 @@ func validateOne(raw ExportedAccount, needsIdentity bool) (validated, error) {
 		entry.Name = swap.NameForEmail(raw.Email)
 	}
 
-	// The config must be an object, and — for a provider that HAS an
-	// account-scoped config — must carry an identity, or a switch to this
-	// account could never complete. For a provider with none, an empty object
-	// is the whole truth: the credential carries whatever identity there is.
-	var config map[string]jsontext.Value
-	if err := json.Unmarshal(raw.Config, &config); err != nil || config == nil {
-		return validated{}, fmt.Errorf("%w: the config for %s must be a JSON object",
-			apperr.ErrTransfer, raw.Email)
-	}
-	if needsIdentity {
+	// A provider with an account-scoped config must have one here, and it must
+	// carry an identity, or a switch to this account could never complete.
+	//
+	// A provider with none stores nothing, whatever the archive carries. An
+	// older archive from such a provider holds the empty object that used to
+	// stand in for "switchable"; it is dropped rather than restored, so a
+	// re-import does not put the placeholder back.
+	if hasConfig {
+		var config map[string]jsontext.Value
+		if err := json.Unmarshal(raw.Config, &config); err != nil || config == nil {
+			return validated{}, fmt.Errorf("%w: the config for %s must be a JSON object",
+				apperr.ErrTransfer, raw.Email)
+		}
 		if account, present := config["oauthAccount"]; !present || string(account) == "null" {
 			return validated{}, fmt.Errorf("%w: the config for %s carries no account identity",
 				apperr.ErrTransfer, raw.Email)
 		}
+		formatted, err := json.Marshal(config, jsontext.WithIndent("  "), json.Deterministic(true))
+		if err != nil {
+			return validated{}, fmt.Errorf("%w: encoding the config for %s: %w",
+				apperr.ErrTransfer, raw.Email, err)
+		}
+		entry.Config = string(formatted)
 	}
-	formatted, err := json.Marshal(config, jsontext.WithIndent("  "), json.Deterministic(true))
-	if err != nil {
-		return validated{}, fmt.Errorf("%w: encoding the config for %s: %w",
-			apperr.ErrTransfer, raw.Email, err)
-	}
-	entry.Config = string(formatted)
 
 	// An API-key account carries a raw string; an OAuth one carries an object.
 	var asString string
