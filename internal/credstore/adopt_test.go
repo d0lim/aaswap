@@ -9,8 +9,8 @@ import (
 
 // seedClaudeSwapItem plants a backup under the claude-swap project's service,
 // which is what an install being imported from looks like.
-func seedClaudeSwapItem(fake *fakeKeychain, num, email, value string) {
-	fake.items[ClaudeSwapBackupService+"\x00"+backupUsername(num, email)] = value
+func seedClaudeSwapItem(s *Store, fake *fakeKeychain, num, email, value string) {
+	fake.items[ClaudeSwapBackupService+"\x00"+s.backupUsername(num, email)] = value
 }
 
 // The whole point of a separate service: neither project's `remove` may delete
@@ -24,8 +24,8 @@ func TestTheTwoProjectsUseDifferentKeychainServices(t *testing.T) {
 
 func TestAdoptingBackupsFromClaudeSwap(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
-	seedClaudeSwapItem(fake, "1", "a@example.com", "creds-1")
-	seedClaudeSwapItem(fake, "2", "b@example.com", "creds-2")
+	seedClaudeSwapItem(s, fake, "1", "a@example.com", "creds-1")
+	seedClaudeSwapItem(s, fake, "2", "b@example.com", "creds-2")
 
 	report, err := s.AdoptClaudeSwapKeychain(map[string]string{
 		"1": "a@example.com",
@@ -60,8 +60,8 @@ func TestAdoptingBackupsFromClaudeSwap(t *testing.T) {
 // claude-swap install, or the import is a one-way door.
 func TestAdoptionLeavesTheClaudeSwapItemsInPlace(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
-	username := backupUsername("1", "a@example.com")
-	seedClaudeSwapItem(fake, "1", "a@example.com", "creds-1")
+	username := s.backupUsername("1", "a@example.com")
+	seedClaudeSwapItem(s, fake, "1", "a@example.com", "creds-1")
 
 	if _, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"}); err != nil {
 		t.Fatal(err)
@@ -79,7 +79,7 @@ func TestAdoptionLeavesTheClaudeSwapItemsInPlace(t *testing.T) {
 func TestAdoptionClearsAnEncThatWouldShadowTheAdoptedItem(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
 	writeEnc(t, s, "1", "a@example.com", "stale-from-the-moved-directory")
-	seedClaudeSwapItem(fake, "1", "a@example.com", "fresh")
+	seedClaudeSwapItem(s, fake, "1", "a@example.com", "fresh")
 
 	if _, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"}); err != nil {
 		t.Fatal(err)

@@ -208,7 +208,7 @@ func TestReadAccountRoundTripsThroughTheEncFile(t *testing.T) {
 // shadow a newer file.
 func TestEncWinsOverTheKeychain(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
-	fake.items[BackupService+"\x00"+backupUsername("1", "a@example.com")] = "stale-keychain"
+	fake.items[BackupService+"\x00"+s.backupUsername("1", "a@example.com")] = "stale-keychain"
 	writeEnc(t, s, "1", "a@example.com", "fresh-file")
 
 	got, _ := s.ReadAccount("1", "a@example.com")
@@ -250,7 +250,7 @@ func TestReadFallsThroughToTheKeychain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, fake := newTestStore(t, platform.MacOS)
-			fake.items[BackupService+"\x00"+backupUsername("1", "a@example.com")] = "from-keychain"
+			fake.items[BackupService+"\x00"+s.backupUsername("1", "a@example.com")] = "from-keychain"
 			tt.setup(t, s)
 
 			got, unreadable := s.ReadAccount("1", "a@example.com")
@@ -344,7 +344,7 @@ func TestNonMacOSNeverConsultsTheKeychain(t *testing.T) {
 	for _, p := range []platform.Platform{platform.Linux, platform.WSL, platform.Windows} {
 		t.Run(p.String(), func(t *testing.T) {
 			s, fake := newTestStore(t, p)
-			fake.items[BackupService+"\x00"+backupUsername("1", "a@example.com")] = "should-not-be-read"
+			fake.items[BackupService+"\x00"+s.backupUsername("1", "a@example.com")] = "should-not-be-read"
 
 			got, _ := s.ReadAccount("1", "a@example.com")
 			if got != "" {
@@ -447,7 +447,7 @@ func TestBackupFileMode(t *testing.T) {
 // leaving either behind would let a removed account come back.
 func TestDeleteAccountClearsBothBackends(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
-	key := BackupService + "\x00" + backupUsername("1", "a@example.com")
+	key := BackupService + "\x00" + s.backupUsername("1", "a@example.com")
 	fake.items[key] = "in-keychain"
 	writeEnc(t, s, "1", "a@example.com", "in-file")
 
@@ -484,7 +484,7 @@ func TestBackupNaming(t *testing.T) {
 		".creds-2-user@example.com.enc"; got != want {
 		t.Errorf("enc filename = %q, want %q", got, want)
 	}
-	if got, want := backupUsername("2", "user@example.com"), "account-2-user@example.com"; got != want {
+	if got, want := s.backupUsername("2", "user@example.com"), "account-2-user@example.com"; got != want {
 		t.Errorf("keychain account name = %q, want %q", got, want)
 	}
 }

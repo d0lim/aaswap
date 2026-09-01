@@ -59,7 +59,7 @@ func newFixture(t *testing.T) *fixture {
 		// test, not the wall clock it costs.
 		FetchStagger: time.Millisecond,
 		Paths:        r,
-		Creds:        credstore.New(r, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
+		Creds:        credstore.NewForProvider(r, root, keychain.NewWithRunner(refusingKeychain{}, 0), ProviderClaude),
 		Usage:        usagestore.New(r.CacheDir()),
 		Settings:     settings.Defaults(),
 	}

@@ -42,7 +42,7 @@ func (s *Store) AdoptClaudeSwapKeychain(slots map[string]string) (AdoptReport, e
 	}
 
 	for num, email := range slots {
-		username := backupUsername(num, email)
+		username := s.backupUsername(num, email)
 		value, found, err := s.kc.Get(ClaudeSwapBackupService, username)
 		switch {
 		case err != nil:

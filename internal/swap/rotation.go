@@ -13,10 +13,21 @@ func (s *Switcher) ConfigBackupPath(accountNum, email string) string {
 	return filepath.Join(s.ConfigsDir(), fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email))
 }
 
-// ReadAccountConfig reads a slot's captured config, returning empty when there
-// is none.
+// ReadAccountConfig reads an account's captured config, returning empty when
+// there is none.
 func (s *Switcher) ReadAccountConfig(accountNum, email string) string {
 	data, err := os.ReadFile(s.ConfigBackupPath(accountNum, email))
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// readLegacyConfig reads a captured config from the pre-provider layout, for
+// the upgrade.
+func (s *Switcher) readLegacyConfig(accountNum, email string) string {
+	data, err := os.ReadFile(filepath.Join(s.legacyConfigsDir(),
+		fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email)))
 	if err != nil {
 		return ""
 	}

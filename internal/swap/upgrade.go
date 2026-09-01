@@ -47,8 +47,12 @@ func (s *Switcher) EnsureUpgraded() (int, error) {
 			return err
 		}
 
+		// Read through the pre-provider layout, write through the scoped one.
+		// That asymmetry IS the upgrade: the material does not move because a
+		// name changed, it moves because where a name is filed changed.
+		legacy := s.Creds.Unscoped()
 		for _, rename := range renames {
-			if err := s.copyStored(rename.Number, rename.Name, rename.Email); err != nil {
+			if err := s.copyStoredFrom(legacy, rename.Number, rename.Name, rename.Email); err != nil {
 				return fmt.Errorf("%w: upgrading %s (%s) to the current format failed, "+
 					"and nothing was changed: %w", apperr.ErrMigration,
 					rename.Number, rename.Email, err)
@@ -60,7 +64,7 @@ func (s *Switcher) EnsureUpgraded() (int, error) {
 		// Published. Everything below is now unreferenced, and a failure to
 		// remove it costs disk rather than correctness.
 		for _, rename := range renames {
-			s.dropStored(rename.Number, rename.Email)
+			s.dropStoredFrom(legacy, rename.Number, rename.Email)
 		}
 		moved = len(renames)
 		return nil
