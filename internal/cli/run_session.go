@@ -269,7 +269,7 @@ func lookClaude() (string, error) {
 // mapCommand remembers which account a directory belongs to.
 func (a *App) mapCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "map NUM|EMAIL|ALIAS [DIRECTORY]",
+		Use:   "map ACCOUNT [DIRECTORY]",
 		Short: "Remember which account a directory belongs to",
 		Long: "`aaswap run` with no account resolves the working directory to its nearest\n" +
 			"mapped ancestor, so a project always gets the same login.",
@@ -310,7 +310,7 @@ func (a *App) unmapCommand() *cobra.Command {
 
 func (a *App) mappingsCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "mappings",
+		Use:   "list",
 		Short: "Show every directory mapping",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
