@@ -58,7 +58,7 @@ func newFixture(t *testing.T) *fixture {
 		FetchStagger: time.Millisecond,
 		Paths:        resolver,
 		Creds:        credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), swap.ProviderClaude, swap.LiveLayout(resolver, swap.ProviderClaude)),
-		Usage:        usagestore.New(resolver.CacheDir()),
+		Usage:        usagestore.NewForProvider(resolver.CacheDir(), swap.ProviderClaude),
 		Settings:     settings.Defaults(),
 	}
 	f.SetClock(func() time.Time { return f.now })

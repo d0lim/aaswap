@@ -61,7 +61,7 @@ func newFixture(t *testing.T) *fixture {
 		FetchStagger: time.Millisecond,
 		Paths:        r,
 		Creds:        credstore.NewForProvider(r, root, keychain.NewWithRunner(refusingKeychain{}, 0), ProviderClaude, LiveLayout(r, ProviderClaude)),
-		Usage:        usagestore.New(r.CacheDir()),
+		Usage:        usagestore.NewForProvider(r.CacheDir(), ProviderClaude),
 		Settings:     settings.Defaults(),
 	}
 	// One clock for the Switcher and its usage store: the store decides
