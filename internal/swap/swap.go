@@ -37,6 +37,7 @@ import (
 	"github.com/d0lim/aaswap/internal/keychain"
 	"github.com/d0lim/aaswap/internal/lockfile"
 	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/settings"
 	"github.com/d0lim/aaswap/internal/usagestore"
 )
@@ -96,6 +97,11 @@ type Switcher struct {
 
 	// Creds routes credentials between the Keychain and files.
 	Creds *credstore.Store
+
+	// Profiles is how this provider's tool keeps a credential inside a session
+	// profile. Held here so it is injected once, beside the credential store it
+	// is the profile-scoped counterpart of.
+	Profiles provider.ProfileStore
 
 	// Usage is the shared measurement table.
 	Usage *usagestore.Store
@@ -157,6 +163,7 @@ func New(r *paths.Resolver) *Switcher {
 	return &Switcher{
 		Paths:       r,
 		Creds:       credstore.NewForProvider(r, root, keychain.New(), ProviderClaude),
+		Profiles:    provider.NewClaudeProfiles(r.Platform, keychain.New()),
 		Usage:       usagestore.New(r.CacheDir()),
 		Oracle:      client,
 		Fetcher:     client,

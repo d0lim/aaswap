@@ -53,6 +53,7 @@ func (e *Engine) freshen(ctx context.Context, num string, account *swap.Account)
 		BackupRoot: e.Switcher.BackupRoot(),
 		Platform:   e.Switcher.Paths.Platform,
 		Creds:      e.Switcher.Creds,
+		Profiles:   e.Switcher.Profiles,
 	}
 	if len(sessions.LivePIDs(num, account.Email)) > 0 {
 		return freshenSkipLiveSession, ""
