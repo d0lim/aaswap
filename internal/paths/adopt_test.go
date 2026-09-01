@@ -33,7 +33,7 @@ func TestCcswapAndClaudeSwapRootsNeverCollide(t *testing.T) {
 		t.Run(p.String(), func(t *testing.T) {
 			r := New(t.TempDir(), p)
 			ours := r.BackupRoot()
-			for _, theirs := range r.ClaudeSwapRoots() {
+			for _, theirs := range r.Predecessors()[0].Roots {
 				if samePath(ours, theirs) {
 					t.Errorf("aaswap's root %q is also claude-swap's", ours)
 				}
@@ -47,17 +47,17 @@ func TestCcswapAndClaudeSwapRootsNeverCollide(t *testing.T) {
 func TestOnlyAStoreWithARosterIsFound(t *testing.T) {
 	home := t.TempDir()
 	r := New(home, platform.MacOS)
-	bare := r.ClaudeSwapRoots()[0]
+	bare := r.Predecessors()[0].Roots[0]
 	if err := os.MkdirAll(bare, 0o700); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, found := r.FindClaudeSwapStore(); found {
+	if _, found := func() (string, bool) { f, ok := r.FindPredecessor(); return f.Root, ok }(); found {
 		t.Error("an empty directory was offered as a store to import")
 	}
 
 	seedStore(t, bare)
-	got, found := r.FindClaudeSwapStore()
+	got, found := func() (string, bool) { f, ok := r.FindPredecessor(); return f.Root, ok }()
 	if !found || got != bare {
 		t.Errorf("FindClaudeSwapStore() = %q, %v; want %q, true", got, found, bare)
 	}
@@ -68,7 +68,7 @@ func TestOnlyAStoreWithARosterIsFound(t *testing.T) {
 func TestAdoptionMovesTheWholeTree(t *testing.T) {
 	home := t.TempDir()
 	r := New(home, platform.MacOS)
-	source := r.ClaudeSwapRoots()[0]
+	source := r.Predecessors()[0].Roots[0]
 	seedStore(t, source)
 
 	if err := r.AdoptStore(source); err != nil {
@@ -91,7 +91,7 @@ func TestAdoptionMovesTheWholeTree(t *testing.T) {
 func TestAdoptionRefusesToMergeIntoAPopulatedStore(t *testing.T) {
 	home := t.TempDir()
 	r := New(home, platform.MacOS)
-	source := r.ClaudeSwapRoots()[0]
+	source := r.Predecessors()[0].Roots[0]
 	seedStore(t, source)
 	seedStore(t, r.BackupRoot())
 
@@ -112,7 +112,7 @@ func TestAdoptionRefusesToMergeIntoAPopulatedStore(t *testing.T) {
 func TestAdoptionIgnoresThrowawayArtifacts(t *testing.T) {
 	home := t.TempDir()
 	r := New(home, platform.MacOS)
-	source := r.ClaudeSwapRoots()[0]
+	source := r.Predecessors()[0].Roots[0]
 	seedStore(t, source)
 
 	target := r.BackupRoot()

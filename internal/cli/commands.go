@@ -61,7 +61,7 @@ func (a *App) rootCommand() *cobra.Command {
 		a.autoCommand(),
 		a.addTokenCommand(),
 		a.tuiCommand(),
-		a.importStoreCommand(),
+		a.adoptCommand(),
 		a.upgradeCommand(),
 	)
 	return root

@@ -16,6 +16,7 @@ import (
 type Store struct {
 	paths          *paths.Resolver
 	platform       platform.Platform
+	backupRoot     string
 	credentialsDir string
 	// provider scopes this store to one auth domain. Empty is the unscoped
 	// layout every store written before providers existed uses, and the
@@ -56,6 +57,7 @@ func NewForProvider(r *paths.Resolver, backupRoot string, kc *keychain.Keychain,
 	return &Store{
 		paths:          r,
 		platform:       r.Platform,
+		backupRoot:     backupRoot,
 		credentialsDir: dir,
 		provider:       provider,
 		kc:             kc,
@@ -74,7 +76,7 @@ func (s *Store) Unscoped() *Store {
 	if s.provider == "" {
 		return s
 	}
-	return NewForProvider(s.paths, filepath.Dir(s.credentialsDir), s.kc, "")
+	return NewForProvider(s.paths, s.backupRoot, s.kc, "")
 }
 
 // CredentialsDir is where per-account .enc backups live.

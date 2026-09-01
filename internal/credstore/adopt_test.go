@@ -27,7 +27,7 @@ func TestAdoptingBackupsFromClaudeSwap(t *testing.T) {
 	seedClaudeSwapItem(s, fake, "1", "a@example.com", "creds-1")
 	seedClaudeSwapItem(s, fake, "2", "b@example.com", "creds-2")
 
-	report, err := s.AdoptClaudeSwapKeychain(map[string]string{
+	report, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{
 		"1": "a@example.com",
 		"2": "b@example.com",
 		// A slot with nothing in the claude-swap Keychain — off macOS there
@@ -63,7 +63,7 @@ func TestAdoptionLeavesTheClaudeSwapItemsInPlace(t *testing.T) {
 	username := s.backupUsername("1", "a@example.com")
 	seedClaudeSwapItem(s, fake, "1", "a@example.com", "creds-1")
 
-	if _, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"}); err != nil {
+	if _, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{"1": "a@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,7 +81,7 @@ func TestAdoptionClearsAnEncThatWouldShadowTheAdoptedItem(t *testing.T) {
 	writeEnc(t, s, "1", "a@example.com", "stale-from-the-moved-directory")
 	seedClaudeSwapItem(s, fake, "1", "a@example.com", "fresh")
 
-	if _, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"}); err != nil {
+	if _, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{"1": "a@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -98,7 +98,7 @@ func TestAdoptionClearsAnEncThatWouldShadowTheAdoptedItem(t *testing.T) {
 // nothing to report as missing.
 func TestAdoptionIsANoOpOffMacOS(t *testing.T) {
 	s, _ := newTestStore(t, platform.Linux)
-	report, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"})
+	report, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{"1": "a@example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
