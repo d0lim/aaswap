@@ -90,6 +90,33 @@ Not sure which one? `ccswap list` shows every account's 5-hour and 7-day usage a
 ccswap list
 ```
 
+### The dashboard
+
+`ccswap tui` is the same information as an interactive screen: usage bars per
+account, reset times, and switching without retyping a slot number.
+
+```bash
+ccswap tui
+```
+
+```
+ ccswap                                                     watch on
+
+ ▸ ● 1 work@example.com  (work)                                  Acme
+     5h  ██████████████▉░░░░░░░░░  62%   resets 20:39
+     7d  ███████▍░░░░░░░░░░░░░░░░  31%   resets Jul 5 22:12
+
+   ○ 2 spare@example.com                                     personal
+     5h  ██▋░░░░░░░░░░░░░░░░░░░░░  11%   resets 18:02
+     7d  ████▌░░░░░░░░░░░░░░░░░░░  19%   resets Jul 7 12:12
+
+   ↑↓ move  ·  enter switch  ·  d disable  ·  r refresh  ·  w watch  ·  q quit
+```
+
+`w` turns on watch mode, which re-collects every 30 seconds. Switching asks
+before it replaces a live credential. It needs a terminal — in a script, use
+`ccswap list --json`.
+
 Or let claude-swap auto-pick by remaining quota — `ccswap switch --strategy best` (most quota left) or `--strategy next-available` (skip rate-limited accounts).
 
 **Note:** You usually don't need to restart — on Linux/Windows the new account is picked up automatically, and on macOS after the Keychain cache expires. To apply it instantly, restart Claude Code or reopen the VS Code extension tab. See [Tips](#tips) for the per-platform details.

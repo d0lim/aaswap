@@ -63,6 +63,7 @@ func (a *App) rootCommand() *cobra.Command {
 		a.importCommand(),
 		a.autoCommand(),
 		a.addTokenCommand(),
+		a.tuiCommand(),
 		a.upgradeCommand(),
 	)
 	return root
