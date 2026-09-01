@@ -1,9 +1,12 @@
 # aaswap
 
-Multi-account switcher for Claude Code. Switch between Claude accounts without
+**A**gent **A**ccount **Swap**. Switch between agent CLI accounts without
 logging out, or let it switch for you before you hit a rate limit. See every
 account's remaining quota at a glance, and run several accounts in parallel.
-Works with both the Claude Code CLI and the VS Code extension.
+
+Manages **Claude Code** (the CLI and the VS Code extension) and **Codex**. Each
+provider keeps its own accounts and its own active login, so both tools can be
+signed in at once.
 
 A single static binary — no runtime to install, on macOS, Linux or Windows.
 
@@ -56,48 +59,74 @@ instead of guessing.
 
 ### Add your first account
 
-Log into Claude Code with your first account, then:
+Log into your agent CLI, then:
 
 ```bash
-aaswap add
+aaswap login
 ```
+
+`login` looks at what is live and says what it will do. With an account logged
+in that aaswap does not yet store, that is simply to store it.
 
 ### Add more accounts
 
-aaswap can't log you in — Claude Code owns that flow — so adding another account
-means logging in with it first. `--wait` turns that into one command instead of
-two: it tells you what to do and captures the account the moment the login
-lands.
+aaswap cannot log you in — the agent CLI owns that flow — so adding another
+account means logging in with it. `login` closes the gap from its side: it
+prints what to do and captures the account the moment the login lands.
 
 ```bash
-aaswap add --wait
+aaswap login
 ```
 
 ```
-Currently logged in as work@example.com [Acme] — already stored as account 1.
+  Logged in as work@example.com [Acme] — already stored as work.
 
-  Log in with the account you want to add:
+    [r] refresh that account's stored credential
+    [w] wait for a different login, then add it
+    [q] cancel
 
-      claude   then run  /login
-
-  Do not run /logout first — it can revoke the token stored for work@example.com.
-
-  Waiting… (Ctrl-C to stop)
+  [r/w/q]
 ```
 
-Run `claude` in another terminal, `/login` with the other account, and come back
-to find it added. If you've already logged in with the new account, plain
-`aaswap add` captures it immediately:
+Answer `w`, run `claude` in another terminal, `/login` with the other account,
+and come back to find it added.
+
+Do not run `/logout` first: current Claude Code may revoke the refresh token
+stored for the account you are leaving.
+
+Three flags skip the question, for scripts and for people who already know:
 
 ```bash
-aaswap add
+aaswap login --capture    # store the account logged in now
+aaswap login --wait       # wait for a /login, then store that account
+aaswap login --token -    # read a setup token or API key from stdin
 ```
 
-Do not run `/logout` first: current Claude Code may revoke the refresh token stored for the account you are leaving.
+Without a terminal nothing is asked and nothing waits: an unstored live login
+is captured, a stored one is refreshed, and no login at all is an error.
 
-On a machine with no account logged in at all, a plain `aaswap add` in a
-terminal waits by itself — the alternative is an error whose only advice is to
-go and log in. Scripts and `--json` still get that error rather than a hang.
+### Accounts are named, not numbered
+
+Every account has a name — its address's local part by default, suffixed when
+two accounts would collide. Use it anywhere:
+
+```bash
+aaswap switch work
+aaswap account rename work dev
+```
+
+### Two providers
+
+`--provider` picks the auth domain, defaulting to `claude`:
+
+```bash
+aaswap --provider codex login          # store a Codex account
+aaswap --provider codex list
+AASWAP_PROVIDER=codex aaswap switch work
+```
+
+Each provider has its own accounts and its own active login. Switching one
+never touches the other.
 
 ### Switch accounts
 
@@ -112,7 +141,7 @@ Or switch to a specific account:
 ```bash
 aaswap switch 2
 aaswap switch user@example.com
-aaswap switch dev                # or by alias, once set with `aaswap alias 2 dev`
+aaswap switch dev                # or by whatever you renamed it to
 ```
 
 Not sure which one? `aaswap list` shows every account's 5-hour and 7-day usage and reset times at a glance:
@@ -124,7 +153,7 @@ aaswap list
 ### The dashboard
 
 `aaswap tui` is the same information as an interactive screen: usage bars per
-account, reset times, and switching without retyping a slot number.
+account, reset times, and switching without retyping a name.
 
 ```bash
 aaswap tui
@@ -148,7 +177,7 @@ Accounts can be added without leaving the dashboard:
 
 | Key | |
 |---|---|
-| `a` | add the account you are logged in as (or refresh its slot, if it already has one) |
+| `a` | add the account you are logged in as (or refresh it, if already stored) |
 | `n` | wait for a `/login` elsewhere, then add that account |
 | `t` | paste a setup token or managed API key |
 | `enter` | switch to the selected account |
@@ -156,7 +185,7 @@ Accounts can be added without leaving the dashboard:
 | `r` / `w` | collect now / re-collect every 30 seconds |
 | `?` | every key, including the ones the footer drops on a narrow terminal |
 
-`n` is the dashboard's form of `aaswap add --wait`: it keeps watching while you
+`n` is the dashboard's form of `aaswap login --wait`: it keeps watching while you
 run `/login` in another terminal and captures the account when it appears.
 Switching asks before it replaces a live credential. The dashboard needs a
 terminal — in a script, use `aaswap list --json`.
@@ -186,7 +215,7 @@ aaswap auto --strategy consume-first   # burn the soonest-resetting account firs
 - **Strategies** (`--strategy`, or `aaswap config set autoswitch.strategy`): `best` (default) stays put until the active account nears its limit, then moves to the account with the most quota left. `consume-first` proactively keeps you on the account whose **weekly window resets soonest** — use-it-or-lose-it — switching to a sooner-resetting account (with room to spare) even below the threshold, so perishable weekly quota isn't wasted.
 - Usage polling is adaptive — a couple of accounts per check, busy alternates watched more closely, and exhausted ones checked about every ten minutes (or slower after 429s) — so API traffic stays flat no matter how many accounts you manage.
 - It fails safe: if a usage check errors it keeps trusting the last-known numbers while retries back off, and an expired token on an idle machine makes it hold rather than fail over (Claude Code refreshes the token on your next message).
-- An account whose refresh token has died is quarantined and reported until you either log in with it and re-run `aaswap add --slot N`, or replace its stored credentials from a known-good export — a plain `aaswap import backup.aaswap` replaces dead-token slots on its own (`--force` is still required to replace other existing accounts; note a stale export can carry an already-superseded token). API-key accounts are never rotated onto unless you pass `--include-api-key-accounts`.
+- An account whose refresh token has died is quarantined and reported until you either log in with it and re-run `aaswap login`, or replace its stored credentials from a known-good export — a plain `aaswap account import backup.aaswap` replaces dead-token accounts on its own (`--force` is still required to replace other existing accounts; note a stale export can carry an already-superseded token). API-key accounts are never rotated onto unless you pass `--include-api-key-accounts`.
 - To hold an account out of rotation yourself — a work account you don't want touched, one you're resting — run `aaswap disable <num|email>`; `aaswap enable <num|email>` puts it back. Disabled accounts are skipped by auto-switch, bare `aaswap switch`, and the `best` / `next-available` strategies, but stay fully managed and remain a valid explicit `aaswap switch <num|email>` target. They show an `(out of rotation)` marker in `aaswap list`.
 - By default only the account-wide 5h/7d windows drive switching. If you work on one model and hit its **weekly per-model limit** first (e.g. Fable), add `--model Fable` (or `aaswap config set autoswitch.model Fable`) to fold that model's window into the decision, so it switches off an account whose model quota is spent even while its 5h/7d windows still have room.
   - **Model names** are Anthropic's own per-model `display_name`s, matched case-insensitively. The exact strings for your accounts are the per-model rows in `aaswap list` (e.g. a line reading `Fable: 100%`).
@@ -238,48 +267,52 @@ cd ~/work/client-app/src
 aaswap run                       # → account 2, session mode
 ```
 
-Subfolders inherit the nearest mapped ancestor. In an unmapped directory, `aaswap run` just launches plain `claude` with your default login. Mappings are per-machine (not part of `aaswap export`) and are cleaned up when their account is removed.
+Subfolders inherit the nearest mapped ancestor. In an unmapped directory, `aaswap run` just launches plain `claude` with your default login. Mappings are per-machine (not part of `aaswap account export`) and are cleaned up when their account is removed.
 
 </details>
 
 ### Refresh expired tokens
 
-If an account's token expires, log back into Claude Code with that account and re-run:
+If an account's token expires, log back into the agent CLI with that account
+and run:
 
 ```bash
-aaswap add
+aaswap login
 ```
 
-This will update the stored credentials without creating a duplicate. `aaswap
-add --wait` works here too: start it, log back in, and it refreshes the slot in
-place when the login lands.
+aaswap notices the stored credential was already refused and refreshes it in
+place without asking — that is the one thing being logged in as it again could
+mean.
 
 ### Other commands
 
 ```bash
-aaswap run 2                     # Run an account in this terminal only (session mode)
-aaswap auto                      # Auto-switch when nearing rate limits (see above)
-aaswap config                    # Show or edit settings (see Configuration below)
-aaswap list                      # Show all accounts with 5h/7d usage and reset times
-aaswap list --token-status       # Add source-labelled OAuth token diagnostics
-aaswap status                    # Show current account
-aaswap add --wait                # Wait for a /login in Claude Code, then capture that account
-aaswap add --slot 3              # Add account to a specific slot (prompts before overwrite)
-aaswap add --alias dev           # Add account and give it a short alias
-aaswap remove 2                  # Remove an account
-aaswap disable 2                 # Hold an account out of auto-rotation (keeps its login)
-aaswap enable 2                  # Return a disabled account to rotation
-aaswap alias 2 dev               # Give an account a short alias (usable anywhere NUM|EMAIL is)
-aaswap alias 2 --unset           # Remove an account's alias
-aaswap alias                     # List all aliases
-aaswap move 2 1                  # Assign an account to a slot (relocates to an empty slot, swaps if taken)
-aaswap unclaimed                 # List stashed credential entries (slot + why they were stashed)
-aaswap unclaimed --purge ID      # Drop one (deletes its bytes; recover with /login + `aaswap add`)
-aaswap upgrade                   # Upgrade aaswap to the latest version
-aaswap purge                     # Remove all aaswap data
+aaswap list                      # every account with 5h/7d usage and reset times
+aaswap status                    # which account is currently logged in
+aaswap switch work               # activate an account
+aaswap switch                    # rotate to the next one
+aaswap run work                  # run an account in this terminal only (session mode)
+aaswap auto                      # auto-switch when nearing rate limits
+aaswap tui                       # interactive dashboard
+aaswap config                    # show or change settings
+aaswap upgrade                   # check for a newer release
+aaswap purge                     # forget every managed account
+
+aaswap account rename work dev   # give an account a different name
+aaswap account disable work      # hold it out of auto-rotation (keeps its login)
+aaswap account enable work
+aaswap account remove work       # forget aaswap's copy — does NOT log you out
+aaswap account export backup.aaswap
+aaswap account import backup.aaswap
+aaswap account unclaimed         # credentials aaswap preserved but could not file
+aaswap account adopt             # take over a ccswap or claude-swap store
+
+aaswap dir map work              # route this directory to an account
+aaswap dir unmap
+aaswap dir list
 ```
 
-The original flag spellings (`aaswap --switch`, `aaswap --list`, ...) keep working.
+Every account-addressing command takes `--provider`.
 
 ## Tips
 
@@ -291,10 +324,10 @@ The original flag spellings (`aaswap --switch`, `aaswap --list`, ...) keep worki
 - Backs up OAuth tokens and config when you add an account
 - Swaps only the account-specific Claude login when you switch accounts;
   live account-independent OAuth state (such as MCP server logins) is
-  preserved instead of being overwritten by a slot's older snapshot
+  preserved instead of being overwritten by an account's older snapshot
 - Account credentials stored securely using platform-appropriate methods
 - Switches (manual and automatic) hold Claude Code's own credential locks while writing, so a swap never interleaves with a token refresh
-- Auto-switch freshens a target's token before activating it, and quarantines accounts whose refresh token has died (recover by re-adding it with `aaswap add --slot N`, or by replacing its stored credentials from a known-good export — a plain `aaswap import backup.aaswap` replaces dead-token slots automatically)
+- Auto-switch freshens a target's token before activating it, and quarantines accounts whose refresh token has died (recover by logging in with it and running `aaswap login`, or by replacing its stored credentials from a known-good export — a plain `aaswap account import backup.aaswap` replaces dead-token accounts automatically)
 - Usage numbers refresh every few minutes — faster for an account being used or close to switching, slower for idle ones — keeping aaswap comfortably inside Anthropic's rate limits however many dashboards you keep open on a machine. An age note like `· 6m ago` just means the next scheduled check hasn't come yet, not that something is stuck.
 
 ## Data locations
@@ -305,11 +338,12 @@ The original flag spellings (`aaswap --switch`, `aaswap --list`, ...) keep worki
 | Linux / WSL | File-based (inside the backup directory, under `credentials/`) | `${XDG_DATA_HOME:-~/.local/share}/aaswap/` |
 | Windows | File-based (inside the backup directory, under `credentials/`) | `~/.aaswap-backup/` |
 
-### Coming from claude-swap
+### Coming from ccswap or claude-swap
 
-aaswap was forked from [claude-swap](https://github.com/realiti4/claude-swap)
-and keeps its **own** store — a different backup directory and a different
-Keychain service.
+aaswap was renamed from **ccswap**, which was itself ported from
+[claude-swap](https://github.com/realiti4/claude-swap). It keeps its **own**
+store — a different backup directory and a different Keychain service from
+either predecessor.
 
 That is not cosmetic. Both projects stamp the same schema version numbers into
 the same file names, and neither can tell the other's numbers from its own; the
@@ -317,10 +351,10 @@ Python implementation discards a usage table whose version it does not
 recognise. Two independently evolving projects cannot share that namespace, so
 the first one to bump a version would silently wipe the other's state.
 
-If you already use claude-swap, `aaswap list` will point out the store and
+If you have a store from either, `aaswap list` will point it out and
 
 ```bash
-aaswap import-store
+aaswap account adopt
 ```
 
 moves it over. The directory is **moved**, not copied — two stores holding the
@@ -373,14 +407,14 @@ aaswap config path                         # where settings.json lives
 Move account data between machines or back it up:
 
 ```bash
-aaswap export backup.aaswap                    # All accounts to a file
-aaswap export backup.aaswap --account 2        # One account
-aaswap export backup.aaswap --full             # Include full ~/.claude.json and credential object (same-PC backup)
-aaswap import backup.aaswap                    # Skips accounts that already exist
-aaswap import backup.aaswap --force            # Overwrite existing
+aaswap account export backup.aaswap                    # All accounts to a file
+aaswap account export backup.aaswap --account work        # One account
+aaswap account export backup.aaswap --full             # Include full ~/.claude.json and credential object (same-PC backup)
+aaswap account import backup.aaswap                    # Skips accounts that already exist
+aaswap account import backup.aaswap --force            # Overwrite existing
 ```
 
-The export file is plaintext JSON and, by default, carries only each account's own login — machine-shared MCP/plugin OAuth tokens and the device token stay on the source machine (`--full` keeps everything, for same-PC backups). If you need encryption, pipe through your tool of choice (e.g. `aaswap export - | gpg -c > backup.gpg`).
+The export file is plaintext JSON and, by default, carries only each account's own login — machine-shared MCP/plugin OAuth tokens and the device token stay on the source machine (`--full` keeps everything, for same-PC backups). If you need encryption, pipe through your tool of choice (e.g. `aaswap account export - | gpg -c > backup.gpg`).
 
 If an imported account is the one you're currently logged in as, activate the imported credentials with `aaswap switch N --force` (a plain `switch` to the current account is a safe no-op and won't touch the import).
 
@@ -414,7 +448,7 @@ Every payload carries a `schemaVersion` (currently `1`); on a handled error stdo
 
 Usage is served from a per-account cache: when the usage API is briefly unreachable, the last-known numbers are shown instead of nothing (the human view marks them with their age, e.g. `· 2m ago`). Rows with decision-trusted usage carry additive `usageFetchedAt`/`usageAgeSeconds` fields telling you how old the measurement is. Whenever `usage` is null but a last-known measurement exists — data too old to drive a decision (`usageStatus` stays `unavailable`), or a row in a non-`ok` state such as `token_expired` — additive `lastGoodUsage`/`lastGoodFetchedAt`/`lastGoodAgeSeconds` fields preserve the human display without making the account actionable. These fields apply to list rows and the managed active row from `status --json`. An account held out of rotation with `aaswap disable` carries an additive `"disabled": true` on its row (absent otherwise).
 
-An account row also carries an additive `alias` field once one is set with `aaswap alias` (e.g. `"alias": "dev"`); accounts without one simply omit the key.
+An account row carries its `name` — the handle `switch` and `run` take.
 
 Weekly windows (`sevenDay` and per-model `scoped` entries — never `fiveHour`) additively carry pace fields once the week is ~a day old: `expectedPct` (where usage would sit if spread evenly across the week) and `aheadOfPace` (`true` when meaningfully above that — the same signal the human views show as an `(ahead)`/`(ahead of pace)` marker). `projectedExhaustionAt`/`willLastToReset` extrapolate the current rate into an ETA to 100% and a yes/no "will it last to the reset"; they stay `--json`-only since a linear projection is too rough to present as fact in the UI.
 
@@ -430,15 +464,16 @@ flow first — useful on headless servers or when receiving a token from another
 machine — register it directly. The token type is auto-detected:
 
 ```bash
-aaswap add-token sk-ant-oat01-...             # OAuth setup-token
-aaswap add-token sk-ant-api03-...             # managed API key
-aaswap add-token sk-ant-oat01-... --slot 3
-aaswap add-token - --slot 3                   # read token from stdin
-aaswap add-token --email user@example.com     # optional label override
+aaswap login --token sk-ant-oat01-...          # OAuth setup-token
+aaswap login --token sk-ant-api03-...          # managed API key
+aaswap login --token sk-ant-oat01-... --name ci
+aaswap login --token -                         # read the token from stdin
+aaswap login --token - --email user@example.com  # optional label override
 ```
 
-`--email` is optional; omitted values use `setup-token-{slot}@token.local`
-(or `api-key-{slot}@token.local` for API keys). No Anthropic API calls are made.
+`--email` is optional; omitted values are derived from the account's name,
+which itself comes from the token's kind — `setup-token@token.local`, or
+`api-key@token.local` for API keys. No Anthropic API calls are made.
 
 The dashboard has the same thing behind `t`, which masks everything past the
 `sk-ant-oat01-` / `sk-ant-api03-` prefix and names the kind it detected.

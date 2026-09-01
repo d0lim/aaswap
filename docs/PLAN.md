@@ -45,7 +45,7 @@
 
 ---
 
-## Phase 2 — 명령 재편, 단절 (위험: 낮음)
+## Phase 2 — 명령 재편, 단절 ✅ 완료
 
 `legacyFlags` 21개, `move`/`swap`, `alias`는 Phase 1에서 이미 삭제됐다. 남은 것:
 
@@ -57,14 +57,24 @@
 
 **완료 조건**: `aaswap --help`가 10개 + 그룹 2개를 보인다. 동작 변경 없음.
 
-## Phase 3 — `login` + 프롬프트 (위험: 낮음)
+## Phase 3 — `login` + 프롬프트 ✅ 완료
 `add`/`add-token` 병합, 네 경우 프롬프트, `--capture`/`--wait`/`--token`.
 
-## Phase 4 — provider 이음매 추출 (위험: 중간)
+## Phase 4 — provider 이음매 추출 ✅ 완료
 구현체 하나뿐인 `Provider` 인터페이스. `session`의 키체인 직접 호출 제거.
 
-## Phase 5 — Codex (위험: 중간)
-`~/.codex/auth.json`, JWT 신원, 자체 할당량.
+## Phase 5 — Codex ⚠️ 부분 완료
+
+**된 것**: `--provider` / `AASWAP_PROVIDER` 차원, `~/.codex/auth.json` 읽기·쓰기,
+id_token JWT에서 신원 추출, provider별 스토어 분리. `aaswap --provider codex
+login --capture` → `list`가 끝까지 동작한다.
+
+**안 된 것**: **Codex 할당량.** 사용량 API를 모르고, 추측해서 만들 수 있는 것이
+아니다. 지금은 관리형 API 키 계정과 같이 할당량 없음으로 보고한다. 이것 때문에
+`auto`는 Codex 계정을 대상으로 삼지 못한다.
+
+**미검증**: `run`(세션 모드)의 Codex 동작. `CODEX_HOME`이 `CLAUDE_CONFIG_DIR`와
+동등해 보이지만 실기로 시험하지 않았다.
 
 ---
 

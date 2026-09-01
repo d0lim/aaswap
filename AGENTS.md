@@ -1,7 +1,9 @@
 # AGENTS.md
 
-Instructions for coding agents working on **aaswap** — a Go 1.27 CLI that
-switches a machine between multiple Claude Code logins.
+Instructions for coding agents working on **aaswap** (Agent Account Swap) — a
+Go 1.27 CLI that switches a machine between multiple agent-CLI logins. It
+manages Claude Code and Codex; each is a *provider*, with its own accounts and
+its own active login.
 
 This tool holds the user's live authentication. A bug here does not produce a
 wrong answer; it produces a person who cannot log in. Read the invariants below
@@ -31,14 +33,24 @@ suggestion.
 These are contracts with software and state that already exist on users'
 machines. Breaking one is not a refactor, it is a regression.
 
-1. **On-disk formats are append-only.** `sequence.json`, `settings.json`,
-   `autoswitch_state.json`, `credentials/*`, `*.enc`, `.aaswap` export files and
-   session-profile manifests are all read by aaswap versions the user may still
-   have installed. Add fields; never rename or remove them. Unknown fields must
-   survive a read-modify-write round trip — that is what the
-   `Extra map[string]jsontext.Value` + `json:",embed"` fallback is for.
+1. **On-disk formats change only through a migration that moves the bytes
+   with them.** `sequence.json` is at `schemaVersion: 2`: accounts nest under
+   `providers.<id>` and are keyed by NAME. Unknown fields — and whole provider
+   sections this build does not implement — must survive a read-modify-write
+   round trip, which is what the `Extra map[string]jsontext.Value` +
+   `json:",embed"` fallback is for. Dropping a section leaves credentials on
+   disk with nothing naming them.
 
-2. **macOS Keychain access shells out to `/usr/bin/security`, by absolute
+   When a change does have to move stored material, the order is fixed: write
+   the new copies, publish the table, THEN drop the old copies. No other
+   ordering leaves a table naming material that is not there, which is the one
+   state a person cannot recover from. See `swap.EnsureUpgraded`.
+
+2. **The Keychain is one provider's mechanism, not a global fact.** Claude
+   Code keeps its credential there on macOS; Codex keeps a plaintext file
+   everywhere. Code above `internal/provider` must never branch on it — a nil
+   Keychain is the file-only shape, not a degraded one. When Claude's path
+   does use it: **it shells out to `/usr/bin/security`, by absolute
    path.** Not `os/exec.LookPath`, not `Security.framework` via cgo. Claude Code
    created these items and the Keychain's creator-equals-reader rule is the only
    reason the user is not prompted on every read. The wire details are part of
@@ -52,13 +64,21 @@ machines. Breaking one is not a refactor, it is a regression.
    same files, or a token refresh and a swap will interleave and one of them
    will lose.
 
-5. **`--json` output is `schemaVersion: 1` and additive-only.** Scripts consume
-   it. New keys are fine; changed or removed keys are not.
+5. **`--json` output is `schemaVersion: 2` and additive-only from here.**
+   Rows carry `name`; `activeAccount` names the live one. Scripts consume it —
+   new keys are fine, changed or removed keys are not.
 
-6. **The CLI surface is stable in both spellings** — the verb subcommands
-   (`aaswap switch`) and the legacy flags (`aaswap --switch`).
+6. **No compatibility aliases.** The old spellings are gone and stay gone:
+   `add`, `add-token`, `alias`, `move`, `swap`, `import-store`, and the 21
+   claude-swap-era flag translations. A clean break was taken deliberately
+   while the install base was nil; re-introducing an alias re-opens it.
 
-7. **Tests never touch real state.** Three guards panic in test builds when the
+7. **The provider reaches the constructor, never a field on a built object.**
+   `swap.NewForProvider` scopes the credential store and the profile store.
+   Assigning `Switcher.Provider` afterwards leaves both pointed at the wrong
+   provider's files while the roster reads the right one's section.
+
+8. **Tests never touch real state.** Three guards panic in test builds when the
    real thing is reached: `paths.guardRealStore`, `keychain.guardRealKeychain`,
    `claudeapi.guardRealEndpoint`. They replace Python's `sys.addaudithook`
    safety net and are the reason this codebase injects a dependency at every
@@ -152,6 +172,10 @@ Concretely, in this codebase:
 - JSON is `encoding/json/v2` + `jsontext` everywhere. Import it as
   `json "encoding/json/v2"`.
 - `omitzero`, not `omitempty`, on bool/numeric/struct/time fields.
+- An account's handle is its NAME, and the name is the map key — there is no
+  separate alias field, so the two cannot drift. A name is also a path
+  component and a Keychain account name, which is why `NormalizeName` refuses
+  what a label could carry.
 - Error matching is `errors.Is` against the `internal/apperr` sentinel tree
   (`apperr.Err` → `ErrCredential` → `ErrCredentialRead`, …), and
   `errors.AsType[T]` when a concrete type is needed. Never `==`, never a bare
@@ -215,6 +239,8 @@ cmd/aaswap/                                       entrypoint, kept thin
 internal/
   platform/ paths/ fsutil/ lockfile/ apperr/      foundation
   settings/ buildinfo/
+  provider/                                       the seam between aaswap and
+                                                  the tools it swaps
   keychain/ credstore/                            credential storage
   claudeapi/ usage/ usagestore/ pollpolicy/ pace/ usage pipeline
   swap/                                           the switcher, split by role
