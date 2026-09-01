@@ -55,22 +55,22 @@ const (
 	// two writers is the fallback for an invalidation that just failed, and the
 	// faults it exists for — an unwritable profile, a read-only mount — are
 	// faults on that very directory.
-	StaleMarkerSuffix = ".cswap-stale-credentials"
+	StaleMarkerSuffix = ".ccswap-stale-credentials"
 
 	// ShareManifest records which entries in a profile ccswap created, so
 	// turning sharing off only ever removes ccswap's own links and never the
 	// user's files.
-	ShareManifest = ".cswap-shared.json"
+	ShareManifest = ".ccswap-shared.json"
 
 	// MCPMirrorMarker records that this profile's MCP servers are ccswap-
 	// mirrored. It gates both the one-time migration stash and the removal on
 	// --no-share, so a profile's own pre-existing definitions are never
 	// silently destroyed.
-	MCPMirrorMarker = ".cswap-mcp-mirror-v1"
+	MCPMirrorMarker = ".ccswap-mcp-mirror-v1"
 
 	// MCPDisplacedStash holds session-local MCP definitions displaced by the
 	// first mirror. Write-once: they land here instead of vanishing.
-	MCPDisplacedStash = ".cswap-mcp-displaced.json"
+	MCPDisplacedStash = ".ccswap-mcp-displaced.json"
 )
 
 // SharedItems are mirrored from the default profile when sharing is on.
@@ -139,12 +139,47 @@ func StaleMarkerFor(sessionDir string) string {
 	return sessionDir + StaleMarkerSuffix
 }
 
+// AdoptLegacyMarker renames a marker written under the old command name to its
+// current spelling.
+//
+// The command was renamed from cswap to ccswap, and every marker in this file
+// is named after it. Profiles outlive the rename, so ignoring the old spelling
+// would not merely lose a file — it would change behavior: a stale profile
+// would stop announcing itself and keep serving a superseded credential, an
+// orphaned share manifest would leave ccswap's own links behind on --no-share,
+// and an unseen mirror marker would re-run the one-time MCP migration against
+// servers that were already mirrored.
+//
+// Renaming rather than reading both names on: the profile converges on one
+// spelling, so the compatibility shim stays here instead of spreading into
+// every reader. Best effort — a failure leaves the profile exactly as it was,
+// which is the same state a pre-rename ccswap would find.
+func AdoptLegacyMarker(path string) {
+	if _, err := os.Lstat(path); err == nil {
+		return // already current; nothing to adopt
+	}
+	dir, base := filepath.Split(path)
+	suffix, ok := strings.CutPrefix(base, ".ccswap-")
+	if !ok {
+		return
+	}
+	legacy := filepath.Join(dir, ".cswap-"+suffix)
+	if _, err := os.Lstat(legacy); err != nil {
+		return
+	}
+	if err := os.Rename(legacy, path); err != nil {
+		slog.Warn("could not adopt a session marker written under the old command name",
+			"from", legacy, "to", path, "error", err)
+	}
+}
+
 // IsStale reports whether a profile was marked for re-seeding.
 //
 // The marker is set when a slot's stored credential changes while a session is
 // live: ccswap never pulls credentials out from under a running Claude Code, so
 // the invalidation is deferred to the next launch that finds the profile quiet.
 func IsStale(sessionDir string) bool {
+	AdoptLegacyMarker(StaleMarkerFor(sessionDir))
 	_, err := os.Lstat(StaleMarkerFor(sessionDir))
 	return err == nil
 }
@@ -152,6 +187,9 @@ func IsStale(sessionDir string) bool {
 // MarkStale defers a profile's invalidation to its next quiet launch.
 func MarkStale(sessionDir string) error {
 	path := StaleMarkerFor(sessionDir)
+	// Adopt first: writing the current name while an old one survives would
+	// leave the profile carrying both.
+	AdoptLegacyMarker(path)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("%w: marking a session profile stale: %w", apperr.ErrSession, err)
 	}
@@ -163,6 +201,7 @@ func MarkStale(sessionDir string) error {
 
 // ClearStale removes the marker, reporting whether there was one.
 func ClearStale(sessionDir string) bool {
+	AdoptLegacyMarker(StaleMarkerFor(sessionDir))
 	err := os.Remove(StaleMarkerFor(sessionDir))
 	return err == nil
 }

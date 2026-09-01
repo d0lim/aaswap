@@ -67,6 +67,7 @@ func (m *Manager) SyncSharing(sessionDir, defaultProfile string, opts ShareOptio
 	}
 
 	manifestPath := filepath.Join(sessionDir, ShareManifest)
+	AdoptLegacyMarker(manifestPath)
 	managed := readManifest(manifestPath)
 
 	// A flag turned off since the last launch: remove the links created for it,
@@ -229,6 +230,7 @@ func (m *Manager) SyncMCPServers(sessionDir, defaultConfigPath string, share boo
 	}
 
 	markerPath := filepath.Join(sessionDir, MCPMirrorMarker)
+	AdoptLegacyMarker(markerPath)
 	adopted := exists(markerPath)
 
 	if !share {
@@ -259,6 +261,7 @@ func (m *Manager) SyncMCPServers(sessionDir, defaultConfigPath string, share boo
 		// mirror existed land in a stash rather than vanishing. Write-once, so
 		// a later re-mirror cannot overwrite the original displacement.
 		stashPath := filepath.Join(sessionDir, MCPDisplacedStash)
+		AdoptLegacyMarker(stashPath)
 		if !exists(stashPath) {
 			if err := writeJSONPrivate(stashPath, map[string]jsontext.Value{MCPKey: existing}); err != nil {
 				return fmt.Errorf("%w: stashing the profile's own MCP servers before "+

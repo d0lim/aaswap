@@ -177,9 +177,9 @@ func TestZeroTimeoutUsesDefault(t *testing.T) {
 // with a real second process, since that is the only way the guarantee is
 // actually exercised.
 func TestLockIsReleasedWhenTheHolderProcessExits(t *testing.T) {
-	if os.Getenv("CSWAP_LOCK_HELPER") != "" {
+	if os.Getenv("CCSWAP_LOCK_HELPER") != "" {
 		// Child: take the lock, announce it, and exit without releasing.
-		l := New(os.Getenv("CSWAP_LOCK_HELPER"), 5*time.Second)
+		l := New(os.Getenv("CCSWAP_LOCK_HELPER"), 5*time.Second)
 		acquired, err := l.Acquire()
 		if err != nil || !acquired {
 			os.Exit(2)
@@ -189,7 +189,7 @@ func TestLockIsReleasedWhenTheHolderProcessExits(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "store.lock")
 	cmd := exec.Command(os.Args[0], "-test.run=TestLockIsReleasedWhenTheHolderProcessExits")
-	cmd.Env = append(os.Environ(), "CSWAP_LOCK_HELPER="+path)
+	cmd.Env = append(os.Environ(), "CCSWAP_LOCK_HELPER="+path)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("helper process failed: %v\n%s", err, out)
 	}
