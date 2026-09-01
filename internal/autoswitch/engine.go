@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/d0lim/aaswap/internal/claudeapi"
@@ -561,9 +560,9 @@ func (e *Engine) perform(roster *swap.Roster, snapshot *swap.Snapshot, headroom 
 	event := e.event(KindSwitch)
 	event.Trigger = trigger
 	if outcome.From != nil {
-		event.From = accountRef(outcome.From.Number, outcome.From.Email)
+		event.From = accountRef(outcome.From.Name, outcome.From.Email)
 	}
-	event.To = accountRef(outcome.To.Number, outcome.To.Email)
+	event.To = accountRef(outcome.To.Name, outcome.To.Email)
 	e.emit(event)
 	return Switched, nil
 }
@@ -686,12 +685,8 @@ func (e *Engine) checkModelNames(snapshot *swap.Snapshot) {
 	}
 }
 
-func accountRef(num, email string) *jsonout.AccountRef {
-	ref := &jsonout.AccountRef{Email: email}
-	if number, err := strconv.Atoi(num); err == nil {
-		ref.Number = &number
-	}
-	return ref
+func accountRef(name, email string) *jsonout.AccountRef {
+	return &jsonout.AccountRef{Name: name, Email: email}
 }
 
 func lowerASCII(s string) string {

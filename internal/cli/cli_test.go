@@ -130,7 +130,7 @@ func (h *harness) seed(accounts map[string]string) {
 		h.t.Fatal(err)
 	}
 	for num, email := range accounts {
-		roster.Insert(num, &swap.Account{Email: email, UUID: "acct-" + num}, h.now)
+		roster.Insert(num, &swap.Account{Email: email, UUID: "acct-" + num})
 		if err := h.switcher.Creds.WriteAccount(num, email,
 			`{"claudeAiOauth":{"accessToken":"tok-`+num+`","refreshToken":"r-`+num+`"}}`); err != nil {
 			h.t.Fatal(err)
@@ -160,7 +160,7 @@ func (h *harness) login(num, email string) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	roster.SetActive(num, h.now)
+	roster.SetActive(num)
 	if err := h.switcher.WriteRoster(roster); err != nil {
 		h.t.Fatal(err)
 	}

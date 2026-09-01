@@ -2,13 +2,11 @@ package swap
 
 import (
 	"context"
-	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/claudeapi"
 	"github.com/d0lim/aaswap/internal/usagestore"
 )
@@ -55,7 +53,7 @@ func TestAddRegistersTheLiveLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Number != "1" || got.Email != "a@example.com" || got.Tag != "Example" {
+	if got.Name != "a" || got.Email != "a@example.com" || got.Tag != "Example" {
 		t.Errorf("outcome = %+v", got)
 	}
 	if got.Unverified != "" {
@@ -63,7 +61,7 @@ func TestAddRegistersTheLiveLogin(t *testing.T) {
 	}
 
 	roster := f.roster()
-	account := roster.Accounts["1"]
+	account := roster.Accounts["a"]
 	if account.Email != "a@example.com" || account.UUID != "acct-1" ||
 		account.OrganizationUUID != "org-1" || account.OrganizationName != "Example" {
 		t.Errorf("account = %+v", account)
@@ -71,15 +69,15 @@ func TestAddRegistersTheLiveLogin(t *testing.T) {
 	if account.Added != Timestamp(f.now) {
 		t.Errorf("added = %q", account.Added)
 	}
-	if num, ok := roster.Active(); !ok || num != "1" {
-		t.Errorf("Active = (%q, %v), want the slot just added", num, ok)
+	if num, ok := roster.ActiveName(); !ok || num != "a" {
+		t.Errorf("Active = (%q, %v), want the account just added", num, ok)
 	}
 
 	// The credential and the config both landed, or the slot is not switchable.
-	if value, _ := f.Creds.ReadAccount("1", "a@example.com"); value != liveCreds {
+	if value, _ := f.Creds.ReadAccount("a", "a@example.com"); value != liveCreds {
 		t.Errorf("stored credential = %q", value)
 	}
-	if config := f.ReadAccountConfig("1", "a@example.com"); !strings.Contains(config, "projects") {
+	if config := f.ReadAccountConfig("a", "a@example.com"); !strings.Contains(config, "projects") {
 		t.Errorf("stored config = %q, want the live config verbatim", config)
 	}
 }
@@ -100,19 +98,19 @@ func TestTheCapturedConfigIsVerbatim(t *testing.T) {
 	if _, err := f.Add(t.Context(), AddRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.ReadAccountConfig("1", "a@example.com"); got != exact {
+	if got := f.ReadAccountConfig("a", "a@example.com"); got != exact {
 		t.Errorf("stored config =\n%q\nwant\n%q", got, exact)
 	}
 }
 
 // Re-running add on a registered account refreshes its credential in place.
-// Assigning a new number would leave two slots holding one account, the older
-// one with a credential the server has retired.
+// Inventing a second name would leave two entries holding one account, the
+// older one with a credential the server has retired.
 func TestAddRefreshesARegisteredAccountInPlace(t *testing.T) {
 	f := newFixture(t)
 	f.liveLogin("a@example.com", "org-1", "Example", "acct-1", liveCreds)
 	f.resolving("acct-1", "a@example.com", "org-1")
-	if _, err := f.Add(t.Context(), AddRequest{Alias: "work"}); err != nil {
+	if _, err := f.Add(t.Context(), AddRequest{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,24 +124,25 @@ func TestAddRefreshesARegisteredAccountInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.Refreshed || got.Number != "1" {
-		t.Errorf("outcome = %+v, want an in-place refresh of slot 1", got)
+	if !got.Refreshed || got.Name != "a" {
+		t.Errorf("outcome = %+v, want an in-place refresh of \"a\"", got)
 	}
 
 	roster := f.roster()
 	if len(roster.Accounts) != 1 {
-		t.Errorf("accounts = %d, want the account to stay in one slot", len(roster.Accounts))
+		t.Errorf("accounts = %d, want the account to stay under one name", len(roster.Accounts))
 	}
-	// The alias survives an add that named none.
-	if roster.Accounts["1"].Alias != "work" {
-		t.Errorf("alias = %q, want it preserved", roster.Accounts["1"].Alias)
+	// The name survives an add that named none.
+	if _, ok := roster.Accounts["a"]; !ok {
+		t.Errorf("accounts = %v, want the name preserved", roster.Names())
 	}
-	if value, _ := f.Creds.ReadAccount("1", "a@example.com"); value != rotated {
+	if value, _ := f.Creds.ReadAccount("a", "a@example.com"); value != rotated {
 		t.Errorf("stored credential = %q, want the rotated one", value)
 	}
 }
 
-// Two slots sharing an address across organizations are two accounts.
+// Two entries sharing an address across organizations are two accounts, and
+// they cannot share a name.
 func TestAddDistinguishesOrganizations(t *testing.T) {
 	f := newFixture(t)
 	f.liveLogin("a@example.com", "", "", "acct-personal", liveCreds)
@@ -158,50 +157,60 @@ func TestAddDistinguishesOrganizations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Number != "2" || got.Refreshed {
-		t.Errorf("outcome = %+v, want a new slot for the organization account", got)
+	if got.Name != "a-2" || got.Refreshed {
+		t.Errorf("outcome = %+v, want a suffixed name for the organization account", got)
 	}
 	if len(f.roster().Accounts) != 2 {
-		t.Error("the two accounts collapsed into one slot")
+		t.Error("the two accounts collapsed into one")
 	}
 }
 
-func TestAddIntoAPinnedSlot(t *testing.T) {
+func TestAddUnderAGivenName(t *testing.T) {
 	f := newFixture(t)
 	f.liveLogin("a@example.com", "", "", "acct-1", liveCreds)
 	f.resolving("acct-1", "a@example.com", "")
 
-	got, err := f.Add(t.Context(), AddRequest{Slot: 5})
+	got, err := f.Add(t.Context(), AddRequest{Name: "Work"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Number != "5" {
-		t.Errorf("Number = %q, want the pinned slot", got.Number)
+	// Normalized on the way in, so the handle a person types and the key the
+	// store files it under cannot differ by case.
+	if got.Name != "work" {
+		t.Errorf("name = %q, want the given name normalized", got.Name)
 	}
-	if _, ok := f.roster().Accounts["5"]; !ok {
-		t.Error("slot 5 does not exist")
+	if _, ok := f.roster().Accounts["work"]; !ok {
+		t.Errorf("accounts = %v, want one called \"work\"", f.roster().Names())
 	}
 }
 
-func TestAddRejectsAnImpossibleSlot(t *testing.T) {
+// A name is a path component and a Keychain account, so the rules that refuse
+// one have to refuse it before anything is stored, not after.
+func TestAddRejectsAnUnusableName(t *testing.T) {
 	f := newFixture(t)
 	f.liveLogin("a@example.com", "", "", "acct-1", liveCreds)
 	f.resolving("acct-1", "a@example.com", "")
 
-	for _, slot := range []int{-1, -100} {
-		_, err := f.Add(t.Context(), AddRequest{Slot: slot})
-		wantErr(t, err, "1 or greater")
+	for _, name := range []string{"..", ".", "a/b", "-x", "7"} {
+		_, err := f.Add(t.Context(), AddRequest{Name: name})
+		if err == nil {
+			t.Errorf("Add(%q) was accepted", name)
+			continue
+		}
+		if len(f.roster().Accounts) != 0 {
+			t.Fatalf("Add(%q) stored something before refusing", name)
+		}
 	}
 }
 
-// Overwriting a slot someone else occupies needs a decision, and a caller that
-// cannot ask gets a refusal rather than a silent overwrite.
-func TestAddConfirmsBeforeDisplacingASlot(t *testing.T) {
+// Taking a name someone else holds needs a decision, and a caller that cannot
+// ask gets a refusal rather than a silent overwrite.
+func TestAddConfirmsBeforeTakingAHeldName(t *testing.T) {
 	setup := func(t *testing.T) *fixture {
 		f := newFixture(t)
 		f.liveLogin("first@example.com", "", "", "acct-1", liveCreds)
 		f.resolving("acct-1", "first@example.com", "")
-		if _, err := f.Add(t.Context(), AddRequest{Slot: 1}); err != nil {
+		if _, err := f.Add(t.Context(), AddRequest{Name: "shared"}); err != nil {
 			t.Fatal(err)
 		}
 		f.liveLogin("second@example.com", "", "", "acct-2", liveCreds)
@@ -211,42 +220,42 @@ func TestAddConfirmsBeforeDisplacingASlot(t *testing.T) {
 
 	t.Run("declined leaves everything alone", func(t *testing.T) {
 		f := setup(t)
-		got, err := f.Add(t.Context(), AddRequest{Slot: 1, Confirm: func(string) bool { return false }})
+		got, err := f.Add(t.Context(), AddRequest{Name: "shared", Confirm: func(string) bool { return false }})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !got.Cancelled {
 			t.Errorf("outcome = %+v, want a cancellation", got)
 		}
-		if f.roster().Accounts["1"].Email != "first@example.com" {
-			t.Error("the declined add displaced the occupant anyway")
+		if f.roster().Accounts["shared"].Email != "first@example.com" {
+			t.Error("the declined add took the name anyway")
 		}
 	})
 
 	t.Run("no way to ask is a refusal", func(t *testing.T) {
 		f := setup(t)
-		got, err := f.Add(t.Context(), AddRequest{Slot: 1})
+		got, err := f.Add(t.Context(), AddRequest{Name: "shared"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !got.Cancelled {
 			t.Errorf("outcome = %+v, want a cancellation", got)
 		}
-		if f.roster().Accounts["1"].Email != "first@example.com" {
-			t.Error("a slot was overwritten with nobody to confirm it")
+		if f.roster().Accounts["shared"].Email != "first@example.com" {
+			t.Error("a name was taken with nobody to confirm it")
 		}
 	})
 
 	t.Run("accepted replaces the occupant and its stored material", func(t *testing.T) {
 		f := setup(t)
-		got, err := f.Add(t.Context(), AddRequest{Slot: 1, Confirm: func(string) bool { return true }})
+		got, err := f.Add(t.Context(), AddRequest{Name: "shared", Confirm: func(string) bool { return true }})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Displaced != "1" || got.Number != "1" {
+		if got.Displaced != "shared" || got.Name != "shared" {
 			t.Errorf("outcome = %+v", got)
 		}
-		if f.roster().Accounts["1"].Email != "second@example.com" {
+		if f.roster().Accounts["shared"].Email != "second@example.com" {
 			t.Error("the slot still names the old occupant")
 		}
 		// The displaced account's material is gone, not orphaned.
@@ -260,11 +269,11 @@ func TestAddConfirmsBeforeDisplacingASlot(t *testing.T) {
 
 	t.Run("assume-yes skips the question", func(t *testing.T) {
 		f := setup(t)
-		got, err := f.Add(t.Context(), AddRequest{Slot: 1, AssumeYes: true})
+		got, err := f.Add(t.Context(), AddRequest{Name: "shared", AssumeYes: true})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Cancelled || got.Displaced != "1" {
+		if got.Cancelled || got.Displaced != "shared" {
 			t.Errorf("outcome = %+v", got)
 		}
 	})
@@ -276,30 +285,26 @@ func TestAddIntoANewSlotMovesTheAccount(t *testing.T) {
 	f := newFixture(t)
 	f.liveLogin("a@example.com", "", "", "acct-1", liveCreds)
 	f.resolving("acct-1", "a@example.com", "")
-	if _, err := f.Add(t.Context(), AddRequest{Alias: "work"}); err != nil {
+	if _, err := f.Add(t.Context(), AddRequest{}); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := f.Add(t.Context(), AddRequest{Slot: 4})
+	got, err := f.Add(t.Context(), AddRequest{Name: "spare"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Number != "4" || got.MovedFrom != "1" {
-		t.Errorf("outcome = %+v, want a move from slot 1 to 4", got)
+	if got.Name != "spare" || got.RenamedFrom != "a" {
+		t.Errorf("outcome = %+v, want a rename from \"a\" to \"spare\"", got)
 	}
 
 	roster := f.roster()
-	if _, still := roster.Accounts["1"]; still {
-		t.Error("the old slot survived the move")
+	if _, still := roster.Accounts["a"]; still {
+		t.Error("the old name survived the rename")
 	}
-	// The alias moves with the account.
-	if roster.Accounts["4"].Alias != "work" {
-		t.Errorf("alias = %q, want it carried to the new slot", roster.Accounts["4"].Alias)
+	if value, _ := f.Creds.ReadAccount("a", "a@example.com"); value != "" {
+		t.Error("the old name's credential was left behind")
 	}
-	if value, _ := f.Creds.ReadAccount("1", "a@example.com"); value != "" {
-		t.Error("the old slot's credential was left behind")
-	}
-	if value, _ := f.Creds.ReadAccount("4", "a@example.com"); value == "" {
+	if value, _ := f.Creds.ReadAccount("spare", "a@example.com"); value == "" {
 		t.Error("the new slot has no credential")
 	}
 }
@@ -349,31 +354,30 @@ func TestAFailedAddChangesNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFixture(t)
-			// A registered account already occupying slot 1, so a destructive
-			// step would be visible.
+			// A registered account already holding the name, so a
+			// destructive step would be visible.
 			f.liveLogin("resident@example.com", "", "", "acct-resident", liveCreds)
 			f.resolving("acct-resident", "resident@example.com", "")
-			if _, err := f.Add(t.Context(), AddRequest{Slot: 1}); err != nil {
+			if _, err := f.Add(t.Context(), AddRequest{Name: "held"}); err != nil {
 				t.Fatal(err)
 			}
-			before := f.rawRoster()
-			beforeCreds, _ := f.Creds.ReadAccount("1", "resident@example.com")
+			before := f.roster()
+			beforeCreds, _ := f.Creds.ReadAccount("held", "resident@example.com")
 
 			f.liveLogin("a@example.com", "", "", "acct-1", liveCreds)
 			f.resolving("acct-1", "a@example.com", "")
 			tt.break_(f)
 
-			_, err := f.Add(t.Context(), AddRequest{Slot: 1, AssumeYes: true})
+			_, err := f.Add(t.Context(), AddRequest{Name: "held", AssumeYes: true})
 			wantErr(t, err, tt.wantErr...)
 
 			// The resident account is untouched.
-			after := f.rawRoster()
-			afterAccounts := after["accounts"].(map[string]any)
-			one, ok := afterAccounts["1"].(map[string]any)
-			if !ok || one["email"] != "resident@example.com" {
-				t.Errorf("the roster changed: %v (was %v)", after, before)
+			after := f.roster()
+			resident, ok := after.Accounts["held"]
+			if !ok || resident.Email != "resident@example.com" {
+				t.Errorf("the roster changed: %v (was %v)", after.Accounts, before.Accounts)
 			}
-			if value, _ := f.Creds.ReadAccount("1", "resident@example.com"); value != beforeCreds {
+			if value, _ := f.Creds.ReadAccount("held", "resident@example.com"); value != beforeCreds {
 				t.Error("the resident's credential was disturbed by a failed add")
 			}
 		})
@@ -441,7 +445,7 @@ func TestAnUnverifiableCaptureProceedsWithANotice(t *testing.T) {
 			if !strings.Contains(got.Unverified, tt.want) {
 				t.Errorf("Unverified = %q, want it to mention %q", got.Unverified, tt.want)
 			}
-			if _, ok := f.roster().Accounts[got.Number]; !ok {
+			if _, ok := f.roster().Accounts[got.Name]; !ok {
 				t.Error("the account was not registered")
 			}
 		})
@@ -498,23 +502,6 @@ func TestWithoutAUUIDTheAddressDecides(t *testing.T) {
 	}
 }
 
-func TestAddValidatesTheAlias(t *testing.T) {
-	f := newFixture(t)
-	f.liveLogin("a@example.com", "", "", "acct-1", liveCreds)
-	f.resolving("acct-1", "a@example.com", "")
-
-	for _, alias := range []string{"", "  "} {
-		if _, err := f.Add(t.Context(), AddRequest{Alias: alias}); alias != "" && err == nil {
-			t.Errorf("a whitespace alias %q was accepted", alias)
-		}
-	}
-	_, err := f.Add(t.Context(), AddRequest{Alias: "has spaces"})
-	wantErr(t, err, "may only contain")
-	if !errors.Is(err, apperr.ErrValidation) {
-		t.Errorf("error is not a validation error: %v", err)
-	}
-}
-
 // A capture replaces the credential a strike was issued against, so the
 // quarantine no longer describes reality.
 func TestAddLiftsTheDeadTokenQuarantine(t *testing.T) {
@@ -525,20 +512,20 @@ func TestAddLiftsTheDeadTokenQuarantine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ids := map[string]usagestore.Identity{"1": {Email: "a@example.com"}}
+	ids := map[string]usagestore.Identity{"a": {Email: "a@example.com"}}
 	if _, err := f.Usage.Record(map[string]usagestore.FetchRecord{
-		"1": {Error: claudeapi.KindInvalidGrant, StruckFP: "sha256:dead"},
+		"a": {Error: claudeapi.KindInvalidGrant, StruckFP: "sha256:dead"},
 	}, ids, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !f.Usage.Entries(ids, nil)["1"].TokenDead("") {
+	if !f.Usage.Entries(ids, nil)["a"].TokenDead("") {
 		t.Fatal("the account was not quarantined")
 	}
 
 	if _, err := f.Add(t.Context(), AddRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if f.Usage.Entries(ids, nil)["1"].TokenDead("") {
+	if f.Usage.Entries(ids, nil)["a"].TokenDead("") {
 		t.Error("the quarantine survived a fresh capture")
 	}
 }

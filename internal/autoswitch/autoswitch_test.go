@@ -124,7 +124,7 @@ func (f *fixture) seed(accounts map[string]string, active string) {
 		f.t.Fatal(err)
 	}
 	for num, email := range accounts {
-		roster.Insert(num, &swap.Account{Email: email, UUID: "acct-" + num}, f.now)
+		roster.Insert(num, &swap.Account{Email: email, UUID: "acct-" + num})
 		if err := f.engine.Switcher.Creds.WriteAccount(num, email,
 			`{"claudeAiOauth":{"accessToken":"tok-`+num+`","refreshToken":"r-`+num+`"}}`); err != nil {
 			f.t.Fatal(err)
@@ -135,7 +135,7 @@ func (f *fixture) seed(accounts map[string]string, active string) {
 		}
 	}
 	if active != "" {
-		roster.SetActive(active, f.now)
+		roster.SetActive(active)
 	}
 	if err := f.engine.Switcher.WriteRoster(roster); err != nil {
 		f.t.Fatal(err)
@@ -231,7 +231,7 @@ func TestAnOverThresholdAccountSwitches(t *testing.T) {
 	if event.Trigger != TriggerProactive {
 		t.Errorf("trigger = %q, want %q", event.Trigger, TriggerProactive)
 	}
-	if event.To == nil || *event.To.Number != 2 {
+	if event.To == nil || event.To.Name == "" {
 		t.Errorf("to = %+v", event.To)
 	}
 	if f.activeSlot() != "2" {
@@ -545,7 +545,7 @@ func TestADeadCandidateIsQuarantined(t *testing.T) {
 		t.Fatalf("outcome = %v, want %v: %v", outcome, Blocked, f.events.reasons())
 	}
 	event, ok := f.events.find(KindQuarantine)
-	if !ok || event.Number != "2" {
+	if !ok || event.Name != "2" {
 		t.Fatalf("no quarantine event: %v", f.events.events)
 	}
 	if event.Reason != "invalid_grant" {

@@ -298,10 +298,10 @@ func TestAnUnreadableBackupHoldsARealStrike(t *testing.T) {
 func TestListPayload(t *testing.T) {
 	f := newFixture(t)
 	roster := f.seedAccounts(map[string]*Account{
-		"1": {Email: "one@example.com", OrganizationName: "Example", OrganizationUUID: "org-1", Alias: "work"},
+		"1": {Email: "one@example.com", OrganizationName: "Example", OrganizationUUID: "org-1"},
 		"2": {Email: "two@example.com", Disabled: true},
 	})
-	roster.SetActive("1", f.now)
+	roster.SetActive("1")
 	f.seedRoster(roster)
 	f.setLiveIdentity("one@example.com", "org-1", "Example", "")
 	if err := f.Creds.WriteActive(liveCreds); err != nil {
@@ -314,22 +314,22 @@ func TestListPayload(t *testing.T) {
 	if payload.SchemaVersion != jsonout.SchemaVersion {
 		t.Errorf("schemaVersion = %d", payload.SchemaVersion)
 	}
-	if payload.ActiveAccountNumber == nil || *payload.ActiveAccountNumber != 1 {
-		t.Errorf("activeAccountNumber = %v, want 1", payload.ActiveAccountNumber)
+	if payload.ActiveAccount == "" {
+		t.Errorf("activeAccount = %q, want the active name", payload.ActiveAccount)
 	}
 	if len(payload.Accounts) != 2 {
 		t.Fatalf("accounts = %d", len(payload.Accounts))
 	}
 
 	first := payload.Accounts[0]
-	if first.Number != 1 || first.Email != "one@example.com" || !first.Active {
+	if first.Name == "" || first.Email != "one@example.com" || !first.Active {
 		t.Errorf("row = %+v", first)
 	}
 	if first.OrganizationName != "Example" || !first.IsOrganization {
 		t.Errorf("organization fields = %+v", first)
 	}
-	if first.Alias != "work" || first.Disabled {
-		t.Errorf("alias/disabled = %q/%v", first.Alias, first.Disabled)
+	if first.Disabled {
+		t.Errorf("disabled = %v, want false", first.Disabled)
 	}
 	if first.UsageStatus != jsonout.StatusOK || first.Usage == nil {
 		t.Fatalf("usage = (%q, %+v)", first.UsageStatus, first.Usage)
@@ -405,7 +405,7 @@ func TestStatusPayload(t *testing.T) {
 		if payload.Active.Email != "stranger@example.com" {
 			t.Errorf("email = %q", payload.Active.Email)
 		}
-		if payload.Active.Number != nil {
+		if payload.Active.Name != "" {
 			t.Error("an unmanaged account was given a slot number")
 		}
 	})
@@ -420,8 +420,8 @@ func TestStatusPayload(t *testing.T) {
 		if payload.Active == nil || !payload.Active.Managed {
 			t.Fatalf("active = %+v", payload.Active)
 		}
-		if payload.Active.Number == nil || *payload.Active.Number != 1 {
-			t.Errorf("number = %v", payload.Active.Number)
+		if payload.Active.Name == "" {
+			t.Errorf("name = %q, want the managed account named", payload.Active.Name)
 		}
 		if payload.Active.UsageStatus != jsonout.StatusOK || payload.Active.Usage == nil {
 			t.Errorf("usage = (%q, %+v)", payload.Active.UsageStatus, payload.Active.Usage)
@@ -437,7 +437,7 @@ func TestStatusPayload(t *testing.T) {
 func TestTheListPayloadJSONShape(t *testing.T) {
 	f := newFixture(t)
 	roster := f.seedAccounts(map[string]*Account{"1": {Email: "one@example.com"}})
-	roster.SetActive("1", f.now)
+	roster.SetActive("1")
 	f.seedRoster(roster)
 	f.setLiveIdentity("one@example.com", "", "", "")
 	if err := f.Creds.WriteActive(liveCreds); err != nil {
@@ -454,14 +454,14 @@ func TestTheListPayloadJSONShape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, key := range []string{"schemaVersion", "activeAccountNumber", "accounts"} {
+	for _, key := range []string{"schemaVersion", "activeAccount", "accounts"} {
 		if _, present := raw[key]; !present {
 			t.Errorf("%q is missing: %s", key, encoded)
 		}
 	}
 	row := raw["accounts"].([]any)[0].(map[string]any)
 	for _, key := range []string{
-		"number", "email", "organizationName", "organizationUuid",
+		"name", "email", "organizationName", "organizationUuid",
 		"isOrganization", "active", "usageStatus", "usage",
 	} {
 		if _, present := row[key]; !present {
@@ -625,25 +625,25 @@ func TestDuplicateAccountWarnings(t *testing.T) {
 		{
 			name: "the same credential lineage in two slots",
 			views: []AccountView{
-				{Number: "1", Account: &Account{Email: "one@example.com"}, Credentials: shared},
-				{Number: "2", Account: &Account{Email: "two@example.com"}, Credentials: shared},
+				{Name: "1", Account: &Account{Email: "one@example.com"}, Credentials: shared},
+				{Name: "2", Account: &Account{Email: "two@example.com"}, Credentials: shared},
 			},
 			want: "hold the same credential",
 		},
 		{
 			name: "the same account uuid recorded twice",
 			views: []AccountView{
-				{Number: "1", Account: &Account{Email: "one@example.com", UUID: "acct-1"}},
-				{Number: "2", Account: &Account{Email: "one@example.com", UUID: "acct-1"}},
+				{Name: "1", Account: &Account{Email: "one@example.com", UUID: "acct-1"}},
+				{Name: "2", Account: &Account{Email: "one@example.com", UUID: "acct-1"}},
 			},
 			want: "both authenticate as",
 		},
 		{
 			name: "different accounts are clean",
 			views: []AccountView{
-				{Number: "1", Account: &Account{Email: "one@example.com", UUID: "acct-1"},
+				{Name: "1", Account: &Account{Email: "one@example.com", UUID: "acct-1"},
 					Credentials: `{"claudeAiOauth":{"refreshToken":"r1"}}`},
-				{Number: "2", Account: &Account{Email: "two@example.com", UUID: "acct-2"},
+				{Name: "2", Account: &Account{Email: "two@example.com", UUID: "acct-2"},
 					Credentials: `{"claudeAiOauth":{"refreshToken":"r2"}}`},
 			},
 		},
@@ -651,16 +651,16 @@ func TestDuplicateAccountWarnings(t *testing.T) {
 			// Placeholders carry no uuid, and two absences are not a match.
 			name: "two slots with no uuid do not collide",
 			views: []AccountView{
-				{Number: "1", Account: &Account{Email: "one@example.com"}},
-				{Number: "2", Account: &Account{Email: "two@example.com"}},
+				{Name: "1", Account: &Account{Email: "one@example.com"}},
+				{Name: "2", Account: &Account{Email: "two@example.com"}},
 			},
 		},
 		{
 			// The same address across organizations is two real accounts.
 			name: "the same uuid under different organizations",
 			views: []AccountView{
-				{Number: "1", Account: &Account{Email: "a@example.com", UUID: "acct-1"}},
-				{Number: "2", Account: &Account{Email: "a@example.com", UUID: "acct-1", OrganizationUUID: "org-2"}},
+				{Name: "1", Account: &Account{Email: "a@example.com", UUID: "acct-1"}},
+				{Name: "2", Account: &Account{Email: "a@example.com", UUID: "acct-1", OrganizationUUID: "org-2"}},
 			},
 		},
 	}
@@ -690,8 +690,8 @@ func TestLockstepUsageWarnings(t *testing.T) {
 	}
 
 	views := []AccountView{
-		{Number: "1", Account: &Account{Email: "one@example.com"}},
-		{Number: "2", Account: &Account{Email: "two@example.com"}},
+		{Name: "1", Account: &Account{Email: "one@example.com"}},
+		{Name: "2", Account: &Account{Email: "two@example.com"}},
 	}
 	entries := map[string]usagestore.Entry{
 		"1": {LastGood: identical, FetchedAt: testNow, Age: time.Minute},

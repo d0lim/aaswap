@@ -178,7 +178,7 @@ func RejectLiveAPIKeyCapture(credentials string) error {
 // The default token labels never collide, so this only ever fires on a forced
 // address.
 func (s *Switcher) RejectCrossKindCollision(roster *Roster, email string, isAPIKey bool) error {
-	num, ok := roster.FindSlot(Identity{Email: email})
+	num, ok := roster.FindName(Identity{Email: email})
 	if !ok {
 		return nil
 	}
@@ -213,17 +213,27 @@ func kindLabel(k Kind) string {
 // across two organizations is two accounts with two quotas, and picking one
 // would silently switch the user to an account they did not name.
 func (s *Switcher) ResolveIdentifier(roster *Roster, identifier string) (string, bool, error) {
-	if isDigits(identifier) {
-		return identifier, true, nil
+	if roster == nil || identifier == "" {
+		return "", false, nil
 	}
-	if num, ok := findByAlias(roster, identifier); ok {
-		return num, true, nil
+	// The name is the key, so an exact hit needs no search. Case-folded because
+	// names are stored lowercased and a person typing one should not have to
+	// remember that.
+	//
+	// A name and an address can never collide, so the order below is not a
+	// precedence rule to reason about: NormalizeName refuses "@", and every
+	// address has one.
+	wanted := strings.ToLower(identifier)
+	for name := range roster.Accounts {
+		if name == wanted {
+			return name, true, nil
+		}
 	}
 
 	var matches []string
-	for _, num := range roster.Numbers() {
-		if roster.Accounts[num].Email == identifier {
-			matches = append(matches, num)
+	for _, name := range roster.Names() {
+		if strings.EqualFold(roster.Accounts[name].Email, identifier) {
+			matches = append(matches, name)
 		}
 	}
 	switch len(matches) {
@@ -234,39 +244,12 @@ func (s *Switcher) ResolveIdentifier(roster *Roster, identifier string) (string,
 	}
 
 	details := make([]string, len(matches))
-	for i, num := range matches {
-		details[i] = fmt.Sprintf("%s [%s]", num, roster.Accounts[num].DisplayTag())
+	for i, name := range matches {
+		details[i] = fmt.Sprintf("%s [%s]", name, roster.Accounts[name].DisplayTag())
 	}
 	return "", false, fmt.Errorf("%w: email %q is ambiguous — it matches accounts: %s. "+
-		"Use the account number instead (for example, `aaswap switch 1`)",
-		apperr.ErrConfig, identifier, strings.Join(details, ", "))
-}
-
-// findByAlias resolves an alias case-insensitively.
-//
-// An empty alias never matches. Accounts without one store no alias at all, and
-// comparing against the empty string would otherwise match the first aliasless
-// account in the roster.
-func findByAlias(roster *Roster, alias string) (string, bool) {
-	if alias == "" || roster == nil {
-		return "", false
-	}
-	want := strings.ToLower(alias)
-	for _, num := range roster.Numbers() {
-		if strings.ToLower(roster.Accounts[num].Alias) == want {
-			return num, true
-		}
-	}
-	return "", false
-}
-
-// AliasInUse reports which other slot already holds an alias.
-func AliasInUse(roster *Roster, alias, excludeNum string) (string, bool) {
-	num, ok := findByAlias(roster, alias)
-	if !ok || num == excludeNum {
-		return "", false
-	}
-	return num, true
+		"Use the account name instead (for example, `aaswap switch %s`)",
+		apperr.ErrConfig, identifier, strings.Join(details, ", "), matches[0])
 }
 
 func isDigits(s string) bool {

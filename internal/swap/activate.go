@@ -23,8 +23,8 @@ import (
 // and not an error: the machine can be logged into an account that was never
 // added.
 type AccountRef struct {
-	Number string
-	Email  string
+	Name  string
+	Email string
 }
 
 // SwitchOutcome is what a switch did, captured under the lock so a caller never
@@ -100,7 +100,7 @@ func (s *Switcher) Switch(ctx context.Context, req SwitchRequest) (SwitchOutcome
 
 	// The locks are released: safe to touch the usage store, whose own lock a
 	// caller may re-enter.
-	s.replanNewActive(outcome.To.Number, roster)
+	s.replanNewActive(outcome.To.Name, roster)
 	return outcome, nil
 }
 
@@ -114,12 +114,12 @@ func (s *Switcher) withClaudeLocks(fn func() error) error {
 
 func (s *Switcher) performSwitch(roster *Roster, req SwitchRequest, provenance Provenance) (SwitchOutcome, error) {
 	target := roster.Accounts[req.Target]
-	outcome := SwitchOutcome{To: AccountRef{Number: req.Target, Email: target.Email}}
+	outcome := SwitchOutcome{To: AccountRef{Name: req.Target, Email: target.Email}}
 
 	live, hasLive := s.LiveIdentity()
 	currentSlot := ""
 	if hasLive {
-		if num, managed := roster.FindSlot(live.Identity()); managed {
+		if num, managed := roster.FindName(live.Identity()); managed {
 			currentSlot = num
 		}
 	}
@@ -146,7 +146,7 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 		// An unmanaged live account: a real departure, with no slot to name.
 		outcome.From = &AccountRef{Email: live.Email}
 	default:
-		outcome.From = &AccountRef{Number: currentSlot, Email: live.Email}
+		outcome.From = &AccountRef{Name: currentSlot, Email: live.Email}
 	}
 
 	target := roster.Accounts[req.Target]
@@ -210,7 +210,7 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 	}
 	rollback.configWritten = true
 
-	roster.SetActive(req.Target, s.now())
+	roster.SetActive(req.Target)
 	if err := s.WriteRoster(roster); err != nil {
 		rollback.run()
 		return SwitchOutcome{}, err
@@ -221,7 +221,7 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 // switchFrom is the ordinary switch: back up the departing account, then
 // activate the target.
 func (s *Switcher) switchFrom(roster *Roster, req SwitchRequest, live LiveIdentity, currentSlot string, provenance Provenance, outcome SwitchOutcome) (SwitchOutcome, error) {
-	outcome.From = &AccountRef{Number: currentSlot, Email: live.Email}
+	outcome.From = &AccountRef{Name: currentSlot, Email: live.Email}
 
 	active := s.Creds.ReadActive()
 	if active.FileReadFailed || active.Degraded {
@@ -287,7 +287,7 @@ func (s *Switcher) switchFrom(roster *Roster, req SwitchRequest, live LiveIdenti
 	rollback.configWritten = true
 
 	// Step 4 — record which slot is active.
-	roster.SetActive(req.Target, s.now())
+	roster.SetActive(req.Target)
 	if err := s.WriteRoster(roster); err != nil {
 		rollback.run()
 		return SwitchOutcome{}, wrapRolledBack(err)

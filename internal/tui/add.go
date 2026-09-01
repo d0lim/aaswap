@@ -273,7 +273,7 @@ func (m Model) handleAdded(msg addedMsg) (tea.Model, tea.Cmd) {
 	if msg.outcome.Refreshed {
 		verb = "Refreshed"
 	}
-	m.status = fmt.Sprintf("%s Account %s (%s)", verb, msg.outcome.Number, msg.outcome.Email)
+	m.status = fmt.Sprintf("%s Account %s (%s)", verb, msg.outcome.Name, msg.outcome.Email)
 	m.statusErr = false
 	if msg.outcome.Unverified != "" {
 		// Never silently. Registering with the ownership question unanswered is

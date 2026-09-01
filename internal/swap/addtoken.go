@@ -24,8 +24,9 @@ type AddTokenRequest struct {
 	// tokens carry no address of their own and making the user invent one is
 	// noise.
 	Email string
-	// Slot pins the destination. Zero auto-assigns.
-	Slot int
+	// Name pins the account's handle. Empty derives one: from the address when
+	// one was given, and from the token's kind when one was not.
+	Name string
 	// AssumeYes skips the confirmation for overwriting an occupied slot.
 	AssumeYes bool
 	// Confirm asks whether to overwrite. Nil means refuse.
@@ -56,19 +57,31 @@ func (s *Switcher) AddToken(req AddTokenRequest) (AddOutcome, error) {
 			return err
 		}
 
-		slot := req.Slot
+		name := req.Name
+		if name != "" {
+			normalized, err := NormalizeName(name)
+			if err != nil {
+				return err
+			}
+			name = normalized
+		}
+
 		email := req.Email
 		if email == "" {
-			if slot == 0 {
-				slot = roster.NextNumber()
+			// No address to derive from, so the kind supplies the handle and
+			// the handle supplies the address. Deriving in that order — rather
+			// than numbering the label as slots used to — keeps the two from
+			// disagreeing, because one is built out of the other.
+			if name == "" {
+				label := "setup-token"
+				if isAPIKey {
+					label = "api-key"
+				}
+				name = uniqueName(label, roster.TakenNames())
 			}
-			// The slot number gives every synthesized account a unique key, and
-			// the label says at a glance what kind of token it is.
-			label := "setup-token"
-			if isAPIKey {
-				label = "api-key"
-			}
-			email = fmt.Sprintf("%s-%d@token.local", label, slot)
+			email = name + "@token.local"
+		} else if name == "" {
+			name = roster.NameFor(email)
 		}
 
 		// Identity is the (email, organization) composite alone, so an API-key
@@ -84,19 +97,18 @@ func (s *Switcher) AddToken(req AddTokenRequest) (AddOutcome, error) {
 		}
 
 		identity := Identity{Email: email}
-		if existing, registered := roster.FindSlot(identity); registered && req.Slot == 0 {
+		if existing, registered := roster.FindName(identity); registered && req.Name == "" {
 			// Refresh in place: a new token for an account already here.
 			if err := s.storeToken(roster, existing, email, credentials, config, isAPIKey); err != nil {
 				return err
 			}
-			roster.LastUpdated = Timestamp(s.now())
 			outcome = AddOutcome{
-				Number: existing, Email: email, Tag: "personal", Refreshed: true,
+				Name: existing, Email: email, Tag: "personal", Refreshed: true,
 			}
 			return s.WriteRoster(roster)
 		}
 
-		num, plan, err := s.planTokenSlot(roster, req, slot, email, identity)
+		num, plan, err := s.planTokenName(roster, req, name, identity)
 		if err != nil || plan.cancelled {
 			outcome = AddOutcome{Cancelled: plan.cancelled}
 			return err
@@ -116,51 +128,40 @@ func (s *Switcher) AddToken(req AddTokenRequest) (AddOutcome, error) {
 			return err
 		}
 
-		record := &Account{Email: email, Added: Timestamp(s.now()), Alias: plan.alias}
+		record := &Account{Email: email, Added: Timestamp(s.now())}
 		if isAPIKey {
 			record.Kind = KindAPIKey
 		}
-		roster.Insert(num, record, s.now())
+		roster.Insert(num, record)
 		outcome = AddOutcome{
-			Number: num, Email: email, Tag: "personal",
-			MovedFrom: plan.migrateFrom, Displaced: plan.displace,
+			Name: num, Email: email, Tag: "personal",
+			RenamedFrom: plan.migrateFrom, Displaced: plan.displace,
 		}
 		return s.WriteRoster(roster)
 	})
 	return outcome, err
 }
 
-// planTokenSlot decides where a token lands and collects any confirmation.
-func (s *Switcher) planTokenSlot(roster *Roster, req AddTokenRequest, slot int, email string, identity Identity) (string, slotPlan, error) {
-	var plan slotPlan
-	if slot == 0 {
-		return fmt.Sprint(roster.NextNumber()), plan, nil
-	}
-	if slot < 1 {
-		return "", plan, fmt.Errorf("%w: a slot number must be 1 or greater", apperr.ErrConfig)
-	}
-	num := fmt.Sprint(slot)
+// planTokenName decides what a token account is called and collects any
+// confirmation.
+func (s *Switcher) planTokenName(roster *Roster, req AddTokenRequest, name string, identity Identity) (string, namePlan, error) {
+	var plan namePlan
 
-	if existing, registered := roster.FindSlot(identity); registered && existing != num {
+	if existing, registered := roster.FindName(identity); registered && existing != name {
 		plan.migrateFrom = existing
-		plan.alias = roster.Accounts[existing].Alias
 	}
-	if occupant, taken := roster.Accounts[num]; taken {
-		if occupant.Identity() == identity {
-			plan.alias = occupant.Alias
-		} else {
-			prompt := fmt.Sprintf("Slot %s is occupied by %s [%s]. Overwrite it?",
-				num, occupant.Email, occupant.DisplayTag())
-			if !req.AssumeYes {
-				if req.Confirm == nil || !req.Confirm(prompt) {
-					plan.cancelled = true
-					return "", plan, nil
-				}
+	if occupant, taken := roster.Accounts[name]; taken && occupant.Identity() != identity {
+		prompt := fmt.Sprintf("%q is %s [%s]. Overwrite it?",
+			name, occupant.Email, occupant.DisplayTag())
+		if !req.AssumeYes {
+			if req.Confirm == nil || !req.Confirm(prompt) {
+				plan.cancelled = true
+				return "", plan, nil
 			}
-			plan.displace = num
 		}
+		plan.displace = name
 	}
-	return num, plan, nil
+	return name, plan, nil
 }
 
 // storeToken writes a token account's material and lifts any quarantine.

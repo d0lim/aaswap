@@ -77,5 +77,7 @@
 6. `activeAccountNumber`는 `*int`, v2의 `active`는 이름 문자열. 매핑 필요.
 7. **`AdoptLegacyMarker`는 `.ccswap-` → `.aaswap-`만 인계한다.** `.cswap-`(Python
    시절)은 단절 원칙대로 버린다.
-8. **`--json` 계약은 v1 유지.** 깨뜨릴 거면 한 번에 깨는 게 맞지만,
-   `keychain_unavailable` 이름 문제는 미관 문제라 Phase 4에서 다룬다.
+8. ~~`--json` 계약은 v1 유지.~~ **정정: 유지가 불가능하다.** 슬롯 번호가 사라지면
+   행의 `"number": 2`가 가리킬 것이 없다. `--json`도 v2로 올리고 `number` 자리에
+   `name`을 넣는다. 어차피 깨지므로 `keychain_unavailable` 이름 문제도 Phase 4에서
+   같이 정리한다.

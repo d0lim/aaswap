@@ -95,7 +95,7 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 		return err
 	}
 	if account.AuthKind() == swap.KindAPIKey {
-		return fmt.Errorf("%w: account %s is an API-key account, which Claude Code cannot "+
+		return fmt.Errorf("%w: %s is an API-key account, which Claude Code cannot "+
 			"run in session mode", apperr.ErrSession, num)
 	}
 
@@ -109,7 +109,7 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 	if os.Getenv("CLAUDE_CONFIG_DIR") == "" {
 		if live, ok := s.LiveIdentity(); ok && live.Identity() == account.Identity() {
 			a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
-				"Account %s (%s) is already the default login — launching Claude Code directly.",
+				"%s (%s) is already the default login — launching Claude Code directly.",
 				num, account.Email)))
 			return a.execClaude(claudeArgs, os.Environ())
 		}
@@ -134,7 +134,7 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 			"the account inside Claude Code.", strings.Join(scrubbed, ", ")))
 	}
 	a.printer.Println(a.printer.Accent("Launching"), " ",
-		fmt.Sprintf("Account %s (%s)", num, account.Email),
+		fmt.Sprintf("%s (%s)", num, account.Email),
 		a.printer.Muted(" [session mode]"))
 	return a.execClaude(claudeArgs, env)
 }
@@ -180,13 +180,13 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 		if manager.ArtifactsSayUsable(sessionDir, identity) {
 			return nil
 		}
-		return fmt.Errorf("%w: the session profile for account %s (%s) could not be "+
+		return fmt.Errorf("%w: the session profile for %s (%s) could not be "+
 			"verified — `claude auth status` did not answer. The profile is left in "+
 			"place; check that `claude` is on your PATH, then retry",
 			apperr.ErrSession, num, account.Email)
 	case session.Unreachable:
 		return fmt.Errorf("%w: `claude` could not be run, so the session profile for "+
-			"account %s could not be verified. Check that Claude Code is installed and "+
+			"%s could not be verified. Check that Claude Code is installed and "+
 			"on your PATH", apperr.ErrSession, num)
 	}
 
@@ -194,7 +194,7 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 	if err := manager.Remove(sessionDir); err != nil {
 		return err
 	}
-	return fmt.Errorf("%w: the session profile for account %s (%s) failed validation. Log "+
+	return fmt.Errorf("%w: the session profile for %s (%s) failed validation. Log "+
 		"in with that account and re-add it: aaswap add --slot %s",
 		apperr.ErrSession, num, account.Email, num)
 }
@@ -215,7 +215,7 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	num, exists := roster.FindSlot(swap.Identity{
+	num, exists := roster.FindName(swap.Identity{
 		Email:            entry.Email,
 		OrganizationUUID: entry.OrganizationUUID,
 	})
@@ -341,7 +341,7 @@ func (a *App) runMap(identifier, dir string) error {
 		return err
 	}
 	a.printer.Println(a.printer.Accent("Mapped"), " ", key, " → ",
-		fmt.Sprintf("Account %s (%s)", num, account.Email))
+		fmt.Sprintf("%s (%s)", num, account.Email))
 	return nil
 }
 

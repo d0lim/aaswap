@@ -53,20 +53,17 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 		if view.IsActive {
 			marker = a.printer.Accent("● ")
 		}
-		label := fmt.Sprintf("Account %s: %s", view.Number, view.Account.Email)
+		label := fmt.Sprintf("%s: %s", view.Name, view.Account.Email)
 		if view.IsActive {
 			label = a.printer.Bold(label)
 		}
 		trailing := a.printer.Muted(" [" + view.Account.DisplayTag() + "]")
-		if view.Account.Alias != "" {
-			trailing = a.printer.Muted(" ("+view.Account.Alias+")") + trailing
-		}
 		if view.Account.Disabled {
 			trailing += a.printer.Dimmed("  (out of rotation)")
 		}
 		a.printer.Println(marker, label, trailing)
 
-		lines := render.EntryLines(snapshot.Entries[view.Number], now, ageNoteThreshold)
+		lines := render.EntryLines(snapshot.Entries[view.Name], now, ageNoteThreshold)
 		for i, line := range lines {
 			branch := "├"
 			if i == len(lines)-1 {
@@ -112,7 +109,7 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 		a.printer.Println(a.printer.Bold("Status: "), a.printer.Dimmed("no active Claude account"))
 		return nil
 	}
-	slot, managed := snapshot.Roster.FindSlot(live.Identity())
+	slot, managed := snapshot.Roster.FindName(live.Identity())
 	if !managed {
 		a.printer.Println(a.printer.Bold("Status: "), live.Email,
 			a.printer.Muted(" ["+live.DisplayTag()+"]"))
@@ -120,7 +117,7 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 		return nil
 	}
 
-	a.printer.Println(a.printer.Bold("Status: "), a.printer.Accent("Account "+slot),
+	a.printer.Println(a.printer.Bold("Status: "), a.printer.Accent(slot),
 		" ", live.Email, a.printer.Muted(" ["+live.DisplayTag()+"]"))
 	for _, line := range render.EntryLines(snapshot.Entries[slot], s.Now(), ageNoteThreshold) {
 		a.printer.Println("  ", a.printer.Muted(line))
@@ -250,7 +247,7 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 		verb = "Activated"
 	}
 	a.printer.Println(a.printer.Accent(verb), " ",
-		fmt.Sprintf("Account %s (%s)", outcome.To.Number, outcome.To.Email))
+		fmt.Sprintf("%s (%s)", outcome.To.Name, outcome.To.Email))
 	for _, warning := range outcome.Warnings {
 		a.printer.Warning(warning)
 	}
@@ -354,15 +351,10 @@ func rotationIndex(switchable []string, current string) int {
 }
 
 func accountRef(ref swap.AccountRef) jsonout.AccountRef {
-	out := jsonout.AccountRef{Email: ref.Email}
-	if ref.Number != "" {
-		number := atoi(ref.Number)
-		out.Number = &number
-	}
-	return out
+	return jsonout.AccountRef{Name: ref.Name, Email: ref.Email}
 }
 
-func (a *App) runAdd(cmd *cobra.Command, slot int, alias string, wait bool) error {
+func (a *App) runAdd(cmd *cobra.Command, name string, wait bool) error {
 	s, err := a.switcher()
 	if err != nil {
 		return err
@@ -376,7 +368,7 @@ func (a *App) runAdd(cmd *cobra.Command, slot int, alias string, wait bool) erro
 		}
 	}
 	outcome, err := s.Add(cmd.Context(), swap.AddRequest{
-		Slot: slot, Alias: alias, AssumeYes: a.assumeYes, Confirm: a.confirm,
+		Name: name, AssumeYes: a.assumeYes, Confirm: a.confirm,
 	})
 	if err != nil {
 		return err
@@ -394,16 +386,16 @@ func (a *App) runAdd(cmd *cobra.Command, slot int, alias string, wait bool) erro
 				"Registering anyway; re-run where the check can complete to confirm.",
 				outcome.Email, outcome.Unverified))
 	}
-	if outcome.MovedFrom != "" {
+	if outcome.RenamedFrom != "" {
 		a.printer.Println(a.printer.Dimmed(
-			fmt.Sprintf("Moved from slot %s → %s", outcome.MovedFrom, outcome.Number)))
+			fmt.Sprintf("Moved from slot %s → %s", outcome.RenamedFrom, outcome.Name)))
 	}
 	verb := "Added"
 	if outcome.Refreshed {
 		verb = "Updated credentials for"
 	}
 	a.printer.Println(a.printer.Accent(verb), " ",
-		fmt.Sprintf("Account %s: %s", outcome.Number, outcome.Email),
+		fmt.Sprintf("%s: %s", outcome.Name, outcome.Email),
 		a.printer.Muted(" ["+outcome.Tag+"]"))
 	return nil
 }
@@ -425,12 +417,12 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 		return nil
 	}
 	if outcome.WasActive {
-		a.printer.Warning(fmt.Sprintf("Account %s (%s) was the active login. "+
+		a.printer.Warning(fmt.Sprintf("%s (%s) was the active login. "+
 			"You are still logged in; aaswap simply no longer has a copy.",
-			outcome.Number, outcome.Email))
+			outcome.Name, outcome.Email))
 	}
 	a.printer.Println(a.printer.Accent("Removed"), " ",
-		fmt.Sprintf("Account %s (%s)", outcome.Number, outcome.Email))
+		fmt.Sprintf("%s (%s)", outcome.Name, outcome.Email))
 	a.pruneMappingsFor(s, mappings.Identity{
 		Email:            outcome.Email,
 		OrganizationUUID: outcome.OrganizationUUID,
@@ -467,7 +459,7 @@ func (a *App) chooseAmbiguous(matches []swap.AmbiguousMatch) (string, bool) {
 	}
 	a.printer.Println("Several accounts share that address:")
 	for _, match := range matches {
-		a.printer.Println("  ", match.Number, ": ", match.Email,
+		a.printer.Println("  ", match.Name, ": ", match.Email,
 			a.printer.Muted(" ["+match.Tag+"]"))
 	}
 	a.printer.Printf("Enter the account number: ")
@@ -478,7 +470,7 @@ func (a *App) chooseAmbiguous(matches []swap.AmbiguousMatch) (string, bool) {
 	}
 	answer = strings.TrimSpace(answer)
 	for _, match := range matches {
-		if match.Number == answer {
+		if match.Name == answer {
 			return answer, true
 		}
 	}
@@ -501,10 +493,10 @@ func (a *App) runSetDisabled(cmd *cobra.Command, identifier string, disabled boo
 	}
 	if !changed {
 		a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
-			"Account %s (%s) is already %s.", num, email, strings.ToLower(verb))))
+			"%s (%s) is already %s.", num, email, strings.ToLower(verb))))
 		return nil
 	}
-	a.printer.Println(a.printer.Accent(verb), " ", fmt.Sprintf("Account %s (%s)", num, email))
+	a.printer.Println(a.printer.Accent(verb), " ", fmt.Sprintf("%s (%s)", num, email))
 
 	if !disabled {
 		a.printer.Println(a.printer.Dimmed("  It is back in the rotation."))
@@ -527,82 +519,20 @@ func (a *App) runSetDisabled(cmd *cobra.Command, identifier string, disabled boo
 	return nil
 }
 
-func (a *App) runAlias(cmd *cobra.Command, args []string, unset bool) error {
+func (a *App) runRename(cmd *cobra.Command, identifier, to string) error {
 	s, err := a.switcher()
 	if err != nil {
 		return err
 	}
-
-	switch {
-	case len(args) == 0:
-		rows, err := s.Aliases()
-		if err != nil {
-			return err
-		}
-		if len(rows) == 0 {
-			a.printer.Println(a.printer.Dimmed("No accounts have an alias."))
-			return nil
-		}
-		for _, row := range rows {
-			a.printer.Println("  ", a.printer.Accent(row.Alias), " → ",
-				fmt.Sprintf("Account %s (%s)", row.Number, row.Email))
-		}
-		return nil
-
-	case unset:
-		num, had, err := s.UnsetAlias(args[0])
-		if err != nil {
-			return err
-		}
-		if !had {
-			a.printer.Println(a.printer.Dimmed(fmt.Sprintf("Account %s has no alias.", num)))
-			return nil
-		}
-		a.printer.Println(a.printer.Accent("Removed"), " ", fmt.Sprintf("the alias on account %s", num))
-		return nil
-
-	case len(args) == 2:
-		num, alias, err := s.SetAlias(args[0], args[1])
-		if err != nil {
-			return err
-		}
-		a.printer.Println(a.printer.Accent("Aliased"), " ",
-			fmt.Sprintf("Account %s as %q", num, alias))
-		return nil
-	}
-	return fmt.Errorf("give both an account and a name, or --unset with just the account")
-}
-
-func (a *App) runSwapSlots(cmd *cobra.Command, first, second string) error {
-	s, err := a.switcher()
+	from, name, err := s.Rename(identifier, to)
 	if err != nil {
 		return err
 	}
-	numA, numB, err := s.SwapSlots(first, second)
-	if err != nil {
-		return err
-	}
-	a.printer.Println(a.printer.Accent("Swapped"), " ",
-		fmt.Sprintf("accounts %s and %s", numA, numB))
-	return nil
-}
-
-func (a *App) runMove(cmd *cobra.Command, identifier, target string) error {
-	s, err := a.switcher()
-	if err != nil {
-		return err
-	}
-	from, to, swapped, err := s.MoveAccount(identifier, target)
-	if err != nil {
-		return err
-	}
-	if swapped {
-		a.printer.Println(a.printer.Accent("Swapped"), " ",
-			fmt.Sprintf("accounts %s and %s (slot %s was occupied)", from, to, to))
+	if from == name {
+		a.printer.Println(a.printer.Dimmed(fmt.Sprintf("%s is already called that.", name)))
 		return nil
 	}
-	a.printer.Println(a.printer.Accent("Moved"), " ",
-		fmt.Sprintf("account %s to slot %s", from, to))
+	a.printer.Println(a.printer.Accent("Renamed"), " ", fmt.Sprintf("%s → %s", from, name))
 	return nil
 }
 

@@ -49,7 +49,7 @@ const DefaultFetchStagger = 250 * time.Millisecond
 // AccountView is what a collect pass needs about one slot: its record, its
 // stored credential, and whether it is the live one.
 type AccountView struct {
-	Number   string
+	Name     string
 	Account  *Account
 	IsActive bool
 	// Credentials is the live credential for the active slot and the stored
@@ -76,15 +76,15 @@ func (s *Switcher) AccountViews(roster *Roster) []AccountView {
 	active := s.Creds.ReadActive()
 	liveSlot := ""
 	if live, ok := s.LiveIdentity(); ok {
-		if num, managed := roster.FindSlot(live.Identity()); managed {
+		if num, managed := roster.FindName(live.Identity()); managed {
 			liveSlot = num
 		}
 	}
 
 	var views []AccountView
-	for _, num := range roster.Numbers() {
+	for _, num := range roster.Names() {
 		account := roster.Accounts[num]
-		view := AccountView{Number: num, Account: account, IsActive: num == liveSlot}
+		view := AccountView{Name: num, Account: account, IsActive: num == liveSlot}
 		if view.IsActive {
 			view.Credentials = active.Value
 			view.Unreadable = active.FileReadFailed || active.KeychainUnavailable
@@ -123,15 +123,15 @@ func (s *Switcher) Collect(ctx context.Context, roster *Roster, views []AccountV
 	identities := make(map[string]usagestore.Identity, len(views))
 	byNum := make(map[string]AccountView, len(views))
 	for _, view := range views {
-		identities[view.Number] = view.Identity()
-		byNum[view.Number] = view
+		identities[view.Name] = view.Identity()
+		byNum[view.Name] = view
 	}
 
 	threshold, models := s.pollPolicyInputs()
 	sentinels := map[string]string{}
 	for _, view := range views {
 		if sentinel := s.staticSentinel(view); sentinel != "" {
-			sentinels[view.Number] = sentinel
+			sentinels[view.Name] = sentinel
 		}
 	}
 
@@ -141,7 +141,7 @@ func (s *Switcher) Collect(ctx context.Context, roster *Roster, views []AccountV
 	// "re-login needed" display and — by excluding the slot from the fetch set
 	// below — stops the endless loop that would otherwise draw a 401 forever.
 	for _, view := range views {
-		num := view.Number
+		num := view.Name
 		if sentinels[num] != "" {
 			continue
 		}
@@ -164,7 +164,7 @@ func (s *Switcher) Collect(ctx context.Context, roster *Roster, views []AccountV
 
 	var requested []string
 	for _, view := range views {
-		num := view.Number
+		num := view.Name
 		if sentinels[num] != "" {
 			continue
 		}
@@ -194,7 +194,7 @@ func (s *Switcher) Collect(ctx context.Context, roster *Roster, views []AccountV
 	// toward a spurious failover. When the gate lifts, the fetch path refreshes
 	// the token and the sentinel clears itself.
 	for _, view := range views {
-		num := view.Number
+		num := view.Name
 		if sentinels[num] != "" || !view.IsActive {
 			continue
 		}
@@ -240,7 +240,7 @@ func (s *Switcher) Collect(ctx context.Context, roster *Roster, views []AccountV
 
 	out := make(map[string]usagestore.Entry, len(views))
 	for _, view := range views {
-		out[view.Number] = usagestore.WithSentinel(entries[view.Number], sentinels[view.Number])
+		out[view.Name] = usagestore.WithSentinel(entries[view.Name], sentinels[view.Name])
 	}
 	return out
 }
@@ -282,7 +282,7 @@ func (s *Switcher) entryTokenDead(entry usagestore.Entry, view AccountView) bool
 	if !view.IsActive {
 		return false
 	}
-	backup, unreadable := s.Creds.ReadAccount(view.Number, view.Account.Email)
+	backup, unreadable := s.Creds.ReadAccount(view.Name, view.Account.Email)
 	if unreadable {
 		// The second source cannot be seen, so "no stored source matches the
 		// condemned generation" is UNPROVEN — and the caller spends that answer
@@ -325,7 +325,7 @@ func (s *Switcher) runFetches(ctx context.Context, views []AccountView) map[stri
 			record := s.fetchAccountUsage(ctx, view)
 			mu.Lock()
 			defer mu.Unlock()
-			records[view.Number] = record
+			records[view.Name] = record
 		})
 	}
 	wg.Wait()
@@ -340,7 +340,7 @@ func (s *Switcher) fetchAccountUsage(ctx context.Context, view AccountView) usag
 	}
 
 	req := claudeapi.FetchRequest{
-		AccountNum:  view.Number,
+		AccountNum:  view.Name,
 		Email:       view.Account.Email,
 		Credentials: view.Credentials,
 		Now:         s.now(),

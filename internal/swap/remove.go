@@ -10,8 +10,8 @@ import (
 
 // RemoveOutcome reports what a removal did.
 type RemoveOutcome struct {
-	Number string
-	Email  string
+	Name  string
+	Email string
 	// WasActive marks removing the account currently logged in. The live login
 	// is left alone — removing a slot forgets aaswap's copy, it does not log the
 	// user out — but they should know.
@@ -38,9 +38,9 @@ type RemoveRequest struct {
 
 // AmbiguousMatch is one candidate when an address names several slots.
 type AmbiguousMatch struct {
-	Number string
-	Email  string
-	Tag    string
+	Name  string
+	Email string
+	Tag   string
 }
 
 // Remove permanently forgets a managed account: its stored credential, its
@@ -72,9 +72,9 @@ func (s *Switcher) Remove(req RemoveRequest) (RemoveOutcome, error) {
 			return fmt.Errorf("%w: account %s does not exist", apperr.ErrAccountNotFound, num)
 		}
 
-		activeNum, _ := roster.Active()
+		activeNum, _ := roster.ActiveName()
 		outcome = RemoveOutcome{
-			Number: num, Email: account.Email, WasActive: activeNum == num,
+			Name: num, Email: account.Email, WasActive: activeNum == num,
 			OrganizationUUID: account.OrganizationUUID,
 		}
 
@@ -89,7 +89,7 @@ func (s *Switcher) Remove(req RemoveRequest) (RemoveOutcome, error) {
 		if err := s.deleteAccountFiles(num, account.Email); err != nil {
 			return err
 		}
-		roster.Remove(num, s.now())
+		roster.Remove(num)
 		return s.WriteRoster(roster)
 	})
 	if err != nil {
@@ -116,11 +116,11 @@ func (s *Switcher) resolveForRemoval(roster *Roster, req RemoveRequest) (string,
 	}
 
 	var matches []AmbiguousMatch
-	for _, candidate := range roster.Numbers() {
+	for _, candidate := range roster.Names() {
 		account := roster.Accounts[candidate]
 		if account.Email == req.Identifier {
 			matches = append(matches, AmbiguousMatch{
-				Number: candidate, Email: account.Email, Tag: account.DisplayTag(),
+				Name: candidate, Email: account.Email, Tag: account.DisplayTag(),
 			})
 		}
 	}
@@ -151,7 +151,7 @@ func (s *Switcher) Purge(confirm func(prompt string) bool, assumeYes bool) (Purg
 		if err != nil {
 			return err
 		}
-		numbers := roster.Numbers()
+		numbers := roster.Names()
 		if len(numbers) == 0 {
 			return nil
 		}
@@ -175,7 +175,7 @@ func (s *Switcher) Purge(confirm func(prompt string) bool, assumeYes bool) (Purg
 			outcome.Removed = append(outcome.Removed, num)
 		}
 
-		empty := newRoster(s.now())
+		empty := newRoster()
 		if err := s.WriteRoster(empty); err != nil {
 			return err
 		}

@@ -43,7 +43,7 @@ func (a *App) printWaitInstructions(state swap.LiveState) {
 	case state.Slot != "":
 		a.printer.Println(a.printer.Bold("Currently logged in as "), state.Identity.Email,
 			a.printer.Muted(" ["+state.Identity.DisplayTag()+"]"),
-			a.printer.Dimmed(fmt.Sprintf(" — already stored as account %s.", state.Slot)))
+			a.printer.Dimmed(fmt.Sprintf(" — already stored as %s.", state.Slot)))
 	default:
 		a.printer.Println(a.printer.Bold("Currently logged in as "), state.Identity.Email,
 			a.printer.Muted(" ["+state.Identity.DisplayTag()+"]"))

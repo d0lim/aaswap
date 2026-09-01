@@ -27,7 +27,7 @@ import (
 
 // SchemaVersion is the payload contract's version. Bumped only on a breaking
 // change to any shape; scripts key off it.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Usage status values. Each names a distinct reason a measurement is or is not
 // available, because the remedies differ: an expired token retries itself, a
@@ -196,16 +196,16 @@ func UsageFields(decision Decision, fetchedAt, now time.Time) (string, *Usage) {
 
 // AccountRef is a minimal reference, used for a switch's two sides.
 //
-// Number is a pointer because null is meaningful: the live login was not one
-// aaswap manages, so there is no slot to name.
+// Name is empty when the live login is not one aaswap manages, so there is
+// nothing to name.
 type AccountRef struct {
-	Number *int   `json:"number"`
-	Email  string `json:"email"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 // AccountRow is one account in a listing.
 type AccountRow struct {
-	Number           int    `json:"number"`
+	Name             string `json:"name"`
 	Email            string `json:"email"`
 	OrganizationName string `json:"organizationName"`
 	OrganizationUUID string `json:"organizationUuid"`
@@ -214,7 +214,6 @@ type AccountRow struct {
 	UsageStatus      string `json:"usageStatus"`
 	Usage            *Usage `json:"usage"`
 
-	Alias string `json:"alias,omitzero"`
 	// Disabled appears only when the slot is held out of rotation, so a
 	// consumer keying on the base shape is unaffected.
 	Disabled bool `json:"disabled,omitzero"`
@@ -252,9 +251,9 @@ func (r *AccountRow) SetFreshness(lastGood *usage.Result, fetchedAt time.Time, a
 
 // ListPayload is `aaswap list --json`.
 type ListPayload struct {
-	SchemaVersion       int          `json:"schemaVersion"`
-	ActiveAccountNumber *int         `json:"activeAccountNumber"`
-	Accounts            []AccountRow `json:"accounts"`
+	SchemaVersion int          `json:"schemaVersion"`
+	ActiveAccount string       `json:"activeAccount"`
+	Accounts      []AccountRow `json:"accounts"`
 
 	// Additive, and absent when clean: the JSON contract keeps stdout a single
 	// machine-readable object, so warnings ride here rather than being printed.
@@ -265,13 +264,12 @@ type ListPayload struct {
 
 // ActiveStatus describes the live login.
 type ActiveStatus struct {
-	Number           *int   `json:"number,omitzero"`
+	Name             string `json:"name,omitzero"`
 	Email            string `json:"email"`
 	OrganizationName string `json:"organizationName,omitzero"`
 	OrganizationUUID string `json:"organizationUuid,omitzero"`
 	IsOrganization   bool   `json:"isOrganization,omitzero"`
 	Managed          bool   `json:"managed"`
-	Alias            string `json:"alias,omitzero"`
 
 	UsageStatus string `json:"usageStatus,omitzero"`
 	Usage       *Usage `json:"usage,omitzero"`

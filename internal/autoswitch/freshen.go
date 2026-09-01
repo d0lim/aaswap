@@ -145,7 +145,6 @@ func (e *Engine) backfillUUID(num, uuid string) error {
 		return nil
 	}
 	account.UUID = uuid
-	roster.LastUpdated = swap.Timestamp(e.now())
 	return e.Switcher.WriteRoster(roster)
 }
 
@@ -172,7 +171,7 @@ func (e *Engine) quarantine(num, email, reason string) error {
 	}
 
 	event := e.event(KindQuarantine)
-	event.Number, event.Email, event.Reason = num, email, reason
+	event.Name, event.Email, event.Reason = num, email, reason
 	e.emit(event)
 	return nil
 }
@@ -223,7 +222,7 @@ func (e *Engine) releaseRecovered(state State) (State, error) {
 	}
 	for _, r := range releases {
 		event := e.event(KindUnquarantine)
-		event.Number, event.Email, event.Reason = r.num, r.email, r.reason
+		event.Name, event.Email, event.Reason = r.num, r.email, r.reason
 		e.emit(event)
 	}
 	return updated, nil

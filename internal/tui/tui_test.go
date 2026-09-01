@@ -44,9 +44,9 @@ func twoAccounts(t *testing.T) Model {
 	t.Helper()
 	return fixture(t,
 		[]swap.AccountView{
-			{Number: "1", IsActive: true, Account: &swap.Account{
-				Email: "work@example.com", Alias: "work"}},
-			{Number: "2", Account: &swap.Account{Email: "spare@example.com"}},
+			{Name: "1", IsActive: true, Account: &swap.Account{
+				Email: "work@example.com"}},
+			{Name: "2", Account: &swap.Account{Email: "spare@example.com"}},
 		},
 		map[string]usagestore.Entry{
 			"1": {FetchedAt: testNow, LastGood: &usage.Result{
@@ -138,7 +138,7 @@ func TestTheDashboardShowsEveryAccount(t *testing.T) {
 // "api key" reads as zero usage, which is a different and wrong claim.
 func TestASentinelReplacesTheBars(t *testing.T) {
 	m := fixture(t,
-		[]swap.AccountView{{Number: "1", Account: &swap.Account{Email: "key@example.com"}}},
+		[]swap.AccountView{{Name: "1", Account: &swap.Account{Email: "key@example.com"}}},
 		map[string]usagestore.Entry{"1": {Sentinel: swap.SentinelAPIKey}})
 
 	frame := m.View().Content
@@ -178,7 +178,7 @@ func TestTheCursorSurvivesAShrinkingList(t *testing.T) {
 	m.cursor = 1
 
 	next, _ := m.handleCollected(collectedMsg{snapshot: &swap.Snapshot{
-		Views:   []swap.AccountView{{Number: "1", Account: &swap.Account{Email: "work@example.com"}}},
+		Views:   []swap.AccountView{{Name: "1", Account: &swap.Account{Email: "work@example.com"}}},
 		Entries: map[string]usagestore.Entry{},
 	}})
 

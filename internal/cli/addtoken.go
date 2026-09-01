@@ -14,7 +14,7 @@ import (
 
 // addTokenCommand registers a raw token as an account.
 func (a *App) addTokenCommand() *cobra.Command {
-	var slot int
+	var name string
 	var email string
 	cmd := &cobra.Command{
 		Use:   "add-token [TOKEN]",
@@ -30,17 +30,17 @@ func (a *App) addTokenCommand() *cobra.Command {
 			if len(args) == 1 {
 				token = args[0]
 			}
-			return a.runAddToken(token, email, slot)
+			return a.runAddToken(token, email, name)
 		},
 	}
-	cmd.Flags().IntVar(&slot, "slot", 0, "store the account in a specific slot")
+	cmd.Flags().StringVar(&name, "name", "", "give the account a name")
 	cmd.Flags().StringVar(&email, "email", "",
 		"label the account with an address (a placeholder is synthesized otherwise)")
 	silenceUsage(cmd)
 	return cmd
 }
 
-func (a *App) runAddToken(token, email string, slot int) error {
+func (a *App) runAddToken(token, email, name string) error {
 	token, err := a.readToken(token)
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func (a *App) runAddToken(token, email string, slot int) error {
 		return err
 	}
 	outcome, err := s.AddToken(swap.AddTokenRequest{
-		Token: token, Email: email, Slot: slot,
+		Token: token, Email: email, Name: name,
 		AssumeYes: a.assumeYes, Confirm: a.confirm,
 	})
 	if err != nil {
@@ -62,16 +62,16 @@ func (a *App) runAddToken(token, email string, slot int) error {
 		return nil
 	}
 
-	if outcome.MovedFrom != "" {
+	if outcome.RenamedFrom != "" {
 		a.printer.Println(a.printer.Dimmed(
-			fmt.Sprintf("Moved from slot %s → %s", outcome.MovedFrom, outcome.Number)))
+			fmt.Sprintf("Moved from slot %s → %s", outcome.RenamedFrom, outcome.Name)))
 	}
 	verb := "Added"
 	if outcome.Refreshed {
 		verb = "Updated the token for"
 	}
 	a.printer.Println(a.printer.Accent(verb), " ",
-		fmt.Sprintf("Account %s: %s", outcome.Number, outcome.Email),
+		fmt.Sprintf("%s: %s", outcome.Name, outcome.Email),
 		a.printer.Muted(" ["+outcome.Tag+"]"))
 	return nil
 }

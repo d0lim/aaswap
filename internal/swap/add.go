@@ -3,41 +3,43 @@ package swap
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
-// AddRequest is one capture of the machine's live login into a slot.
+// AddRequest is one capture of the machine's live login into the store.
 type AddRequest struct {
-	// Slot pins the destination. Zero auto-assigns the next number.
-	Slot int
-	// Alias names the slot. Empty leaves any existing alias alone — which is
-	// what makes re-running `aaswap add` on a registered account a credential
-	// refresh rather than a rename.
-	Alias string
-	// AssumeYes skips the confirmation for overwriting an occupied slot.
+	// Name pins the account's handle. Empty derives one from the address,
+	// suffixed when something already holds it.
+	//
+	// One field where there were two. A slot number and an alias were both
+	// ways of saying "this account", and keeping them apart meant every
+	// operation had to decide which one it was addressed by.
+	Name string
+	// AssumeYes skips the confirmation for taking a name something else holds.
 	// Callers with their own confirmation UI set it after confirming.
 	AssumeYes bool
-	// Confirm asks whether to overwrite an occupied slot. Nil means refuse,
-	// which is the safe answer for a caller that cannot ask.
+	// Confirm asks whether to overwrite. Nil means refuse, which is the safe
+	// answer for a caller that cannot ask.
 	Confirm func(prompt string) bool
 }
 
 // AddOutcome reports what an add did.
 type AddOutcome struct {
-	Number string
-	Email  string
+	Name  string
+	Email string
 	// Tag is the account's organization context, for display.
 	Tag string
 	// Refreshed marks an in-place credential refresh of an already-registered
 	// account rather than a new registration.
 	Refreshed bool
-	// MovedFrom names the slot this account previously occupied, when the add
-	// relocated it.
-	MovedFrom string
-	// Displaced names the slot's previous occupant, when one was overwritten.
+	// RenamedFrom names the handle this account previously had, when the add
+	// renamed it.
+	RenamedFrom string
+	// Displaced names what the name previously held, when one was overwritten.
 	Displaced string
 	// Unverified carries the ownership check's reason for not completing.
 	Unverified string
@@ -52,13 +54,13 @@ type AddOutcome struct {
 // fails halfway must leave the roster exactly as it found it, because the
 // alternative is a slot that names an account whose credential is nowhere.
 func (s *Switcher) Add(ctx context.Context, req AddRequest) (AddOutcome, error) {
-	var alias string
-	if req.Alias != "" {
-		normalized, err := NormalizeAlias(req.Alias)
+	var name string
+	if req.Name != "" {
+		normalized, err := NormalizeName(req.Name)
 		if err != nil {
 			return AddOutcome{}, err
 		}
-		alias = normalized
+		name = normalized
 	}
 
 	identity, ok := s.LiveIdentity()
@@ -73,24 +75,24 @@ func (s *Switcher) Add(ctx context.Context, req AddRequest) (AddOutcome, error) 
 		if err != nil {
 			return err
 		}
-		outcome, err = s.add(ctx, roster, req, alias, identity)
+		outcome, err = s.add(ctx, roster, req, name, identity)
 		return err
 	})
 	return outcome, err
 }
 
-func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, alias string, identity LiveIdentity) (AddOutcome, error) {
-	existing, registered := roster.FindSlot(identity.Identity())
+func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, name string, identity LiveIdentity) (AddOutcome, error) {
+	existing, registered := roster.FindName(identity.Identity())
 
-	// No slot named and the account is already registered: refresh in place.
-	// The alternative — assigning a new number — would leave two slots holding
-	// one account, and the older one holding a credential the server has
-	// retired.
-	if req.Slot == 0 && registered {
-		return s.refreshInPlace(ctx, roster, existing, alias, identity)
+	// No name given and the account is already registered: refresh in place.
+	// The alternative — inventing a second name — would leave two entries
+	// holding one account, and the older one holding a credential the server
+	// has retired.
+	if name == "" && registered {
+		return s.refreshInPlace(ctx, roster, existing, identity)
 	}
 
-	num, plan, err := s.planSlot(roster, req, alias, identity, existing, registered)
+	num, plan, err := s.planName(roster, req, name, identity, existing, registered)
 	if err != nil || plan.cancelled {
 		return AddOutcome{Cancelled: plan.cancelled}, err
 	}
@@ -131,31 +133,23 @@ func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, alia
 		OrganizationUUID: identity.OrganizationUUID,
 		OrganizationName: identity.OrganizationName,
 		Added:            Timestamp(s.now()),
-		Alias:            plan.alias,
-	}, s.now())
-	roster.SetActive(num, s.now())
+	})
+	roster.SetActive(num)
 	if err := s.WriteRoster(roster); err != nil {
 		return AddOutcome{}, err
 	}
 
 	return AddOutcome{
-		Number: num, Email: identity.Email, Tag: identity.DisplayTag(),
-		MovedFrom: plan.migrateFrom, Displaced: plan.displace,
+		Name: num, Email: identity.Email, Tag: identity.DisplayTag(),
+		RenamedFrom: plan.migrateFrom, Displaced: plan.displace,
 		Unverified: captured.Unverified,
 	}, nil
 }
 
 // refreshInPlace re-captures the credential for an account already in the
-// roster, leaving its slot, added date and — unless one was given — its alias
-// alone.
-func (s *Switcher) refreshInPlace(ctx context.Context, roster *Roster, num, alias string, identity LiveIdentity) (AddOutcome, error) {
-	account := roster.Accounts[num]
-	if alias != "" {
-		if conflict, inUse := AliasInUse(roster, alias, num); inUse {
-			return AddOutcome{}, fmt.Errorf("%w: alias %q is already used by account %s",
-				apperr.ErrValidation, alias, conflict)
-		}
-	}
+// store, leaving its name and added date alone.
+func (s *Switcher) refreshInPlace(ctx context.Context, roster *Roster, name string, identity LiveIdentity) (AddOutcome, error) {
+	account := roster.Accounts[name]
 
 	captured, err := s.captureVerified(ctx, identity)
 	if err != nil {
@@ -169,88 +163,60 @@ func (s *Switcher) refreshInPlace(ctx context.Context, roster *Roster, num, alia
 		return AddOutcome{}, err
 	}
 
-	if err := s.storeCapture(num, identity, captured.Credentials, config); err != nil {
+	if err := s.storeCapture(name, identity, captured.Credentials, config); err != nil {
 		return AddOutcome{}, err
 	}
-	if alias != "" {
-		account.Alias = alias
-	}
-	roster.SetActive(num, s.now())
+	roster.SetActive(name)
 	if err := s.WriteRoster(roster); err != nil {
 		return AddOutcome{}, err
 	}
 
 	return AddOutcome{
-		Number: num, Email: identity.Email, Refreshed: true,
+		Name: name, Email: identity.Email, Refreshed: true,
 		Tag: displayTag(account.OrganizationName), Unverified: captured.Unverified,
 	}, nil
 }
 
-// slotPlan is what an add decided about placement before anything destructive
+// namePlan is what an add decided about placement before anything destructive
 // ran.
-type slotPlan struct {
-	alias       string
+type namePlan struct {
 	displace    string
 	migrateFrom string
 	cancelled   bool
 }
 
-// planSlot decides where the capture lands and collects every confirmation,
+// planName decides what the capture is called and collects every confirmation,
 // before a single destructive step.
-func (s *Switcher) planSlot(roster *Roster, req AddRequest, alias string, identity LiveIdentity, existing string, registered bool) (string, slotPlan, error) {
-	plan := slotPlan{alias: alias}
+//
+// One decision where there used to be two. A slot number said where an account
+// lived and an alias said what it was called, and every path had to keep them
+// agreeing; now the name is both, so the only question left is whether
+// something already holds it.
+func (s *Switcher) planName(roster *Roster, req AddRequest, name string, identity LiveIdentity, existing string, registered bool) (string, namePlan, error) {
+	var plan namePlan
 
-	if req.Slot == 0 {
-		num := fmt.Sprint(roster.NextNumber())
-		if alias != "" {
-			if conflict, inUse := AliasInUse(roster, alias, num); inUse {
-				return "", plan, fmt.Errorf("%w: alias %q is already used by account %s",
-					apperr.ErrValidation, alias, conflict)
-			}
-		}
-		return num, plan, nil
+	if name == "" {
+		return roster.NameFor(identity.Email), plan, nil
 	}
 
-	if req.Slot < 1 {
-		return "", plan, fmt.Errorf("%w: a slot number must be 1 or greater", apperr.ErrConfig)
-	}
-	num := fmt.Sprint(req.Slot)
-
-	if registered && existing != num {
+	if registered && existing != name {
 		plan.migrateFrom = existing
 	}
 
-	if occupant, taken := roster.Accounts[num]; taken {
-		if occupant.Identity() == identity.Identity() {
-			// The same account, re-captured into the slot it already holds.
-			// Its alias carries forward unless one was given.
-			if alias == "" {
-				plan.alias = occupant.Alias
-			}
-		} else {
-			prompt := fmt.Sprintf("Slot %s is occupied by %s [%s]. Overwrite it?",
-				num, occupant.Email, occupant.DisplayTag())
+	if occupant, taken := roster.Accounts[name]; taken {
+		if occupant.Identity() != identity.Identity() {
+			prompt := fmt.Sprintf("%q is %s [%s]. Overwrite it?",
+				name, occupant.Email, occupant.DisplayTag())
 			if !req.AssumeYes {
 				if req.Confirm == nil || !req.Confirm(prompt) {
 					plan.cancelled = true
 					return "", plan, nil
 				}
 			}
-			plan.displace = num
+			plan.displace = name
 		}
 	}
-	if plan.migrateFrom != "" && plan.alias == "" {
-		// The account is moving slots; its alias moves with it.
-		plan.alias = roster.Accounts[plan.migrateFrom].Alias
-	}
-
-	if plan.alias != "" {
-		if conflict, inUse := AliasInUse(roster, plan.alias, num); inUse && conflict != plan.migrateFrom {
-			return "", plan, fmt.Errorf("%w: alias %q is already used by account %s",
-				apperr.ErrValidation, plan.alias, conflict)
-		}
-	}
-	return num, plan, nil
+	return name, plan, nil
 }
 
 // captureVerified reads the live credential and checks it belongs to the
@@ -309,6 +275,40 @@ func (s *Switcher) storeCapture(num string, identity LiveIdentity, credentials, 
 	})
 }
 
+// copyStored duplicates an account's stored material under a new name.
+//
+// A copy, not a move. Until the roster names the new location the old one is
+// still the truth, and a move would leave a window where neither is.
+func (s *Switcher) copyStored(from, to, email string) error {
+	credentials, unreadable := s.Creds.ReadAccount(from, email)
+	if unreadable {
+		return fmt.Errorf("%w: %s's stored credential could not be read, so it "+
+			"cannot be moved; nothing was changed", apperr.ErrCredentialRead, from)
+	}
+	if credentials != "" {
+		if err := s.Creds.WriteAccount(to, email, credentials); err != nil {
+			return err
+		}
+		s.BackupWritten(to, email)
+	}
+	if config := s.ReadAccountConfig(from, email); config != "" {
+		if err := s.WriteAccountConfig(to, email, config); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// dropStored removes material the roster no longer names. Best effort: it runs
+// after the roster has been published, so a failure costs disk rather than
+// correctness.
+func (s *Switcher) dropStored(name, email string) {
+	if err := s.deleteAccountFiles(name, email); err != nil {
+		slog.Debug("could not remove the material left behind by a rename",
+			"name", name, "error", err)
+	}
+}
+
 // forget removes a slot's stored material and its roster record.
 func (s *Switcher) forget(roster *Roster, num string) error {
 	account, ok := roster.Accounts[num]
@@ -318,7 +318,7 @@ func (s *Switcher) forget(roster *Roster, num string) error {
 	if err := s.deleteAccountFiles(num, account.Email); err != nil {
 		return err
 	}
-	roster.Remove(num, s.now())
+	roster.Remove(num)
 	return nil
 }
 
