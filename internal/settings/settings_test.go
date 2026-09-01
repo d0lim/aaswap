@@ -92,8 +92,8 @@ func TestLoadFillsDefaultsForAbsentKeys(t *testing.T) {
 	if got.AutoSwitch.Threshold != 80 {
 		t.Errorf("Threshold = %v, want the file's 80", got.AutoSwitch.Threshold)
 	}
-	if want := Defaults().AutoSwitch.CooldownSeconds; got.AutoSwitch.CooldownSeconds != want {
-		t.Errorf("CooldownSeconds = %v, want the default %v", got.AutoSwitch.CooldownSeconds, want)
+	if want := Defaults().AutoSwitch.Model; got.AutoSwitch.Model != want {
+		t.Errorf("Model = %q, want the default %q", got.AutoSwitch.Model, want)
 	}
 	if want := Defaults().UI.Theme; got.UI.Theme != want {
 		t.Errorf("Theme = %v, want the default %v", got.UI.Theme, want)
@@ -103,27 +103,22 @@ func TestLoadFillsDefaultsForAbsentKeys(t *testing.T) {
 // Out-of-range values written by hand are clamped rather than rejected:
 // refusing to start over a settings file is worse than running with a sane one.
 func TestLoadClampsOutOfRangeValues(t *testing.T) {
-	root := writeSettings(t, map[string]any{
-		"autoswitch": map[string]any{
-			"threshold":       200,
-			"intervalSeconds": 1,
-			"hysteresisPct":   -5,
-			"unhealthyTicks":  0,
-		},
-	})
-
-	got := Load(root).AutoSwitch
-	if got.Threshold != 99.9 {
-		t.Errorf("Threshold = %v, want the 99.9 ceiling", got.Threshold)
-	}
-	if got.IntervalSeconds != 15 {
-		t.Errorf("IntervalSeconds = %v, want the 15s floor (the usage-cache TTL)", got.IntervalSeconds)
-	}
-	if got.HysteresisPct != 0 {
-		t.Errorf("HysteresisPct = %v, want the 0 floor", got.HysteresisPct)
-	}
-	if got.UnhealthyTicks != 1 {
-		t.Errorf("UnhealthyTicks = %v, want the 1 floor", got.UnhealthyTicks)
+	for _, tc := range []struct {
+		name  string
+		value any
+		want  float64
+	}{
+		{"above the ceiling", 200, 99.9},
+		{"below the floor", -5, 50},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeSettings(t, map[string]any{
+				"autoswitch": map[string]any{"threshold": tc.value},
+			})
+			if got := Load(root).AutoSwitch.Threshold; got != tc.want {
+				t.Errorf("Threshold = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -131,11 +126,8 @@ func TestLoadCoercesBadTypes(t *testing.T) {
 	root := writeSettings(t, map[string]any{
 		"autoswitch": map[string]any{
 			"threshold": "high",
-			// A number in a boolean slot follows Python's truthiness, which is
-			// how the file the original wrote has always been read.
-			"includeApiKeyAccounts": 1,
 			// Garbage in the model slot disables the filter rather than
-			// wedging the engine on a name no account reports.
+			// wedging the listing on a name no account reports.
 			"model": 123,
 		},
 	})
@@ -143,9 +135,6 @@ func TestLoadCoercesBadTypes(t *testing.T) {
 	got := Load(root).AutoSwitch
 	if want := Defaults().AutoSwitch.Threshold; got.Threshold != want {
 		t.Errorf("Threshold = %v, want the default %v for a non-numeric value", got.Threshold, want)
-	}
-	if !got.IncludeAPIKeyAccounts {
-		t.Error("IncludeAPIKeyAccounts = false, want a non-zero number to read as true")
 	}
 	if got.Model != "" {
 		t.Errorf("Model = %q, want it cleared for a non-string value", got.Model)
@@ -161,10 +150,6 @@ func TestLoadChoiceValues(t *testing.T) {
 		want    string
 		get     func(Settings) string
 	}{
-		{"valid strategy", "autoswitch", "strategy", "consume-first", "consume-first",
-			func(s Settings) string { return s.AutoSwitch.Strategy }},
-		{"unsupported strategy", "autoswitch", "strategy", "chaos", "best",
-			func(s Settings) string { return s.AutoSwitch.Strategy }},
 		{"valid theme", "ui", "theme", "light", "light",
 			func(s Settings) string { return s.UI.Theme }},
 		{"unsupported theme", "ui", "theme", "purple", "auto",
@@ -211,18 +196,14 @@ func TestSetParsing(t *testing.T) {
 		wantErr string // substring; empty means success
 	}{
 		{name: "float", key: "autoswitch.threshold", raw: "80", want: 80.0},
-		{name: "int", key: "autoswitch.unhealthyTicks", raw: "5", want: 5},
-		{name: "int rejects a float", key: "autoswitch.unhealthyTicks", raw: "3.5", wantErr: "integer"},
 		{name: "float out of range", key: "autoswitch.threshold", raw: "200", wantErr: "between 50 and 99.9"},
-		{name: "choice", key: "autoswitch.strategy", raw: "consume-first", want: "consume-first"},
-		{name: "choice rejects", key: "autoswitch.strategy", raw: "chaos", wantErr: "must be one of"},
+		{name: "choice", key: "ui.theme", raw: "light", want: "light"},
+		{name: "choice rejects", key: "ui.theme", raw: "purple", wantErr: "must be one of"},
 		{name: "string", key: "autoswitch.model", raw: "Fable", want: "Fable"},
 		{name: "string rejects empty", key: "autoswitch.model", raw: "   ", wantErr: "non-empty"},
-		// bool words are matched explicitly: a naive string conversion makes
-		// "false" true, the opposite of what the user typed.
-		{name: "bool false word", key: "autoswitch.includeApiKeyAccounts", raw: "FALSE", want: false},
-		{name: "bool true word", key: "autoswitch.includeApiKeyAccounts", raw: "yes", want: true},
-		{name: "bool rejects nonsense", key: "autoswitch.includeApiKeyAccounts", raw: "falsy", wantErr: "true or false"},
+		// A key the rotation engine used to own. It is no longer offered, and
+		// the refusal is the point: it used to report success and do nothing.
+		{name: "a removed key", key: "autoswitch.cooldownSeconds", raw: "300", wantErr: "unknown setting"},
 		{name: "unknown key", key: "autoswitch.bogus", raw: "1", wantErr: "unknown setting"},
 	}
 
@@ -306,7 +287,7 @@ func TestUnset(t *testing.T) {
 		if _, err := Set(root, "autoswitch.threshold", "80"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := Set(root, "autoswitch.strategy", "consume-first"); err != nil {
+		if _, err := Set(root, "autoswitch.model", "Fable"); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := Unset(root, "autoswitch.threshold"); err != nil {
@@ -316,8 +297,8 @@ func TestUnset(t *testing.T) {
 		if _, ok := sec["threshold"]; ok {
 			t.Error("threshold survived unset")
 		}
-		if sec["strategy"] != "consume-first" {
-			t.Errorf("strategy = %v, want it untouched", sec["strategy"])
+		if sec["model"] != "Fable" {
+			t.Errorf("model = %v, want it untouched", sec["model"])
 		}
 	})
 
@@ -383,51 +364,37 @@ func TestEffective(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------- Overrides
+// ------------------------------------------------------------------- Clamp
 
-func TestMergeCLI(t *testing.T) {
+// Clamp is what the command layer applies to whatever the file produced, so a
+// hand-edited value out of range still reaches the listing inside its bounds.
+func TestClampBringsValuesBackInRange(t *testing.T) {
 	base := Defaults().AutoSwitch
 
-	t.Run("no overrides leaves settings untouched", func(t *testing.T) {
-		if got := MergeCLI(base, Overrides{}); !reflect.DeepEqual(got, base) {
-			t.Errorf("MergeCLI with no overrides = %+v, want %+v", got, base)
-		}
-	})
-
-	t.Run("a flag beats the file", func(t *testing.T) {
+	t.Run("an in-range value is untouched", func(t *testing.T) {
 		from := base
 		from.Threshold = 70
-		if got := MergeCLI(from, Overrides{Threshold: new(85.0)}); got.Threshold != 85 {
-			t.Errorf("Threshold = %v, want the flag's 85", got.Threshold)
+		if got := Clamp(from); !reflect.DeepEqual(got, from) {
+			t.Errorf("Clamp = %+v, want %+v", got, from)
 		}
 	})
 
-	// A flag is subject to the same bounds as a file value.
-	t.Run("flag values are clamped", func(t *testing.T) {
-		if got := MergeCLI(base, Overrides{IntervalSeconds: new(1.0)}); got.IntervalSeconds != 15 {
-			t.Errorf("IntervalSeconds = %v, want the 15s floor", got.IntervalSeconds)
-		}
-	})
-
-	t.Run("every field can be overridden", func(t *testing.T) {
-		got := MergeCLI(base, Overrides{
-			Threshold:             new(75.0),
-			CooldownSeconds:       new(30.0),
-			IncludeAPIKeyAccounts: new(true),
-			Model:                 new("Fable"),
-			Strategy:              new("consume-first"),
+	for _, tc := range []struct {
+		name string
+		from float64
+		want float64
+	}{
+		{"above the ceiling", 200, 99.9},
+		{"below the floor", 1, 50},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			from := base
+			from.Threshold = tc.from
+			if got := Clamp(from).Threshold; got != tc.want {
+				t.Errorf("Threshold = %v, want %v", got, tc.want)
+			}
 		})
-		if got.Threshold != 75 || got.CooldownSeconds != 30 || !got.IncludeAPIKeyAccounts ||
-			got.Model != "Fable" || got.Strategy != "consume-first" {
-			t.Errorf("MergeCLI = %+v, want every override applied", got)
-		}
-	})
-
-	t.Run("an unsupported strategy reverts to the default", func(t *testing.T) {
-		if got := MergeCLI(base, Overrides{Strategy: new("chaos")}); got.Strategy != "best" {
-			t.Errorf("Strategy = %q, want the default", got.Strategy)
-		}
-	})
+	}
 }
 
 // ---------------------------------------------------------------- Registry

@@ -100,21 +100,14 @@ func fromRaw(raw map[string]any) Settings {
 // over a settings file is worse than running with a sane value.
 func (s Spec) coerce(value any) any {
 	switch s.Kind {
-	case KindFloat, KindInt:
+	case KindFloat:
 		// JSON numbers decode to float64. A bool or a string is a type error,
 		// not a number to clamp, so it reverts to the default.
 		n, ok := value.(float64)
 		if !ok {
 			return s.Default()
 		}
-		clamped := min(max(n, s.Lo), s.Hi)
-		if s.Kind == KindInt {
-			return int(clamped)
-		}
-		return clamped
-
-	case KindBool:
-		return truthy(value)
+		return min(max(n, s.Lo), s.Hi)
 
 	case KindString:
 		// A non-empty string keeps; anything else — null, a number, garbage —
@@ -134,29 +127,6 @@ func (s Spec) coerce(value any) any {
 		return str
 	}
 	return s.Default()
-}
-
-// truthy reproduces Python's bool() over a decoded JSON value, which is what
-// the original implementation applied to boolean settings. It keeps a file
-// written by the Python version — where `"includeApiKeyAccounts": 1` means
-// true — loading the same way here.
-func truthy(value any) bool {
-	switch v := value.(type) {
-	case nil:
-		return false
-	case bool:
-		return v
-	case float64:
-		return v != 0
-	case string:
-		return v != ""
-	case []any:
-		return len(v) > 0
-	case map[string]any:
-		return len(v) > 0
-	default:
-		return true
-	}
 }
 
 // Set validates and persists one key, returning the stored value.
@@ -254,29 +224,13 @@ func Effective(backupRoot string) []Row {
 	return rows
 }
 
-var boolWords = map[string]bool{
-	"true": true, "1": true, "yes": true,
-	"false": false, "0": false, "no": false,
-}
-
 // ParseValue strictly parses a CLI-provided string for `aaswap config set`.
 //
 // Unlike the forgiving clamp on load, an out-of-range or mistyped value is an
 // error, so the user learns about the problem when setting the value rather
-// than through silently degraded behaviour at `aaswap auto` time.
+// than through behaviour that silently ignores it.
 func ParseValue(spec Spec, raw string) (any, error) {
 	switch spec.Kind {
-	case KindBool:
-		// Never coerce the string itself: a naive conversion makes "false"
-		// true, which is the opposite of what the user typed.
-		parsed, ok := boolWords[strings.ToLower(strings.TrimSpace(raw))]
-		if !ok {
-			return nil, fmt.Errorf(
-				"%s expects true or false (or 1/0, yes/no), got %q: %w",
-				spec.Dotted(), raw, apperr.ErrConfig)
-		}
-		return parsed, nil
-
 	case KindChoice:
 		if !slices.Contains(spec.Choices, raw) {
 			return nil, fmt.Errorf(
@@ -293,17 +247,6 @@ func ParseValue(spec Spec, raw string) (any, error) {
 				spec.Dotted(), spec.Dotted(), apperr.ErrConfig)
 		}
 		return value, nil
-
-	case KindInt:
-		n, err := strconv.Atoi(strings.TrimSpace(raw))
-		if err != nil {
-			return nil, fmt.Errorf(
-				"%s expects an integer, got %q: %w", spec.Dotted(), raw, apperr.ErrConfig)
-		}
-		if err := spec.checkRange(float64(n)); err != nil {
-			return nil, err
-		}
-		return n, nil
 
 	case KindFloat:
 		n, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
