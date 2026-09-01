@@ -87,8 +87,6 @@ type App struct {
 	// provider is the auth domain this invocation addresses. Empty means the
 	// default, which is Claude.
 	provider string
-	// overrides are the policy knobs a flag may override for this run.
-	overrides settings.Overrides
 	// awaitTuning collapses the login wait's polling cadence. Zero uses the
 	// production one; a test sets it so the wait is not measured in seconds.
 	// OnWaiting is always supplied by awaitLogin and never read from here.
@@ -227,7 +225,7 @@ func (a *App) switcher() (*swap.Switcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.Settings.AutoSwitch = settings.Clamp(settings.MergeCLI(s.Settings.AutoSwitch, a.overrides))
+	s.Settings.AutoSwitch = settings.Clamp(s.Settings.AutoSwitch)
 	// A replaced backup credential leaves that slot's session profile holding
 	// the previous generation, which still passes the local reuse check. The
 	// switcher does not know about profiles, so the command layer — which does
