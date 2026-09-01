@@ -25,8 +25,8 @@ func (s *Store) prevBackupPath(accountNum, email string) string {
 	return s.backupEncPath(accountNum, email) + ".prev"
 }
 
-func prevBackupUsername(accountNum, email string) string {
-	return backupUsername(accountNum, email) + ".prev"
+func (s *Store) prevBackupUsername(accountNum, email string) string {
+	return s.backupUsername(accountNum, email) + ".prev"
 }
 
 // retainPreviousBackup keeps a slot's current backup as the previous generation
@@ -57,7 +57,7 @@ func (s *Store) retainPreviousBackup(accountNum, email, incoming string) {
 
 	if !s.usesFileBackupBackend() {
 		if _, err := s.cap.observe(func() (struct{}, error) {
-			return struct{}{}, s.kc.Set(BackupService, prevBackupUsername(accountNum, email), current)
+			return struct{}{}, s.kc.Set(BackupService, s.prevBackupUsername(accountNum, email), current)
 		}); err != nil {
 			slog.Warn("failed to retain the previous credential generation",
 				"account", accountNum, "error", err)
@@ -87,7 +87,7 @@ func (s *Store) ReadPreviousBackup(accountNum, email string) string {
 		return ""
 	}
 	value, err := s.cap.observe(func() (string, error) {
-		v, found, err := s.kc.Get(BackupService, prevBackupUsername(accountNum, email))
+		v, found, err := s.kc.Get(BackupService, s.prevBackupUsername(accountNum, email))
 		if err != nil || !found {
 			return "", err
 		}
@@ -110,7 +110,7 @@ func (s *Store) DeletePreviousBackup(accountNum, email string) {
 			"account", accountNum, "error", err)
 	}
 	if s.platform == platform.MacOS {
-		if err := s.kc.Delete(BackupService, prevBackupUsername(accountNum, email)); err != nil {
+		if err := s.kc.Delete(BackupService, s.prevBackupUsername(accountNum, email)); err != nil {
 			slog.Warn("failed to drop the retained previous Keychain generation",
 				"account", accountNum, "error", err)
 		}

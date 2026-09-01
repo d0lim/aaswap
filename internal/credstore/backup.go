@@ -35,9 +35,16 @@ func (s *Store) backupEncPath(accountNum, email string) string {
 	return filepath.Join(s.credentialsDir, fmt.Sprintf(".creds-%s-%s.enc", accountNum, email))
 }
 
-// backupUsername is the Keychain account name for a slot's backup item.
-func backupUsername(accountNum, email string) string {
-	return fmt.Sprintf("account-%s-%s", accountNum, email)
+// backupUsername is the Keychain account name for an account's backup item.
+//
+// The Keychain is one flat namespace per service, so the provider has to be in
+// the name: two providers holding one address under one name would otherwise be
+// the same item, and whichever wrote last would own both.
+func (s *Store) backupUsername(name, email string) string {
+	if s.provider == "" {
+		return fmt.Sprintf("account-%s-%s", name, email)
+	}
+	return fmt.Sprintf("account-%s-%s-%s", s.provider, name, email)
 }
 
 // usesFileBackupBackend reports whether backup *writes* go to files rather than
@@ -142,7 +149,7 @@ func decodeBackup(encoded string) (string, error) {
 // caller decides what it means.
 func (s *Store) readBackupKeychain(accountNum, email string) (string, error) {
 	return s.cap.observe(func() (string, error) {
-		value, _, err := s.kc.Get(BackupService, backupUsername(accountNum, email))
+		value, _, err := s.kc.Get(BackupService, s.backupUsername(accountNum, email))
 		return value, err
 	})
 }
@@ -159,7 +166,7 @@ func (s *Store) WriteAccount(accountNum, email, credentials string) error {
 
 	if !s.usesFileBackupBackend() {
 		_, err := s.cap.observe(func() (struct{}, error) {
-			return struct{}{}, s.kc.Set(BackupService, backupUsername(accountNum, email), credentials)
+			return struct{}{}, s.kc.Set(BackupService, s.backupUsername(accountNum, email), credentials)
 		})
 		if err == nil {
 			return s.reconcileEncAfterKeychainWrite(accountNum, email, credentials)
@@ -223,7 +230,7 @@ func (s *Store) DeleteAccount(accountNum, email string) error {
 	s.DeletePreviousBackup(accountNum, email)
 	if s.platform == platform.MacOS {
 		if _, err := s.cap.observe(func() (struct{}, error) {
-			return struct{}{}, s.kc.Delete(BackupService, backupUsername(accountNum, email))
+			return struct{}{}, s.kc.Delete(BackupService, s.backupUsername(accountNum, email))
 		}); err != nil {
 			errs = append(errs, fmt.Errorf("remove backup Keychain item: %w", err))
 		}
@@ -251,14 +258,14 @@ func (s *Store) ReadKeychainBackup(accountNum, email string) (string, error) {
 // WriteKeychainBackup writes a slot's backup to the Keychain only.
 func (s *Store) WriteKeychainBackup(accountNum, email, credentials string) error {
 	_, err := s.cap.observe(func() (struct{}, error) {
-		return struct{}{}, s.kc.Set(BackupService, backupUsername(accountNum, email), credentials)
+		return struct{}{}, s.kc.Set(BackupService, s.backupUsername(accountNum, email), credentials)
 	})
 	return err
 }
 
 // DeleteKeychainBackup removes a slot's backup Keychain item, best effort.
 func (s *Store) DeleteKeychainBackup(accountNum, email string) {
-	if err := s.kc.Delete(BackupService, backupUsername(accountNum, email)); err != nil {
+	if err := s.kc.Delete(BackupService, s.backupUsername(accountNum, email)); err != nil {
 		slog.Warn("failed to delete backup credentials from the Keychain",
 			"account", accountNum, "error", err)
 	}

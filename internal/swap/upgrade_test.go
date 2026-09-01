@@ -2,6 +2,7 @@ package swap
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -13,13 +14,20 @@ func (f *fixture) seedLegacyStore(t *testing.T, table string, slots map[string]s
 	if err := os.WriteFile(f.RosterPath(), []byte(table), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// Seeded through the unscoped store and the unscoped configs directory:
+	// that is where a version 1 install actually put these.
+	legacy := f.Creds.Unscoped()
 	for num, email := range slots {
-		if err := f.Creds.WriteAccount(num, email,
+		if err := legacy.WriteAccount(num, email,
 			`{"claudeAiOauth":{"accessToken":"tok-`+num+`"}}`); err != nil {
 			t.Fatal(err)
 		}
-		if err := f.WriteAccountConfig(num, email,
-			`{"oauthAccount":{"emailAddress":"`+email+`"}}`); err != nil {
+		if err := os.MkdirAll(f.legacyConfigsDir(), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(f.legacyConfigsDir(),
+			".claude-config-"+num+"-"+email+".json"),
+			[]byte(`{"oauthAccount":{"emailAddress":"`+email+`"}}`), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -64,7 +72,7 @@ func TestUpgradeMovesTheStoredMaterial(t *testing.T) {
 	// The old copies are gone, or every account's credential exists twice and
 	// the stale one outlives the next refresh.
 	for num, email := range map[string]string{"1": "one@example.com", "2": "two@example.com"} {
-		if value, _ := f.Creds.ReadAccount(num, email); value != "" {
+		if value, _ := f.Creds.Unscoped().ReadAccount(num, email); value != "" {
 			t.Errorf("slot %s's credential was left behind", num)
 		}
 	}

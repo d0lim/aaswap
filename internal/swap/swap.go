@@ -156,7 +156,7 @@ func New(r *paths.Resolver) *Switcher {
 	client := claudeapi.New()
 	return &Switcher{
 		Paths:       r,
-		Creds:       credstore.New(r, root, keychain.New()),
+		Creds:       credstore.NewForProvider(r, root, keychain.New(), ProviderClaude),
 		Usage:       usagestore.New(r.CacheDir()),
 		Oracle:      client,
 		Fetcher:     client,
@@ -195,8 +195,18 @@ func (s *Switcher) LockPath() string {
 	return filepath.Join(s.BackupRoot(), LockFileName)
 }
 
-// ConfigsDir holds each slot's captured ~/.claude.json.
+// ConfigsDir holds each account's captured config, scoped to this provider.
+//
+// Scoped for the same reason the credentials are: two providers can hold one
+// person's account under one name, and a shared directory would give whichever
+// wrote last both accounts' configs.
 func (s *Switcher) ConfigsDir() string {
+	return filepath.Join(s.BackupRoot(), "configs", s.provider())
+}
+
+// legacyConfigsDir is where a store written before providers existed kept
+// captured configs. Read by the upgrade, and by nothing else.
+func (s *Switcher) legacyConfigsDir() string {
 	return filepath.Join(s.BackupRoot(), "configs")
 }
 

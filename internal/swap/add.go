@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/credstore"
 	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
@@ -280,7 +282,13 @@ func (s *Switcher) storeCapture(num string, identity LiveIdentity, credentials, 
 // A copy, not a move. Until the roster names the new location the old one is
 // still the truth, and a move would leave a window where neither is.
 func (s *Switcher) copyStored(from, to, email string) error {
-	credentials, unreadable := s.Creds.ReadAccount(from, email)
+	return s.copyStoredFrom(s.Creds, from, to, email)
+}
+
+// copyStoredFrom is copyStored reading through a given store, so the upgrade
+// can take its source from the pre-provider layout.
+func (s *Switcher) copyStoredFrom(source *credstore.Store, from, to, email string) error {
+	credentials, unreadable := source.ReadAccount(from, email)
 	if unreadable {
 		return fmt.Errorf("%w: %s's stored credential could not be read, so it "+
 			"cannot be moved; nothing was changed", apperr.ErrCredentialRead, from)
@@ -291,7 +299,12 @@ func (s *Switcher) copyStored(from, to, email string) error {
 		}
 		s.BackupWritten(to, email)
 	}
-	if config := s.ReadAccountConfig(from, email); config != "" {
+	config := s.ReadAccountConfig(from, email)
+	if config == "" && source != s.Creds {
+		// The upgrade's source: the config sits in the pre-provider layout too.
+		config = s.readLegacyConfig(from, email)
+	}
+	if config != "" {
 		if err := s.WriteAccountConfig(to, email, config); err != nil {
 			return err
 		}
@@ -303,9 +316,21 @@ func (s *Switcher) copyStored(from, to, email string) error {
 // after the roster has been published, so a failure costs disk rather than
 // correctness.
 func (s *Switcher) dropStored(name, email string) {
-	if err := s.deleteAccountFiles(name, email); err != nil {
-		slog.Debug("could not remove the material left behind by a rename",
-			"name", name, "error", err)
+	s.dropStoredFrom(s.Creds, name, email)
+}
+
+// dropStoredFrom is dropStored against a given store, so the upgrade can clear
+// the pre-provider layout it read from.
+func (s *Switcher) dropStoredFrom(store *credstore.Store, name, email string) {
+	if err := store.DeleteAccount(name, email); err != nil {
+		slog.Debug("could not remove a superseded credential", "name", name, "error", err)
+	}
+	path := s.ConfigBackupPath(name, email)
+	if store != s.Creds {
+		path = filepath.Join(s.legacyConfigsDir(), filepath.Base(path))
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		slog.Debug("could not remove a superseded config", "name", name, "error", err)
 	}
 }
 

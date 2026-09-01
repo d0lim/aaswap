@@ -17,8 +17,12 @@ type Store struct {
 	paths          *paths.Resolver
 	platform       platform.Platform
 	credentialsDir string
-	kc             *keychain.Keychain
-	cap            *capability
+	// provider scopes this store to one auth domain. Empty is the unscoped
+	// layout every store written before providers existed uses, and the
+	// upgrade reads through a store built that way.
+	provider string
+	kc       *keychain.Keychain
+	cap      *capability
 
 	// lastActiveBackend records where the most recent active-credential write
 	// landed, "keychain" or "file", for the post-switch follow-up message.
@@ -30,13 +34,47 @@ type Store struct {
 // The Keychain handle is injectable so tests drive every branch with a fake
 // runner; production passes keychain.New().
 func New(r *paths.Resolver, backupRoot string, kc *keychain.Keychain) *Store {
+	return NewForProvider(r, backupRoot, kc, "")
+}
+
+// NewForProvider builds a Store scoped to one auth domain.
+//
+// Two providers can hold the same person's account under the same name — one
+// address, one handle, two tools — so the place their credentials are filed has
+// to differ. A directory per provider rather than a longer filename, because a
+// person opening the store should be able to see which tool an account belongs
+// to.
+//
+// An empty provider selects the unscoped layout. That is not a default anyone
+// should choose: it is what a store written before providers existed looks
+// like, and it exists so the upgrade can read one.
+func NewForProvider(r *paths.Resolver, backupRoot string, kc *keychain.Keychain, provider string) *Store {
+	dir := filepath.Join(backupRoot, "credentials")
+	if provider != "" {
+		dir = filepath.Join(dir, provider)
+	}
 	return &Store{
 		paths:          r,
 		platform:       r.Platform,
-		credentialsDir: filepath.Join(backupRoot, "credentials"),
+		credentialsDir: dir,
+		provider:       provider,
 		kc:             kc,
 		cap:            newCapability(r.Platform),
 	}
+}
+
+// Unscoped returns a view of the same store in the pre-provider layout.
+//
+// Only the upgrade should want this: it reads material a version 1 store filed
+// before providers existed, and writes it back through the scoped store. A
+// fresh capability cache because the two views probe the Keychain
+// independently, and a failure reading the old layout says nothing about the
+// new one.
+func (s *Store) Unscoped() *Store {
+	if s.provider == "" {
+		return s
+	}
+	return NewForProvider(s.paths, filepath.Dir(s.credentialsDir), s.kc, "")
 }
 
 // CredentialsDir is where per-account .enc backups live.
