@@ -269,7 +269,7 @@ func (h *harness) sessionDir(t *testing.T, provider, name, email string) string 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return session.DirFor(s.BackupRoot(), name, email)
+	return session.DirFor(s.BackupRoot(), s.Spec().Name, name, email)
 }
 
 // stashUnclaimed preserves a credential that belongs to no managed account,

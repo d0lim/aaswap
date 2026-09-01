@@ -122,8 +122,8 @@ func TestTwoAddressesMayShareASlug(t *testing.T) {
 	if SlugifyEmail("a/b@x.com") != SlugifyEmail("a\\b@x.com") {
 		t.Skip("these do not collide, which is fine; the point is the prefix carries uniqueness")
 	}
-	one := DirFor("/root", "1", "a/b@x.com")
-	two := DirFor("/root", "2", "a\\b@x.com")
+	one := DirFor("/root", "claude", "1", "a/b@x.com")
+	two := DirFor("/root", "claude", "2", "a\\b@x.com")
 	if one == two {
 		t.Error("two slots produced the same profile directory")
 	}
@@ -722,5 +722,46 @@ func TestEnvironmentInjectsDeclaredHazards(t *testing.T) {
 	env, _ := Environment(nil, "/profiles/p", spec)
 	if !slices.Contains(env, "CLAUDE_CODE_DISABLE_AGENT_VIEW=1") {
 		t.Errorf("env = %v, want Claude's Agent View disabled", env)
+	}
+}
+
+// A profile is a whole synthetic home. One address at two tools is the ordinary
+// case for one person, and an unscoped path gave both the same directory: two
+// live credentials and two sets of shared links under one manifest.
+func TestAProfileDirectoryBelongsToOneProvider(t *testing.T) {
+	claude := DirFor("/root", "claude", "work", "me@example.com")
+	codex := DirFor("/root", "codex", "work", "me@example.com")
+	if claude == codex {
+		t.Fatalf("both providers use %s", claude)
+	}
+	// Every profile lives under one root, so anything that walks them — a
+	// cleanup, an audit — has a single place to look.
+	for _, dir := range []string{claude, codex} {
+		if !strings.HasPrefix(dir, filepath.Join("/root", "sessions")+string(filepath.Separator)) {
+			t.Errorf("%s is outside the sessions root", dir)
+		}
+	}
+}
+
+// Claude keeps the unsuffixed path. Profiles outlive a change here — each holds
+// a copy of a credential and a manifest of links aaswap created — and moving
+// them would orphan both with nothing left to clean them up.
+func TestClaudeKeepsTheExistingProfilePath(t *testing.T) {
+	want := filepath.Join("/root", "sessions", "work-me_example.com")
+	for _, provider := range []string{"claude", ""} {
+		if got := DirFor("/root", provider, "work", "me@example.com"); got != want {
+			t.Errorf("DirFor(%q) = %q, want the existing %q", provider, got, want)
+		}
+	}
+}
+
+// A provider's own directory sits beside the profiles rather than among them,
+// so nothing can read one as the other. An account's directory always carries
+// an address, which is what makes that safe.
+func TestAProviderDirectoryCannotBeReadAsAProfile(t *testing.T) {
+	profile := DirFor("/root", "claude", "codex", "someone@example.com")
+	scope := filepath.Dir(DirFor("/root", "codex", "work", "me@example.com"))
+	if profile == scope {
+		t.Errorf("an account named codex collides with Codex's own directory at %s", scope)
 	}
 }
