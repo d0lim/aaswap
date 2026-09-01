@@ -1,14 +1,17 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/mappings"
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/session"
 	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
@@ -69,26 +72,21 @@ func splitRunArgsAt(args []string, at int) (identifier string, claudeArgs []stri
 	return "", args
 }
 
-// errClaudeOnly explains why a command refuses a non-Claude provider.
+// requireCapability refuses a command the addressed provider cannot support.
 //
-// Session mode is Claude Code's shape end to end: the profile directory, the
-// env var that points at it, the binary launched into it, the credential
-// layout inside it, and the MCP mirroring. Launching `claude` because someone
-// asked for a Codex session is the worst available answer — it would run the
-// wrong tool as the wrong account and look like it worked.
-func errClaudeOnly(provider, what string) error {
-	return fmt.Errorf("%w: %s is Claude Code's session machinery and does not "+
-		"support %s yet. Use `aaswap --provider %s switch` to change that "+
-		"provider's active login instead",
-		apperr.ErrConfig, what, provider, provider)
-}
-
-// claudeOnly refuses a command that has no meaning outside Claude Code.
-func (a *App) claudeOnly(s *swap.Switcher, what string) error {
-	if s.Provider == "" || s.Provider == swap.ProviderClaude {
+// The refusal comes from the provider's own declaration rather than from a
+// hardcoded name, so a provider added later is refused for the right reason and
+// a capability added later cannot be forgotten for an existing one. Every
+// refusal names the provider, says what is missing, and points at the command
+// that does work — a refusal with no way forward is a dead end.
+func (a *App) requireCapability(s *swap.Switcher, capability provider.Capability) error {
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
+	if spec.Can(capability) {
 		return nil
 	}
-	return errClaudeOnly(s.Provider, what)
+	return fmt.Errorf("%w: %s. Use `aaswap --provider %s switch` to change that "+
+		"provider's active login instead",
+		apperr.ErrConfig, spec.Why(capability), spec.Name)
 }
 
 func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []string, share session.ShareOptions) error {
@@ -96,9 +94,10 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 	if err != nil {
 		return err
 	}
-	if err := a.claudeOnly(s, "session mode"); err != nil {
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
 		return err
 	}
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
 
 	if identifier == "" {
 		resolved, found, err := a.resolveFromDirectory(s)
@@ -108,9 +107,10 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 		if !found {
 			// No mapping: exactly what typing `claude` would do, with the
 			// environment untouched.
-			a.printer.Println(a.printer.Dimmed(
-				"This directory maps to no account — launching Claude Code as the default login."))
-			return a.execClaude(claudeArgs, os.Environ())
+			a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+				"This directory maps to no account — launching %s as the default login.",
+				spec.Name)))
+			return a.execProvider(spec, claudeArgs, os.Environ())
 		}
 		identifier = resolved
 	}
@@ -120,8 +120,8 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 		return err
 	}
 	if account.AuthKind() == swap.KindAPIKey {
-		return fmt.Errorf("%w: %s is an API-key account, which Claude Code cannot "+
-			"run in session mode", apperr.ErrSession, num)
+		return fmt.Errorf("%w: %s is an API-key account, which %s cannot "+
+			"run in session mode", apperr.ErrSession, num, spec.Name)
 	}
 
 	manager := a.sessionManager(s)
@@ -131,45 +131,66 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 	// The same-account fast path: never make a second credential copy for the
 	// account that IS the default login. Two copies of one account drift apart
 	// the moment the server rotates the refresh token.
-	if os.Getenv("CLAUDE_CONFIG_DIR") == "" {
+	if os.Getenv(spec.Session.HomeEnv) == "" {
 		if live, ok := s.LiveIdentity(); ok && live.Identity() == account.Identity() {
 			a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
-				"%s (%s) is already the default login — launching Claude Code directly.",
-				num, account.Email)))
-			return a.execClaude(claudeArgs, os.Environ())
+				"%s (%s) is already the default login — launching %s directly.",
+				num, account.Email, spec.Name)))
+			return a.execProvider(spec, claudeArgs, os.Environ())
 		}
 	} else {
-		a.printer.Warning("CLAUDE_CONFIG_DIR is already set; overriding it for this launch.")
+		a.printer.Warning(fmt.Sprintf(
+			"%s is already set; overriding it for this launch.", spec.Session.HomeEnv))
 	}
 
-	if err := a.prepareSession(manager, s, sessionDir, num, account, identity); err != nil {
+	if err := a.prepareSession(manager, s, sessionDir, num, account, identity, spec); err != nil {
 		return err
 	}
 	if err := manager.SyncSharing(sessionDir, defaultProfileDir(s), share); err != nil {
 		return err
 	}
-	if err := manager.SyncMCPServers(sessionDir, s.Paths.DefaultGlobalConfigPath(),
-		share.Customizations); err != nil {
-		return err
+	// Mirroring MCP definitions edits the profile's account-scoped config. A
+	// provider with none keeps its servers in a machine-scoped file, and
+	// writing there would rewrite the user's own settings for every account.
+	if _, hasConfig := spec.ConfigFile(); hasConfig {
+		if err := manager.SyncMCPServers(sessionDir, s.Paths.DefaultGlobalConfigPath(),
+			share.Customizations); err != nil {
+			return err
+		}
 	}
 
-	env, scrubbed := session.Environment(os.Environ(), sessionDir)
+	env, scrubbed := session.Environment(os.Environ(), sessionDir, spec)
 	if len(scrubbed) > 0 {
 		a.printer.Warning(fmt.Sprintf("Ignoring %s for this session — it would override "+
-			"the account inside Claude Code.", strings.Join(scrubbed, ", ")))
+			"the account inside %s.", strings.Join(scrubbed, ", "), spec.Name))
 	}
 	a.printer.Println(a.printer.Accent("Launching"), " ",
 		fmt.Sprintf("%s (%s)", num, account.Email),
-		a.printer.Muted(" [session mode]"))
-	return a.execClaude(claudeArgs, env)
+		a.printer.Muted(" ["+spec.Name+" session mode]"))
+	return a.execProvider(spec, claudeArgs, env)
 }
 
 // prepareSession makes sure the profile is usable, seeding it when it is not.
-func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, sessionDir, num string, account *swap.Account, identity session.Identity) error {
+func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, sessionDir, num string, account *swap.Account, identity session.Identity, spec provider.Spec) error {
 	// A deferred invalidation is honored only when nothing is running: a second
 	// launch joining a live session must not re-seed under it. The marker
 	// survives for a later launch.
 	stale := session.IsStale(sessionDir) && manager.Quiescent(num, account.Email)
+
+	// A profile that wants refreshing but belongs to a provider whose running
+	// sessions aaswap cannot see. Quiescent already answered false — the safe
+	// direction — but silence would leave the user with a session on an old
+	// credential and no idea why. Naming it is the whole difference between a
+	// declared limitation and a bug.
+	if !manager.CanDetectSessions() &&
+		(session.IsStale(sessionDir) || manager.ProfileSuperseded(sessionDir, num, account.Email)) {
+		a.printer.Warning(fmt.Sprintf(
+			"This %s profile's credential is out of date, but aaswap cannot tell "+
+				"whether a %s session is running against it, so it will not replace "+
+				"it automatically. Close any running %s sessions and run "+
+				"`aaswap --provider %s login` to refresh it.",
+			spec.Name, spec.Name, spec.Name, spec.Name))
+	}
 
 	// Generation, not just identity. Usable asks whether the profile is logged
 	// in as the right ACCOUNT; it cannot ask whether the credential is the one
@@ -256,40 +277,67 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 }
 
 func (a *App) sessionManager(s *swap.Switcher) *session.Manager {
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
 	return &session.Manager{
 		BackupRoot: s.BackupRoot(),
 		Platform:   s.Paths.Platform,
 		Creds:      s.Creds,
 		Profiles:   s.Profiles,
-		Probe:      session.ExecProber{},
+		Spec:       spec,
+		ConfigsDir: s.ConfigsDir(),
+		Probe:      proberFor(spec),
 		Now:        s.Now,
 	}
 }
 
-// defaultProfileDir is the default ~/.claude, which sharing always mirrors —
-// even when the invoking shell is itself inside a session.
-func defaultProfileDir(s *swap.Switcher) string {
-	return s.Paths.DefaultClaudeConfigHome()
+// proberFor is the authentication probe for a provider, nil when there is none.
+//
+// The probe runs `claude auth status --json`, which is Claude Code's own
+// command. Running it for another provider would ask the wrong binary a
+// question it does not answer — and a probe that always fails is worse than no
+// probe, because the manager resolves a nil one from local artifacts instead of
+// treating the profile as broken.
+func proberFor(spec provider.Spec) session.Prober {
+	if spec.Name != swap.ProviderClaude {
+		return nil
+	}
+	return session.ExecProber{Spec: spec}
 }
 
-// execClaude hands the terminal over to Claude Code.
+// defaultProfileDir is the provider's own default home, which sharing always
+// mirrors — even when the invoking shell is itself inside a session.
+//
+// The PROVIDER's, not Claude's: mirroring ~/.claude into a Codex profile would
+// link one tool's settings and history into another's home, where they mean
+// nothing and shadow the files that do.
+func defaultProfileDir(s *swap.Switcher) string {
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
+	if spec.Name == swap.ProviderClaude {
+		// Claude's default home ignores CLAUDE_CONFIG_DIR by design: sharing
+		// mirrors the default profile even from inside a session.
+		return s.Paths.DefaultClaudeConfigHome()
+	}
+	return filepath.Join(s.Paths.Home, spec.Home.Default)
+}
+
+// execProvider hands the terminal over to the provider's own binary.
 //
 // On POSIX it does not return: see handOver.
-func (a *App) execClaude(claudeArgs []string, env []string) error {
-	binary, err := lookClaude()
+func (a *App) execProvider(spec provider.Spec, args []string, env []string) error {
+	argv := spec.Session.Argv
+	binary, err := exec.LookPath(argv[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: `%s` was not found on your PATH. Install %s first",
+			apperr.ErrSession, argv[0], spec.Name)
 	}
-	return handOver(binary, claudeArgs, env, a.Out, a.Err, a.In)
-}
-
-func lookClaude() (string, error) {
-	binary, err := exec.LookPath(session.ClaudeBinary)
-	if err != nil {
-		return "", fmt.Errorf("%w: `claude` was not found on your PATH. Install Claude "+
-			"Code first", apperr.ErrSession)
+	// Anything the declaration puts after the binary comes before the user's
+	// arguments, so a provider that needs a subcommand to start a session gets
+	// one without the caller knowing.
+	args = slices.Concat(argv[1:], args)
+	if a.HandOver != nil {
+		return a.HandOver(binary, args, env)
 	}
-	return binary, nil
+	return handOver(binary, args, env, a.Out, a.Err, a.In)
 }
 
 // mapCommand remembers which account a directory belongs to.
@@ -352,7 +400,7 @@ func (a *App) runMap(identifier, dir string) error {
 	if err != nil {
 		return err
 	}
-	if err := a.claudeOnly(s, "directory mapping"); err != nil {
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
 		return err
 	}
 	num, account, err := s.ResolveAccount(identifier)
@@ -379,7 +427,7 @@ func (a *App) runUnmap(dir string) error {
 	if err != nil {
 		return err
 	}
-	if err := a.claudeOnly(s, "directory mapping"); err != nil {
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
 		return err
 	}
 	store := mappings.New(s.BackupRoot())
@@ -400,7 +448,7 @@ func (a *App) runMappings() error {
 	if err != nil {
 		return err
 	}
-	if err := a.claudeOnly(s, "directory mapping"); err != nil {
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
 		return err
 	}
 	store := mappings.New(s.BackupRoot())

@@ -28,7 +28,7 @@ func TestAFileOnlyProfileStoreNeverReachesForAKeychain(t *testing.T) {
 
 	// Built with no Keychain at all — the shape a non-macOS host, and every
 	// file-only provider, has.
-	store := NewClaudeProfiles(platform.Linux, nil)
+	store := NewProfiles(MustLookup(Claude), platform.Linux, nil)
 
 	if got := store.Read(dir); got == "" {
 		t.Error("the file was not read")
@@ -51,7 +51,7 @@ func TestAnEmptyFileOnlyProfileIsDefinitelyEmpty(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	store := NewClaudeProfiles(platform.Linux, nil)
+	store := NewProfiles(MustLookup(Claude), platform.Linux, nil)
 
 	if store.Read(dir) != "" {
 		t.Error("an empty profile read as holding something")
