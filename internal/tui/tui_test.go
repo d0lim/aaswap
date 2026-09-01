@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/render"
 	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/d0lim/aaswap/internal/usage"
@@ -23,6 +24,10 @@ var testNow = time.Date(2026, 7, 4, 14, 12, 0, 0, time.UTC)
 func fixture(t *testing.T, views []swap.AccountView, entries map[string]usagestore.Entry) Model {
 	t.Helper()
 	m := Model{
+		// Claude's declaration, which is what these tests were written
+		// against. Leaving it zero would disable every key the declaration
+		// gates and the tests would pass by not reaching them.
+		spec:   provider.MustLookup(provider.Claude),
 		styles: newStyles(PaletteFor(render.Dark)),
 		clock:  func() time.Time { return testNow },
 		width:  76,

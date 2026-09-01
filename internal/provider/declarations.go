@@ -31,6 +31,9 @@ func claudeSpec() Spec {
 		},
 		Login:    &Login{Argv: []string{"claude", "/login"}},
 		Identity: claudeIdentity{},
+		// The only tool whose token format aaswap knows well enough to store
+		// one a person pasted: two prefixes, two credential shapes.
+		Token: claudeToken{},
 		// The only tool that keeps its live credential anywhere but a file.
 		Keychain: true,
 		// The only provider that can renew a credential without a new browser

@@ -1,19 +1,13 @@
 package swap
 
 import (
-	json "encoding/json/v2"
 	"fmt"
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
-	"github.com/d0lim/aaswap/internal/credstore"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/usagestore"
 )
-
-// setupTokenScopes are what a setup token carries. Recorded so the stored
-// credential has the shape Claude Code expects, even though nothing here
-// verifies it.
-var setupTokenScopes = []string{"user:inference"}
 
 // AddTokenRequest registers a raw token as an account.
 type AddTokenRequest struct {
@@ -39,11 +33,22 @@ type AddTokenRequest struct {
 // For a headless machine, or a token handed over from somewhere else: there is
 // no prior Claude Code login on this machine to capture.
 func (s *Switcher) AddToken(req AddTokenRequest) (AddOutcome, error) {
+	// Asked of the declaration before anything is read or written. A token's
+	// FORMAT is the one part of a login aaswap has to understand — recognising
+	// it, and writing it in the shape the tool reads — and there is no generic
+	// version of that to fall back on. Storing Claude's shape for another
+	// provider produces an account whose activation destroys a working login.
+	source := s.spec().Token
+	if source == nil {
+		return AddOutcome{}, fmt.Errorf("%w: %s",
+			apperr.ErrValidation, s.spec().Why(providerpkg.CapToken))
+	}
+
 	token := strings.TrimSpace(req.Token)
 	if token == "" {
 		return AddOutcome{}, fmt.Errorf("%w: the token cannot be empty", apperr.ErrValidation)
 	}
-	isAPIKey := credstore.LooksLikeAPIKey(token)
+	isAPIKey := source.APIKey(token)
 
 	if req.Email != "" && !validEmail(req.Email) {
 		return AddOutcome{}, fmt.Errorf("%w: %q is not a valid email address",
@@ -91,9 +96,9 @@ func (s *Switcher) AddToken(req AddTokenRequest) (AddOutcome, error) {
 			return err
 		}
 
-		credentials, config, err := tokenMaterial(token, email, isAPIKey)
+		credentials, config, err := source.Material(token, email)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %w", apperr.ErrCredentialWrite, err)
 		}
 
 		identity := Identity{Email: email}
@@ -185,43 +190,6 @@ func (s *Switcher) storeToken(roster *Roster, num, email, credentials, config st
 	// fetch to prove the new token good.
 	return s.Usage.ClearDeadToken([]string{num},
 		map[string]usagestore.Identity{num: {Email: email}})
-}
-
-// tokenMaterial builds the stored credential and config for a raw token.
-//
-// A managed key is stored RAW, because that is what Claude Code's API-key axis
-// reads. A setup token is wrapped in the credential shape its OAuth axis reads.
-// The synthesized config is the same either way: neither token carries real
-// organization metadata.
-func tokenMaterial(token, email string, isAPIKey bool) (credentials, config string, err error) {
-	if isAPIKey {
-		credentials = token
-	} else {
-		encoded, marshalErr := json.Marshal(map[string]any{
-			"claudeAiOauth": map[string]any{
-				"accessToken": token,
-				"scopes":      setupTokenScopes,
-			},
-		}, json.Deterministic(true))
-		if marshalErr != nil {
-			return "", "", fmt.Errorf("%w: encoding the token credential: %w",
-				apperr.ErrCredentialWrite, marshalErr)
-		}
-		credentials = string(encoded)
-	}
-
-	encodedConfig, err := json.Marshal(map[string]any{
-		"oauthAccount": map[string]any{
-			"emailAddress":     email,
-			"accountUuid":      "",
-			"organizationUuid": nil,
-			"organizationName": nil,
-		},
-	}, json.Deterministic(true))
-	if err != nil {
-		return "", "", fmt.Errorf("%w: encoding the token config: %w", apperr.ErrConfig, err)
-	}
-	return credentials, string(encodedConfig), nil
 }
 
 // validEmail is the same shape the import path enforces: the address becomes

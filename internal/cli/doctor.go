@@ -22,6 +22,7 @@ var allCapabilities = []provider.Capability{
 	provider.CapSession,
 	provider.CapUsage,
 	provider.CapRefresh,
+	provider.CapToken,
 }
 
 // doctorCommand reports what aaswap can do for each provider on this machine.

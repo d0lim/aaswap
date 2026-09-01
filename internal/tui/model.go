@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/render"
 	"github.com/d0lim/aaswap/internal/swap"
 )
@@ -31,8 +32,14 @@ const statusLinger = 6 * time.Second
 // crash at exactly the moment the user needs to see what happened.
 type Model struct {
 	switcher *swap.Switcher
-	styles   styles
-	clock    func() time.Time
+	// spec is the declaration for the provider being shown. The dashboard's
+	// keys are a menu, and a menu offering an action the provider has no
+	// declaration for is worse here than at the command line: a flag at least
+	// names itself, while a key is simply listed on the help screen with
+	// nothing to say it belongs to another tool.
+	spec   provider.Spec
+	styles styles
+	clock  func() time.Time
 
 	width, height int
 
@@ -70,6 +77,7 @@ type Model struct {
 func NewModel(s *swap.Switcher, theme render.Theme) Model {
 	return Model{
 		switcher: s,
+		spec:     s.Spec(),
 		styles:   newStyles(PaletteFor(theme)),
 		clock:    s.Now,
 		width:    80,

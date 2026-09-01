@@ -7,17 +7,23 @@ import (
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/swap"
 	"golang.org/x/term"
 )
 
 func (a *App) runAddToken(token, email, name string) error {
-	token, err := a.readToken(token)
+	s, err := a.switcher()
 	if err != nil {
 		return err
 	}
+	// The refusal comes BEFORE the read. `--token -` takes a secret off stdin,
+	// and a provider that cannot store one has no reason to be handed it.
+	if err := a.requireCapability(s, provider.CapToken); err != nil {
+		return err
+	}
 
-	s, err := a.switcher()
+	token, err = a.readToken(token)
 	if err != nil {
 		return err
 	}
@@ -35,7 +41,7 @@ func (a *App) runAddToken(token, email, name string) error {
 
 	if outcome.RenamedFrom != "" {
 		a.printer.Println(a.printer.Dimmed(
-			fmt.Sprintf("Moved from slot %s → %s", outcome.RenamedFrom, outcome.Name)))
+			fmt.Sprintf("Renamed %s → %s", outcome.RenamedFrom, outcome.Name)))
 	}
 	verb := "Added"
 	if outcome.Refreshed {

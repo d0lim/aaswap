@@ -165,6 +165,8 @@ const (
 	CapUsage Capability = "report usage"
 	// CapRefresh is renewing an expired token without a new login.
 	CapRefresh Capability = "refresh tokens"
+	// CapToken is storing an account from a raw token, with no login flow.
+	CapToken Capability = "store a pasted token"
 )
 
 // BaselineCapabilities are what a provider gets from Name, Home and Files
@@ -223,6 +225,7 @@ type Spec struct {
 	Identity IdentitySource // nil → the hash fallback
 	Usage    UsageSource    // nil → headroom is unknown, never zero
 	Session  *Session       // nil → `run` is unsupported here
+	Token    TokenSource    // nil → a pasted token cannot be stored here
 	Hazards  []Hazard
 
 	// Keychain says this provider's tool ALSO keeps its live credential in the
@@ -254,6 +257,28 @@ type IdentitySource interface {
 	Identify(files map[string]string) (Identity, bool)
 	// Tier says how the name was obtained, for the capability report.
 	Tier() Tier
+}
+
+// TokenSource stores an account from a token a person pasted, with no login
+// flow and no network call — for a headless machine, or a credential handed
+// over from elsewhere.
+//
+// Declared rather than assumed, because a token is the one piece of a login
+// whose FORMAT aaswap has to understand: it has to be recognised, and it has to
+// be written in the shape the tool reads. There is no generic version of that.
+// A provider that declares none reports the gap; it does not get Claude's shape
+// written into its credential file.
+type TokenSource interface {
+	// Material is what to store: the credential the tool reads, and a config to
+	// file beside it (empty for a provider whose credential is the whole login).
+	Material(token, email string) (credentials, config string, err error)
+	// APIKey reports whether this token is a managed key rather than a grant
+	// that expires. A managed key never refreshes and bills per token, which
+	// the account's kind has to record.
+	APIKey(token string) bool
+	// Hint describes what a token for this tool looks like, for the prompt and
+	// the flag help. Shown verbatim.
+	Hint() string
 }
 
 // UsageSource reports rate-limit headroom.
@@ -288,6 +313,8 @@ func (s Spec) Can(c Capability) bool {
 		return s.Usage != nil
 	case CapRefresh:
 		return s.Refreshable
+	case CapToken:
+		return s.Token != nil
 	default:
 		return false
 	}
@@ -300,14 +327,21 @@ func (s Spec) Why(c Capability) string {
 	}
 	switch c {
 	case CapSession:
-		return fmt.Sprintf("%s does not declare an isolated profile directory, "+
-			"so aaswap cannot run a session as one of its accounts", s.Name)
+		return fmt.Sprintf("%s does not declare an isolated profile directory, so "+
+			"aaswap cannot run a session as one of its accounts. Use "+
+			"`aaswap --provider %s switch` to change its active login instead",
+			s.Name, s.Name)
 	case CapUsage:
 		return fmt.Sprintf("aaswap has no way to read %s's rate limits, so it "+
 			"reports headroom as unknown rather than guessing", s.Name)
 	case CapRefresh:
 		return fmt.Sprintf("aaswap cannot renew a %s token; log in again with "+
 			"`aaswap --provider %s login`", s.Name, s.Name)
+	case CapToken:
+		return fmt.Sprintf("aaswap does not know what a %s token looks like or how "+
+			"%s stores one, so it cannot store one you paste. Log in with the tool "+
+			"itself, then run `aaswap --provider %s login --capture`",
+			s.Name, s.DisplayName(), s.Name)
 	default:
 		return fmt.Sprintf("%s does not support %s", s.Name, c)
 	}
