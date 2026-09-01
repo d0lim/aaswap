@@ -3,7 +3,9 @@ package swap
 import (
 	"encoding/base64"
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,5 +208,63 @@ func TestACodexAccountWithACredentialIsNotReportedEmpty(t *testing.T) {
 	if got := f.staticSentinel(view); got == SentinelNoCredentials {
 		t.Errorf("the account reads as having no credential, but %d bytes are "+
 			"stored for it", len(view.Credentials))
+	}
+}
+
+// A provider whose credential IS the whole login has no config to store, and
+// must not need one to be switchable.
+//
+// It was needing one by accident. IsSwitchable demands both a credential and a
+// config — right for Claude, where activating one without the other logs you in
+// as one account while your projects and settings say another — and a capture
+// wrote an empty {} config for every provider. So the requirement was satisfied
+// by a file that exists only to satisfy it: nothing writes it deliberately,
+// nothing reads it, and readTargetConfig skips it at switch time.
+//
+// The failure that hides behind it is not visible until the file is missing:
+// a store restored from an export, or written by a build that stopped
+// generating it, has switchable accounts that report as unswitchable — so
+// `switch` with no argument finds nothing to pick and `list` flags every
+// account as needing a re-login.
+func TestAConfiglessProviderIsSwitchableOnItsCredentialAlone(t *testing.T) {
+	f := codexFixture(t)
+	f.codexLogin("work@example.com", "acct-1", "plus")
+	if _, err := f.Add(t.Context(), AddRequest{Name: "work"}); err != nil {
+		t.Fatal(err)
+	}
+	roster, err := f.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Whatever a capture happened to leave behind, gone. The credential is the
+	// whole login, so this must change nothing.
+	if err := os.Remove(f.ConfigBackupPath("work", "work@example.com")); err != nil &&
+		!errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+
+	if !f.IsSwitchable(roster, "work") {
+		t.Error("a stored Codex account with a stored credential reports as " +
+			"unswitchable, so nothing will offer it")
+	}
+	if got := f.SwitchableNumbers(roster); len(got) != 1 {
+		t.Errorf("SwitchableNumbers = %v, want the one stored account", got)
+	}
+}
+
+// And nothing writes the file in the first place. A backup that is written on
+// every capture, read by nothing, and named after another tool is state a person
+// opening the store has to work out the meaning of.
+func TestAConfiglessProviderStoresNoConfigBackup(t *testing.T) {
+	f := codexFixture(t)
+	f.codexLogin("work@example.com", "acct-1", "plus")
+	if _, err := f.Add(t.Context(), AddRequest{Name: "work"}); err != nil {
+		t.Fatal(err)
+	}
+
+	path := f.ConfigBackupPath("work", "work@example.com")
+	if data, err := os.ReadFile(path); err == nil {
+		t.Errorf("%s was written holding %q, for a provider with no config", path, data)
 	}
 }

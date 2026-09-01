@@ -8,7 +8,12 @@ import (
 	"github.com/d0lim/aaswap/internal/apperr"
 )
 
-// ConfigBackupPath is where a slot's captured ~/.claude.json lives.
+// ConfigBackupPath is where an account's captured config lives.
+//
+// Named for Claude Code because Claude Code is the only provider that has one:
+// a provider whose credential IS the login stores nothing here. If a second
+// such provider arrives, the name comes with it — renaming it now would move
+// every existing Claude backup for no present gain.
 func (s *Switcher) ConfigBackupPath(accountNum, email string) string {
 	return filepath.Join(s.ConfigsDir(), fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email))
 }
@@ -34,9 +39,17 @@ func (s *Switcher) readLegacyConfig(accountNum, email string) string {
 	return string(data)
 }
 
-// WriteAccountConfig stores a slot's captured config with owner-only
+// WriteAccountConfig stores an account's captured config with owner-only
 // permissions.
+//
+// A no-op for a provider that declares no config. There is nothing to store —
+// the credential is the whole login — and what was being stored was an empty
+// object: written on every capture, read by nothing, and named after another
+// tool, for anyone who opened the store to puzzle over.
 func (s *Switcher) WriteAccountConfig(accountNum, email, config string) error {
+	if _, hasConfig := s.spec().ConfigFile(); !hasConfig {
+		return nil
+	}
 	if err := os.MkdirAll(s.ConfigsDir(), 0o700); err != nil {
 		return fmt.Errorf("%w: creating the configs directory: %w", apperr.ErrConfig, err)
 	}
@@ -47,12 +60,18 @@ func (s *Switcher) WriteAccountConfig(accountNum, email, config string) error {
 	return nil
 }
 
-// IsSwitchable reports whether a slot can be activated without re-adding the
-// account: it needs BOTH a stored credential and a stored config.
+// IsSwitchable reports whether an account can be activated without storing it
+// again: it needs a stored credential, and a stored config where the provider
+// has one.
 //
-// Both, because activating with one and not the other logs the user in as one
-// account while their projects and settings say another. It tolerates a stale
-// sequence entry pointing at a record that is gone.
+// Both for Claude, because activating with one and not the other logs the user
+// in as one account while their projects and settings say another. For a
+// provider whose credential IS the login there is no second half to be missing,
+// and demanding one meant the requirement was satisfied by an empty file that
+// existed only to satisfy it — so a store restored from an export had switchable
+// accounts reporting as unswitchable.
+//
+// It tolerates a stale sequence entry pointing at a record that is gone.
 func (s *Switcher) IsSwitchable(roster *Roster, accountNum string) bool {
 	account, ok := roster.Accounts[accountNum]
 	if !ok {
@@ -60,6 +79,9 @@ func (s *Switcher) IsSwitchable(roster *Roster, accountNum string) bool {
 	}
 	if value, _ := s.Creds.ReadAccount(accountNum, account.Email); value == "" {
 		return false
+	}
+	if _, hasConfig := s.spec().ConfigFile(); !hasConfig {
+		return true
 	}
 	return s.ReadAccountConfig(accountNum, account.Email) != ""
 }

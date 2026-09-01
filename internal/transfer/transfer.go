@@ -275,7 +275,11 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 	} else {
 		credentials, _ = s.Creds.ReadAccount(num, account.Email)
 		config = s.ReadAccountConfig(num, account.Email)
-		if credentials == "" || config == "" {
+		// A stored config is half of a complete Claude account and no part of a
+		// provider whose credential IS the login. Requiring one everywhere made
+		// export skip every Codex account that was not the live one.
+		_, needsConfig := s.Spec().ConfigFile()
+		if credentials == "" || (needsConfig && config == "") {
 			if explicit {
 				// The user named this account, so a missing backup is a
 				// failure, not something to work around.
@@ -304,16 +308,22 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 		Fingerprint:      account.Fingerprint,
 	}
 
+	// A provider with no account-scoped config carries none: there is nothing
+	// to slim and nothing to validate, and an empty object in its place would be
+	// a document the far end has to decide the meaning of.
+	_, hasConfig := s.Spec().ConfigFile()
 	configValue := jsontext.Value(config)
-	if !full {
-		_, hasIdentity := s.Spec().ConfigFile()
+	switch {
+	case !hasConfig:
+		configValue = nil
+	case !full:
 		slim, err := slimConfig(configValue,
-			fmt.Sprintf("config for %s", account.Email), hasIdentity)
+			fmt.Sprintf("config for %s", account.Email), true)
 		if err != nil {
 			return ExportedAccount{}, "", err
 		}
 		configValue = slim
-	} else if !configValue.IsValid() {
+	case !configValue.IsValid():
 		return ExportedAccount{}, "", fmt.Errorf("%w: the config for %s is not valid JSON",
 			apperr.ErrTransfer, account.Email)
 	}
