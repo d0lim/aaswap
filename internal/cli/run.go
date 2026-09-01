@@ -314,7 +314,7 @@ func (a *App) reportAdd(outcome swap.AddOutcome) error {
 	}
 	if outcome.RenamedFrom != "" {
 		a.printer.Println(a.printer.Dimmed(
-			fmt.Sprintf("Moved from slot %s → %s", outcome.RenamedFrom, outcome.Name)))
+			fmt.Sprintf("Renamed %s → %s", outcome.RenamedFrom, outcome.Name)))
 	}
 	verb := "Added"
 	if outcome.Refreshed {
@@ -511,7 +511,7 @@ func (a *App) runUnclaimed(cmd *cobra.Command, purge string) error {
 			a.printer.Println("  ", a.printer.Muted("reason: "+entry.Reason))
 		}
 		if entry.ConfigSlot != "" {
-			a.printer.Println("  ", a.printer.Muted("the config named slot "+entry.ConfigSlot))
+			a.printer.Println("  ", a.printer.Muted("the config named "+entry.ConfigSlot))
 		}
 		if entry.CreatedAt != "" {
 			a.printer.Println("  ", a.printer.Muted("preserved "+entry.CreatedAt))

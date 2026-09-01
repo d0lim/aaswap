@@ -66,7 +66,7 @@ func TestTheAddPromptNamesWhatWillHappen(t *testing.T) {
 			name: "an account with no slot is a new registration",
 			state: swap.LiveState{LoggedIn: true, Identity: swap.LiveIdentity{
 				Email: "new@example.com", OrganizationName: "Acme"}},
-			want: []string{"Add the account", "new@example.com", "Acme", "new slot"},
+			want: []string{"Add the account", "new@example.com", "Acme", "new account"},
 		},
 		{
 			name: "an account already in a slot is a refresh of that slot",

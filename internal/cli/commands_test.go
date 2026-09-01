@@ -466,7 +466,7 @@ func TestUnclaimedListingAndPurge(t *testing.T) {
 	if code := h.run("account", "unclaimed"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "reason:", "the config named slot 1", "--purge")
+	wantContains(t, h.stdout(), "reason:", "the config named 1", "--purge")
 
 	if code := h.run("account", "unclaimed", "--purge", "all", "--yes"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())

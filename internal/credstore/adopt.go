@@ -74,7 +74,8 @@ func (s *Store) AdoptKeychain(fromService string, slots map[string]string) (Adop
 	}
 
 	if len(report.Failed) > 0 {
-		return report, fmt.Errorf("%w: %d slot(s) did not come across", apperr.ErrCredential, len(report.Failed))
+		return report, fmt.Errorf("%w: %d account(s) did not come across",
+			apperr.ErrCredential, len(report.Failed))
 	}
 	return report, nil
 }

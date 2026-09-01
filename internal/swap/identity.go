@@ -234,7 +234,7 @@ func (s *Switcher) RejectCrossKindCollision(roster *Roster, email string, isAPIK
 	if existing == incoming {
 		return nil
 	}
-	return fmt.Errorf("%w: %q already exists as an %s account (slot %s); cannot add it "+
+	return fmt.Errorf("%w: %q already exists as an %s account (%s); cannot add it "+
 		"as an %s account. Pass a distinct --email",
 		apperr.ErrValidation, email, kindLabel(existing), num, kindLabel(incoming))
 }

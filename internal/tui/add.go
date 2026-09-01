@@ -130,10 +130,10 @@ func (m Model) handleLiveProbed(msg liveProbedMsg) (tea.Model, tea.Cmd) {
 	if slot := msg.state.Slot; slot != "" {
 		title = fmt.Sprintf("Refresh Account %s from the live login?", slot)
 		body = append(body, st.muted.Render(
-			"  Replaces the stored credential for Account "+slot+". Nothing else changes."))
+			"  Replaces the stored credential for "+slot+". Nothing else changes."))
 	} else {
 		body = append(body, st.muted.Render(
-			"  Stores its credential and config in a new slot."))
+			"  Stores its credential as a new account."))
 	}
 	body = append(body, "",
 		st.muted.Render("  To add a DIFFERENT account, press esc and then ")+
