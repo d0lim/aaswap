@@ -10,13 +10,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // Outcome is what one tick decided. The values double as exit codes for a
@@ -160,12 +160,12 @@ func (e *Engine) tick(ctx context.Context) (Outcome, error) {
 	current, managed := e.Switcher.CurrentNumber(roster)
 	if !managed {
 		e.emit(e.event(KindPoll))
-		reason, detail := "no-active-account", "log in and run `ccswap add` first"
+		reason, detail := "no-active-account", "log in and run `aaswap add` first"
 		if e.Switcher.HasLiveLogin() {
-			// A live login ccswap does not manage: NEVER act. A switch would
+			// A live login aaswap does not manage: NEVER act. A switch would
 			// overwrite it with no backup anywhere.
 			reason = "unmanaged-active-account"
-			detail = "run `ccswap add` to include it in rotation"
+			detail = "run `aaswap add` to include it in rotation"
 		}
 		event := e.event(KindNoSwitch)
 		event.Reason, event.Detail = reason, detail
@@ -412,7 +412,7 @@ func (e *Engine) activateFirstUsable(ctx context.Context, roster *swap.Roster, s
 		event.Detail = message
 	case skippedLive:
 		event.Reason = "candidates-in-session"
-		event.Detail = "every candidate is running as a `ccswap run` session"
+		event.Detail = "every candidate is running as a `aaswap run` session"
 	default:
 		event.Reason = "no-viable-candidate"
 		event.Detail = "no candidate's stored token could be refreshed (network?)"

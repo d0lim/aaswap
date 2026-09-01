@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // AddRequest is one capture of the machine's live login into a slot.
@@ -14,7 +14,7 @@ type AddRequest struct {
 	// Slot pins the destination. Zero auto-assigns the next number.
 	Slot int
 	// Alias names the slot. Empty leaves any existing alias alone — which is
-	// what makes re-running `ccswap add` on a registered account a credential
+	// what makes re-running `aaswap add` on a registered account a credential
 	// refresh rather than a rename.
 	Alias string
 	// AssumeYes skips the confirmation for overwriting an occupied slot.

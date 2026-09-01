@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 var testNow = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -108,7 +108,7 @@ func (f *fixture) setLiveIdentity(email, orgUUID, orgName, accountUUID string) {
 			"organizationName": orgName,
 			"accountUuid":      accountUUID,
 		},
-		// A key ccswap does not own, present in every real config.
+		// A key aaswap does not own, present in every real config.
 		"projects": map[string]any{"/home/u/work": map[string]any{"allowedTools": []string{}}},
 	}
 	data, err := json.Marshal(config)
@@ -189,7 +189,7 @@ func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
 		},
 		{
 			// Only when the credential actually CHANGED. A switch that finds
-			// the live bytes untouched since ccswap wrote them backs up the
+			// the live bytes untouched since aaswap wrote them backs up the
 			// config alone, and a profile seeded from those same bytes is not
 			// stale — announcing there would invalidate profiles on every
 			// ordinary switch.

@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // TimestampLayout is how the roster stamps times: UTC, second resolution, no
@@ -147,7 +147,7 @@ func sortedSlots[T any](accounts map[string]T) []string {
 		if aErr == nil && bErr == nil {
 			return ai - bi
 		}
-		// A non-numeric key is not something ccswap writes, but it must still
+		// A non-numeric key is not something aaswap writes, but it must still
 		// order deterministically rather than crash the listing.
 		return cmpStrings(a, b)
 	})
@@ -181,7 +181,7 @@ func (r *Roster) FindSlot(identity Identity) (string, bool) {
 //
 // Deliberately not the lowest FREE number: reusing a number a user just removed
 // would make "account 3" mean a different account than it did a minute ago, in
-// a shell history full of `ccswap switch 3`.
+// a shell history full of `aaswap switch 3`.
 func (r *Roster) NextNumber() int {
 	highest := 0
 	if r != nil {

@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // AdoptReport says what an adoption did to the Keychain.
 type AdoptReport struct {
-	// Copied is how many slots now have a backup under ccswap's own service.
+	// Copied is how many slots now have a backup under aaswap's own service.
 	Copied int
 	// Missing names slots that had no claude-swap Keychain item at all. Not an
 	// error: off macOS there never was one, and on macOS a slot whose backup
@@ -22,7 +22,7 @@ type AdoptReport struct {
 }
 
 // AdoptClaudeSwapKeychain copies backup items from the claude-swap Keychain
-// service into ccswap's own, for the slots named.
+// service into aaswap's own, for the slots named.
 //
 // Copies rather than moves. The directory tree has already been moved by the
 // time this runs, so the originals are unreferenced — but leaving them is what

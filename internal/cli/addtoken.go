@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/mappings"
-	"github.com/d0lim/ccswap/internal/session"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/mappings"
+	"github.com/d0lim/aaswap/internal/session"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
@@ -21,13 +21,13 @@ func (a *App) runCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run [NUM|EMAIL|ALIAS] [-- CLAUDE ARGS...]",
 		Short: "Launch Claude Code as one account, leaving the default login alone",
-		Long: "With no account, the working directory decides: `ccswap map` remembers which\n" +
+		Long: "With no account, the working directory decides: `aaswap map` remembers which\n" +
 			"account a directory belongs to, and the nearest mapped ancestor wins.\n" +
 			"An unmapped directory launches Claude Code exactly as typing `claude` would.\n\n" +
 			"Everything after `--` is passed through to Claude Code.",
-		Example: "  ccswap run 2\n" +
-			"  ccswap run work -- --resume\n" +
-			"  ccswap run                      # whichever account this directory maps to",
+		Example: "  aaswap run 2\n" +
+			"  aaswap run work -- --resume\n" +
+			"  aaswap run                      # whichever account this directory maps to",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			identifier, claudeArgs := splitRunArgs(cmd, args)
@@ -46,7 +46,7 @@ func (a *App) runCommand() *cobra.Command {
 
 // splitRunArgs separates the account from the arguments meant for Claude Code.
 //
-// Cobra records where `--` appeared, so `ccswap run -- --resume` passes the flag
+// Cobra records where `--` appeared, so `aaswap run -- --resume` passes the flag
 // through instead of reading it as an account.
 func splitRunArgs(cmd *cobra.Command, args []string) (identifier string, claudeArgs []string) {
 	return splitRunArgsAt(args, cmd.ArgsLenAtDash())
@@ -195,7 +195,7 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 		return err
 	}
 	return fmt.Errorf("%w: the session profile for account %s (%s) failed validation. Log "+
-		"in with that account and re-add it: ccswap add --slot %s",
+		"in with that account and re-add it: aaswap add --slot %s",
 		apperr.ErrSession, num, account.Email, num)
 }
 
@@ -224,7 +224,7 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 		// user asked to run Claude Code, and the default login still can.
 		a.printer.Warning(fmt.Sprintf(
 			"This directory maps to %s, which is no longer managed. Remove the mapping "+
-				"with `ccswap unmap`, or re-add the account.", entry.Email))
+				"with `aaswap unmap`, or re-add the account.", entry.Email))
 		return "", false, nil
 	}
 	return num, true, nil
@@ -271,7 +271,7 @@ func (a *App) mapCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "map NUM|EMAIL|ALIAS [DIRECTORY]",
 		Short: "Remember which account a directory belongs to",
-		Long: "`ccswap run` with no account resolves the working directory to its nearest\n" +
+		Long: "`aaswap run` with no account resolves the working directory to its nearest\n" +
 			"mapped ancestor, so a project always gets the same login.",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -392,7 +392,7 @@ func (a *App) runMappings() error {
 
 	if len(table) == 0 {
 		a.printer.Println(a.printer.Dimmed(
-			"No directories are mapped. Map one with: ccswap map <account> [directory]"))
+			"No directories are mapped. Map one with: aaswap map <account> [directory]"))
 		return nil
 	}
 	for _, dir := range sortedMapKeys(table) {

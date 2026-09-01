@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/spf13/cobra"
 )
 
@@ -11,7 +11,7 @@ func (a *App) importStoreCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "import-store",
 		Short: "Take over an account store left by the claude-swap project",
-		Long: "ccswap keeps its own account store, separate from the claude-swap\n" +
+		Long: "aaswap keeps its own account store, separate from the claude-swap\n" +
 			"project it was forked from. The two stamp the same schema versions into\n" +
 			"the same file names, and neither can tell the other's version numbers\n" +
 			"from its own — so sharing a store would let either one discard the\n" +
@@ -78,7 +78,7 @@ func (a *App) runImportStore() error {
 		return adoptErr
 	}
 
-	a.printer.Printf("%d account(s) are now ccswap's. Run `ccswap list` to check them.\n", len(slots))
+	a.printer.Printf("%d account(s) are now aaswap's. Run `aaswap list` to check them.\n", len(slots))
 	a.printer.Println(a.printer.Dimmed(
 		"The claude-swap Keychain items were left in place, so moving the directory " +
 			"back restores claude-swap. Remove them once you are satisfied."))

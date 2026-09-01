@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/render"
+	"github.com/d0lim/aaswap/internal/render"
 )
 
 // cliHandler writes log records the way a command-line tool should.

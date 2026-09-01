@@ -3,9 +3,9 @@ package credstore
 import (
 	"path/filepath"
 
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // Store owns the active credential store and the per-account backup store.

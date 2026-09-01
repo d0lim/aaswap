@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/session"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/session"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // freshenVerdict is what happened when the engine tried to make a candidate's
@@ -24,7 +24,7 @@ const (
 	// DIFFERENT account. Activating it would put the user on the wrong account
 	// with every gauge reading normal.
 	freshenIdentityConflict
-	// freshenSkipLiveSession: a `ccswap run` session owns this account's token in
+	// freshenSkipLiveSession: a `aaswap run` session owns this account's token in
 	// its own profile.
 	freshenSkipLiveSession
 	// freshenSystemic: a deterministic refusal every candidate hits identically.

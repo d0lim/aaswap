@@ -8,9 +8,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // Layout constants.
@@ -80,7 +80,7 @@ func (m Model) dashboard() string {
 // the whole store rather than of any one account.
 func (m Model) header() string {
 	st := m.styles
-	left := st.title.Render(" ccswap")
+	left := st.title.Render(" aaswap")
 
 	var right []string
 	if m.watch {
@@ -280,8 +280,8 @@ func (m Model) renderHelp() string {
 	}
 	b.WriteString("\n\n" + st.muted.Render(
 		"Switching writes a live credential. It takes the store lock, so it may\n"+
-			"pause while another ccswap or a running Claude Code holds it.\n\n"+
-			"ccswap cannot log you in — Claude Code owns that flow. `n` waits for you\n"+
+			"pause while another aaswap or a running Claude Code holds it.\n\n"+
+			"aaswap cannot log you in — Claude Code owns that flow. `n` waits for you\n"+
 			"to run /login elsewhere and captures the account when it lands."))
 	return st.modal.Render(b.String())
 }

@@ -18,13 +18,13 @@ import (
 
 // Keychain service names.
 const (
-	// BackupService holds ccswap's own per-account backup credentials.
+	// BackupService holds aaswap's own per-account backup credentials.
 	//
-	// ccswap's own service, not claude-swap's. The two projects evolve
+	// aaswap's own service, not claude-swap's. The two projects evolve
 	// independently and a Keychain service is a flat namespace keyed by
 	// account name, so sharing one means either project's `remove` deletes
 	// the other's item for that slot. See ClaudeSwapBackupService.
-	BackupService = "ccswap"
+	BackupService = "aaswap"
 
 	// ClaudeSwapBackupService is where the claude-swap project keeps the same
 	// kind of item. Read only by the import command, which copies items across
@@ -32,7 +32,7 @@ const (
 	ClaudeSwapBackupService = "claude-swap"
 
 	// ClaudeOAuthService is Claude Code's *active* OAuth credential. Claude
-	// Code reads it; ccswap reads and writes it when switching accounts.
+	// Code reads it; aaswap reads and writes it when switching accounts.
 	ClaudeOAuthService = "Claude Code-credentials"
 
 	// ClaudeManagedKeyService is Claude Code's *active* managed API key — the
@@ -59,7 +59,7 @@ var sharedCredentialKeys = []string{
 	"pluginSecrets",
 }
 
-// accountCredentialKeys are the account-scoped siblings ccswap knows about,
+// accountCredentialKeys are the account-scoped siblings aaswap knows about,
 // named so the unrecognized-key probe below does not flag them. claudeAiOauth
 // is the login itself; trustedDeviceToken is enrolled per (device, account) at
 // /login.
@@ -111,7 +111,7 @@ func SharedCredentialFields(credentials string) (map[string]any, bool) {
 		return nil, false
 	}
 	if _, hasLogin := data["claudeAiOauth"]; hasLogin {
-		// A sibling key ccswap does not know defaults to slot-owned, which fails
+		// A sibling key aaswap does not know defaults to slot-owned, which fails
 		// safe — but silently. If Claude Code grows a new *shared* key, that
 		// default quietly reintroduces the stale-restore papercut for it, so
 		// leave a trace that gets noticed.
@@ -123,7 +123,7 @@ func SharedCredentialFields(credentials string) (map[string]any, bool) {
 		}
 		if len(unrecognized) > 0 {
 			slices.Sort(unrecognized)
-			slog.Debug("live credential has sibling keys ccswap does not recognize "+
+			slog.Debug("live credential has sibling keys aaswap does not recognize "+
 				"(a newer Claude Code?); treating them as slot-owned",
 				"keys", unrecognized)
 		}

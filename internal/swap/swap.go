@@ -32,13 +32,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/lockfile"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/lockfile"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // BackupWritten announces a replaced backup credential, if anyone is listening.
@@ -56,7 +56,7 @@ const RosterFileName = paths.RosterFileName
 // operations that matter — adding, removing, relocating, switching — touch the
 // roster and the credential backups together, and a per-slot lock would let two
 // of them interleave into a roster that names credentials nobody wrote.
-const LockFileName = ".ccswap.lock"
+const LockFileName = ".aaswap.lock"
 
 // IdentityOracle resolves an access token to the account it belongs to.
 //
@@ -174,7 +174,7 @@ func (s *Switcher) now() time.Time {
 	return s.Now()
 }
 
-// BackupRoot is where ccswap keeps everything it owns.
+// BackupRoot is where aaswap keeps everything it owns.
 func (s *Switcher) BackupRoot() string { return s.Paths.BackupRoot() }
 
 // RosterPath is sequence.json's location.

@@ -1,4 +1,4 @@
-// Package apperr carries ccswap's error taxonomy.
+// Package apperr carries aaswap's error taxonomy.
 //
 // The Python original expressed this as an exception hierarchy rooted at
 // ClaudeSwitchError, and callers branched on subclasses: the CLI catches the
@@ -9,7 +9,7 @@
 //
 // That means errors.Is answers the same questions the except clauses did:
 //
-//	errors.Is(err, apperr.Err)              // any ccswap error (CLI)
+//	errors.Is(err, apperr.Err)              // any aaswap error (CLI)
 //	errors.Is(err, apperr.ErrCredential)    // any credential problem
 //	errors.Is(err, apperr.ErrCredentialRead) // specifically a failed read
 //
@@ -22,7 +22,7 @@ import "errors"
 
 // kind is a node in the taxonomy. Error returns only the node's own label —
 // the parent is reachable through Unwrap but is deliberately absent from the
-// message, so wrapping does not produce "credential: ccswap error" noise.
+// message, so wrapping does not produce "credential: aaswap error" noise.
 type kind struct {
 	label  string
 	parent error
@@ -33,10 +33,10 @@ func (k *kind) Unwrap() error { return k.parent }
 
 func derive(label string, parent error) error { return &kind{label: label, parent: parent} }
 
-// Err is the root of the taxonomy: every error ccswap raises on purpose
+// Err is the root of the taxonomy: every error aaswap raises on purpose
 // unwraps to it. The CLI treats a match as "expected failure, print and exit 1"
 // and anything else as a bug worth a stack trace.
-var Err = errors.New("ccswap error")
+var Err = errors.New("aaswap error")
 
 // Credential storage and retrieval.
 var (
@@ -55,7 +55,7 @@ var (
 	ErrTransfer        = derive("account transfer error", Err)
 )
 
-// Locking. ErrClaudeCodeLockTimeout is distinct because it is not a ccswap
+// Locking. ErrClaudeCodeLockTimeout is distinct because it is not a aaswap
 // defect: Claude Code legitimately holds the lock during a token refresh, and
 // the right response is to tell the user to retry rather than to fail hard.
 var (

@@ -13,7 +13,7 @@ import (
 //
 // Windows has no flock; LockFileEx is the equivalent, and locking a single byte
 // (rather than the whole range) matches what the Python implementation did
-// through msvcrt.locking, so a Go and a Python ccswap on the same machine still
+// through msvcrt.locking, so a Go and a Python aaswap on the same machine still
 // exclude each other during the migration period.
 func tryLock(f *os.File) error {
 	overlapped := new(windows.Overlapped)

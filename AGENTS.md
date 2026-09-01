@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for coding agents working on **ccswap** — a Go 1.27 CLI that
+Instructions for coding agents working on **aaswap** — a Go 1.27 CLI that
 switches a machine between multiple Claude Code logins.
 
 This tool holds the user's live authentication. A bug here does not produce a
@@ -14,7 +14,7 @@ before changing anything under `internal/credstore`, `internal/keychain`, or
 
 ```bash
 make check     # vet + modernize + lint + test — run this before calling work done
-make build     # -> ./ccswap
+make build     # -> ./aaswap
 make test      # go test ./...
 make race      # go test -race ./...
 make modernize # go fix -diff ./...  (non-zero exit when the tree is not modern Go)
@@ -32,8 +32,8 @@ These are contracts with software and state that already exist on users'
 machines. Breaking one is not a refactor, it is a regression.
 
 1. **On-disk formats are append-only.** `sequence.json`, `settings.json`,
-   `autoswitch_state.json`, `credentials/*`, `*.enc`, `.ccswap` export files and
-   session-profile manifests are all read by ccswap versions the user may still
+   `autoswitch_state.json`, `credentials/*`, `*.enc`, `.aaswap` export files and
+   session-profile manifests are all read by aaswap versions the user may still
    have installed. Add fields; never rename or remove them. Unknown fields must
    survive a read-modify-write round trip — that is what the
    `Extra map[string]jsontext.Value` + `json:",embed"` fallback is for.
@@ -56,7 +56,7 @@ machines. Breaking one is not a refactor, it is a regression.
    it. New keys are fine; changed or removed keys are not.
 
 6. **The CLI surface is stable in both spellings** — the verb subcommands
-   (`ccswap switch`) and the legacy flags (`ccswap --switch`).
+   (`aaswap switch`) and the legacy flags (`aaswap --switch`).
 
 7. **Tests never touch real state.** Three guards panic in test builds when the
    real thing is reached: `paths.guardRealStore`, `keychain.guardRealKeychain`,
@@ -211,7 +211,7 @@ Do not add a library for something the stdlib does.
 ## Layout
 
 ```
-cmd/ccswap/                                       entrypoint, kept thin
+cmd/aaswap/                                       entrypoint, kept thin
 internal/
   platform/ paths/ fsutil/ lockfile/ apperr/      foundation
   settings/ buildinfo/

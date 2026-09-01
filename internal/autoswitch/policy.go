@@ -21,8 +21,8 @@ package autoswitch
 import (
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
 )
 
 // StateFileName holds the engine's memory between runs.
@@ -108,14 +108,14 @@ var systemicRefusals = []struct {
 	Message string
 }{
 	{claudeapi.KindStoreUnmirrored,
-		"CLAUDE_SECURESTORAGE_CONFIG_DIR is set — unset it or run ccswap from a normal shell"},
+		"CLAUDE_SECURESTORAGE_CONFIG_DIR is set — unset it or run aaswap from a normal shell"},
 	{claudeapi.KindInvalidClient,
-		"ccswap's OAuth client was rejected — systemic, not this account"},
+		"aaswap's OAuth client was rejected — systemic, not this account"},
 	{claudeapi.KindStashUnreadable,
 		"a stashed successor is unreadable — unlock the keychain or fix the file, then " +
-			"retry; `ccswap unclaimed` inspects it"},
+			"retry; `aaswap unclaimed` inspects it"},
 	{claudeapi.KindConsumeBusy,
-		"another ccswap surface holds the slot — retries next pass"},
+		"another aaswap surface holds the slot — retries next pass"},
 }
 
 // systemicMessage explains a systemic refusal, reporting false for anything

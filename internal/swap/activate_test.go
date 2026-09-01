@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/claudeapi"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 // twoAccounts registers two switchable slots and leaves slot 1 live.
@@ -74,7 +74,7 @@ func TestSwitchActivatesTheTarget(t *testing.T) {
 func TestSwitchPreservesTheUsersOwnConfig(t *testing.T) {
 	f := newFixture(t)
 	f.twoAccounts()
-	// A config with plenty that is none of ccswap's business.
+	// A config with plenty that is none of aaswap's business.
 	if err := os.WriteFile(f.Paths.GlobalConfigPath(), []byte(`{
 	  "oauthAccount": {"emailAddress": "one@example.com"},
 	  "projects": {"/home/u/work": {"allowedTools": ["Bash"]}},
@@ -105,7 +105,7 @@ func TestSwitchPreservesTheUsersOwnConfig(t *testing.T) {
 func TestSwitchBacksUpTheDepartingAccount(t *testing.T) {
 	f := newFixture(t)
 	f.twoAccounts()
-	// Claude Code rotated the live credential since ccswap wrote it.
+	// Claude Code rotated the live credential since aaswap wrote it.
 	const rotated = `{"claudeAiOauth":{"accessToken":"tok-1-rotated","refreshToken":"r1"}}`
 	if err := f.Creds.WriteActive(rotated); err != nil {
 		t.Fatal(err)
@@ -335,7 +335,7 @@ func TestSwitchingToAnUnusableTarget(t *testing.T) {
 		{
 			name:    "no stored credential",
 			break_:  func(f *fixture) { _ = f.Creds.DeleteAccount("2", "two@example.com") },
-			wantErr: []string{"no stored credentials", "ccswap add --slot 2"},
+			wantErr: []string{"no stored credentials", "aaswap add --slot 2"},
 		},
 		{
 			name: "no stored config",

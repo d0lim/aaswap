@@ -1,7 +1,7 @@
 // Package paths resolves where Claude Code keeps its config and credentials,
-// and where ccswap keeps its backups.
+// and where aaswap keeps its backups.
 //
-// The resolution rules mirror Claude Code's own so ccswap reads and writes the
+// The resolution rules mirror Claude Code's own so aaswap reads and writes the
 // very same files (from the claude-code source):
 //
 //   - Config home: CLAUDE_CONFIG_DIR if set, else ~/.claude.
@@ -10,8 +10,8 @@
 //     .claude.json sits at the home directory by default, not inside .claude/.
 //   - Credentials: <config-home>/.credentials.json.
 //
-// The ccswap backup root follows the XDG Base Directory Specification on
-// Linux and WSL ($XDG_DATA_HOME/ccswap) and uses ~/.ccswap-backup on macOS and
+// The aaswap backup root follows the XDG Base Directory Specification on
+// Linux and WSL ($XDG_DATA_HOME/aaswap) and uses ~/.aaswap-backup on macOS and
 // Windows.
 //
 // # Why a Resolver instead of package functions
@@ -37,13 +37,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // Backup directory names.
 //
-// ccswap keeps its own store, separate from the claude-swap project it was
+// aaswap keeps its own store, separate from the claude-swap project it was
 // forked from. That is not cosmetic. Both projects stamp the same schema
 // version numbers into settings.json, usage.json and the roster, and the
 // version is how each decides whether a file is one it understands — the
@@ -53,20 +53,20 @@ import (
 // backup root only looks like compatibility.
 //
 // A claude-swap store is therefore FOREIGN. See [Resolver.ClaudeSwapRoots] and
-// the `ccswap import-store` command, which moves one over on request.
+// the `aaswap import-store` command, which moves one over on request.
 const (
 	// BackupDirName is the XDG data directory, used on Linux and WSL.
-	BackupDirName = "ccswap"
+	BackupDirName = "aaswap"
 	// RosterFileName is the account table's name inside a backup root. Named
 	// here because "is there a store at this path" is a question about
-	// locations, and both ccswap's own roots and a foreign one answer it.
+	// locations, and both aaswap's own roots and a foreign one answer it.
 	RosterFileName = "sequence.json"
 	// LegacyBackupDirName is the pre-XDG backup directory, still the layout
 	// used on macOS and Windows.
-	LegacyBackupDirName = ".ccswap-backup"
+	LegacyBackupDirName = ".aaswap-backup"
 )
 
-// claude-swap's own backup directory names, which ccswap only ever reads, and
+// claude-swap's own backup directory names, which aaswap only ever reads, and
 // only when asked to import.
 const (
 	claudeSwapDirName       = "claude-swap"
@@ -106,7 +106,7 @@ func New(home string, p platform.Platform) *Resolver {
 }
 
 // FromEnv builds a Resolver from the process environment. This is the only
-// place in ccswap that reads these variables.
+// place in aaswap that reads these variables.
 //
 // In a test binary it panics rather than return a Resolver pointing at the
 // developer's real account store — see [guardRealStore].
@@ -180,12 +180,12 @@ func (r *Resolver) CredentialsPath() string {
 	return filepath.Join(r.ClaudeConfigHome(), ".credentials.json")
 }
 
-// LegacyBackupRoot returns the pre-XDG backup root, ~/.ccswap-backup.
+// LegacyBackupRoot returns the pre-XDG backup root, ~/.aaswap-backup.
 func (r *Resolver) LegacyBackupRoot() string {
 	return filepath.Join(r.Home, LegacyBackupDirName)
 }
 
-// BackupRoot returns ccswap's backup root for this platform.
+// BackupRoot returns aaswap's backup root for this platform.
 //
 // Per the XDG spec, XDG_DATA_HOME is ignored when unset, empty, or not
 // absolute. A leading ~ is expanded so values like "~/data" — set through
@@ -200,7 +200,7 @@ func (r *Resolver) BackupRoot() string {
 	return r.LegacyBackupRoot()
 }
 
-// CacheDir is where ccswap keeps regenerable state: the usage table and the
+// CacheDir is where aaswap keeps regenerable state: the usage table and the
 // update-check stamp.
 //
 // Everything under it is throwaway by construction. Deleting it costs at most

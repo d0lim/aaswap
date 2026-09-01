@@ -7,15 +7,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/mappings"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
-	"github.com/d0lim/ccswap/internal/procdetect"
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/mappings"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/procdetect"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
@@ -42,7 +42,7 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 	}
 
 	if len(snapshot.Views) == 0 {
-		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: ccswap add"))
+		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: aaswap add"))
 		a.noteClaudeSwapStore(s.Paths)
 		return nil
 	}
@@ -116,7 +116,7 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 	if !managed {
 		a.printer.Println(a.printer.Bold("Status: "), live.Email,
 			a.printer.Muted(" ["+live.DisplayTag()+"]"))
-		a.printer.Println(a.printer.Dimmed("  Not managed by ccswap. Run `ccswap add` to store it."))
+		a.printer.Println(a.printer.Dimmed("  Not managed by aaswap. Run `aaswap add` to store it."))
 		return nil
 	}
 
@@ -139,7 +139,7 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 // "the switch did nothing" into "the running session is still on the old
 // account until it restarts".
 //
-// Only the default profile: a `ccswap run` session has its own profile and its
+// Only the default profile: a `aaswap run` session has its own profile and its
 // own credential, and a switch does not touch it.
 func (a *App) reportRunningInstances(s *swap.Switcher) {
 	configDir := s.Paths.DefaultClaudeConfigHome()
@@ -208,7 +208,7 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 		return err
 	}
 	if len(roster.Accounts) == 0 {
-		return fmt.Errorf("no accounts are managed yet. Log in with Claude Code, then run: ccswap add")
+		return fmt.Errorf("no accounts are managed yet. Log in with Claude Code, then run: aaswap add")
 	}
 
 	if target == "" {
@@ -262,7 +262,7 @@ func (a *App) chooseTarget(cmd *cobra.Command, s *swap.Switcher, roster *swap.Ro
 	switchable := s.SwitchableNumbers(roster)
 	if len(switchable) == 0 {
 		return "", fmt.Errorf("no account has both a stored credential and a stored config; " +
-			"re-add one with: ccswap add --slot N")
+			"re-add one with: aaswap add --slot N")
 	}
 
 	current, _ := s.CurrentNumber(roster)
@@ -426,7 +426,7 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 	}
 	if outcome.WasActive {
 		a.printer.Warning(fmt.Sprintf("Account %s (%s) was the active login. "+
-			"You are still logged in; ccswap simply no longer has a copy.",
+			"You are still logged in; aaswap simply no longer has a copy.",
 			outcome.Number, outcome.Email))
 	}
 	a.printer.Println(a.printer.Accent("Removed"), " ",
@@ -443,7 +443,7 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 //
 // Best effort, and reported rather than returned: the account is already gone
 // by the time this runs, and failing the command afterwards would say the
-// removal did not happen. A surviving mapping sends `ccswap run` in that
+// removal did not happen. A surviving mapping sends `aaswap run` in that
 // directory looking for a slot that is not there, which is a confusing error
 // but not a dangerous one.
 func (a *App) pruneMappingsFor(s *swap.Switcher, identity mappings.Identity) {
@@ -522,7 +522,7 @@ func (a *App) runSetDisabled(cmd *cobra.Command, identifier string, disabled boo
 	}
 	if len(s.SwitchableNumbers(roster)) == 0 {
 		a.printer.Warning("No accounts remain in rotation — auto-switch and a bare " +
-			"switch have nothing to pick. Re-enable one with: ccswap enable <num|email>")
+			"switch have nothing to pick. Re-enable one with: aaswap enable <num|email>")
 	}
 	return nil
 }
@@ -666,7 +666,7 @@ func (a *App) runUnclaimed(cmd *cobra.Command, purge string) error {
 	}
 	a.printer.Blank()
 	a.printer.Println(a.printer.Dimmed(
-		"Drop one with: ccswap unclaimed --purge <id>, or all of them with --purge all"))
+		"Drop one with: aaswap unclaimed --purge <id>, or all of them with --purge all"))
 	return nil
 }
 
@@ -707,7 +707,7 @@ func sortedIDs(entries map[string]*credstore.StashEntry) []string {
 
 // noteClaudeSwapStore points out a store left by the claude-swap project.
 //
-// Shown only when ccswap has no accounts of its own, which is the only moment
+// Shown only when aaswap has no accounts of its own, which is the only moment
 // the suggestion is actionable — import-store refuses to merge into a populated
 // store, so nagging someone who already has accounts would offer a command that
 // cannot run.
@@ -721,5 +721,5 @@ func (a *App) noteClaudeSwapStore(resolver *paths.Resolver) {
 		return
 	}
 	a.printer.Println(a.printer.Dimmed(
-		"Found a claude-swap store at " + source + " — `ccswap import-store` moves it over."))
+		"Found a claude-swap store at " + source + " — `aaswap import-store` moves it over."))
 }

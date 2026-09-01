@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
 	"github.com/spf13/cobra"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 func TestListShowsEveryAccount(t *testing.T) {
@@ -35,7 +35,7 @@ func TestListOnAnEmptyStoreExplainsWhatToDo(t *testing.T) {
 	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts are managed yet", "ccswap add")
+	wantContains(t, h.stdout(), "No accounts are managed yet", "aaswap add")
 }
 
 // The JSON surface is what scripts consume, so it must be exactly one object
@@ -95,7 +95,7 @@ func TestStatus(t *testing.T) {
 		if code := h.run("status"); code != ExitOK {
 			t.Fatalf("exit = %d: %s", code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "ccswap add")
+		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "aaswap add")
 	})
 
 	t.Run("as JSON, an absent login is null", func(t *testing.T) {
@@ -395,7 +395,7 @@ func TestDisablingTheLastAccountWarns(t *testing.T) {
 	if code := h.run("disable", "1"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts remain in rotation", "ccswap enable")
+	wantContains(t, h.stdout(), "No accounts remain in rotation", "aaswap enable")
 }
 
 func TestAliasCommands(t *testing.T) {
@@ -854,7 +854,7 @@ func TestMappings(t *testing.T) {
 	if code := h.run("mappings"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No directories are mapped", "ccswap map")
+	wantContains(t, h.stdout(), "No directories are mapped", "aaswap map")
 }
 
 func TestMappingAnUnknownAccount(t *testing.T) {

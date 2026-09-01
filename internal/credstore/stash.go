@@ -17,15 +17,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // The stash preserves credentials of unknown provenance.
 //
 // A switch overwrites the machine's live credential with a slot's stored one.
 // When the live bytes are positively NOT the departing slot's — another
-// account's token, an unmanaged login, bytes something outside ccswap wrote —
+// account's token, an unmanaged login, bytes something outside aaswap wrote —
 // they may go into no slot, because filing them would destroy that slot's only
 // refresh token. But they may not simply be destroyed either: they can be the
 // only live copy of some account's refresh token anywhere.

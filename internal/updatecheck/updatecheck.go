@@ -1,4 +1,4 @@
-// Package updatecheck tells the user when a newer ccswap exists, and how to get
+// Package updatecheck tells the user when a newer aaswap exists, and how to get
 // it.
 //
 // It does NOT upgrade in place. A Go binary installed by a package manager, a
@@ -18,11 +18,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // ReleasesURL is where the latest release is published.
-const ReleasesURL = "https://api.github.com/repos/d0lim/ccswap/releases/latest"
+const ReleasesURL = "https://api.github.com/repos/d0lim/aaswap/releases/latest"
 
 // CacheTTL is how long a check is reused.
 //
@@ -55,9 +55,9 @@ const (
 func (m Method) UpgradeCommand() string {
 	switch m {
 	case Homebrew:
-		return "brew upgrade --cask ccswap"
+		return "brew upgrade --cask aaswap"
 	case GoInstall:
-		return "go install github.com/d0lim/ccswap/cmd/ccswap@latest"
+		return "go install github.com/d0lim/aaswap/cmd/aaswap@latest"
 	}
 	return ""
 }
@@ -77,7 +77,7 @@ func DetectMethod() Method {
 	}
 
 	// A Homebrew install lives under the prefix, whatever the prefix is. Two
-	// layouts, because ccswap ships as a CASK: casks stage under Caskroom,
+	// layouts, because aaswap ships as a CASK: casks stage under Caskroom,
 	// formulae under Cellar. Cellar is still checked — recognising one install
 	// shape too many costs nothing, while missing the real one costs the whole
 	// upgrade instruction.
@@ -173,7 +173,7 @@ func (c *Checker) fetch(ctx context.Context) (version, url string) {
 		return "", ""
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "ccswap")
+	req.Header.Set("User-Agent", "aaswap")
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {

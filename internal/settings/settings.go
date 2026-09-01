@@ -8,9 +8,9 @@
 // Reading is deliberately forgiving: a missing or corrupt file yields defaults
 // with a logged warning rather than an error, so a bad hand edit degrades to
 // default behaviour instead of bricking the CLI. Writing is deliberately
-// strict: `ccswap config set` rejects an out-of-range value loudly, so the user
+// strict: `aaswap config set` rejects an out-of-range value loudly, so the user
 // learns about the problem when setting it rather than through silently
-// degraded behaviour at `ccswap auto` time. [Spec] is the single source of truth
+// degraded behaviour at `aaswap auto` time. [Spec] is the single source of truth
 // for the bounds both paths use, so the lenient and strict sides cannot drift.
 package settings
 
@@ -20,7 +20,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 	FileName = "settings.json"
 )
 
-// AutoSwitch holds the policy knobs for the auto-switch engine (`ccswap auto`).
+// AutoSwitch holds the policy knobs for the auto-switch engine (`aaswap auto`).
 //
 // Threshold is binding-window utilization — the higher of the 5h and 7d
 // percentages. At or above it the engine looks for a better account. It is 90
@@ -99,7 +99,7 @@ const (
 // Spec is the metadata for one user-tunable settings.json key.
 //
 // It is the single source of truth for bounds and choices: both the lenient
-// clamp on load and the strict validation in `ccswap config set` read from here.
+// clamp on load and the strict validation in `aaswap config set` read from here.
 type Spec struct {
 	// Section is the top-level JSON section ("autoswitch", "ui").
 	Section string
@@ -124,7 +124,7 @@ func (s Spec) Dotted() string { return s.Section + "." + s.JSONKey }
 // Default is this key's value when it is absent from settings.json.
 func (s Spec) Default() any { return s.get(Defaults()) }
 
-// specs is the registry, in the order `ccswap config` lists them.
+// specs is the registry, in the order `aaswap config` lists them.
 var specs = []Spec{
 	{
 		Section: "autoswitch", JSONKey: "threshold", Kind: KindFloat, Lo: 50, Hi: 99.9,
@@ -134,7 +134,7 @@ var specs = []Spec{
 	},
 	{
 		Section: "autoswitch", JSONKey: "intervalSeconds", Kind: KindFloat, Lo: 15, Hi: 3600,
-		Help: "Poll interval for the ccswap auto loop, in seconds",
+		Help: "Poll interval for the aaswap auto loop, in seconds",
 		get:  func(s Settings) any { return s.AutoSwitch.IntervalSeconds },
 		set:  func(s *Settings, v any) { s.AutoSwitch.IntervalSeconds = v.(float64) },
 	},

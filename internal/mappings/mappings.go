@@ -1,6 +1,6 @@
 // Package mappings remembers which account a directory belongs to.
 //
-// `ccswap run` with no account resolves the working directory to its nearest
+// `aaswap run` with no account resolves the working directory to its nearest
 // mapped ancestor and launches that account, so a project directory always gets
 // the same login without anyone naming it.
 //
@@ -25,8 +25,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // SchemaVersion is the file's format.
@@ -214,7 +214,7 @@ func (s *Store) Remove(path string) (bool, error) {
 // went.
 //
 // Called when an account is removed: a mapping to an account that no longer
-// exists would silently send `ccswap run` looking for it.
+// exists would silently send `aaswap run` looking for it.
 func (s *Store) PruneAccount(identity Identity) (int, error) {
 	table := s.Load()
 	removed := 0

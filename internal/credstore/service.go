@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/d0lim/ccswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/paths"
 )
 
 // KeychainServiceName returns the Keychain service name Claude Code derives for

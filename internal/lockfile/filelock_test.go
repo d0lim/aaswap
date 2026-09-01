@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 func TestAcquireAndRelease(t *testing.T) {
@@ -173,13 +173,13 @@ func TestZeroTimeoutUsesDefault(t *testing.T) {
 }
 
 // The operating system drops an advisory lock when its holder dies, so a
-// crashed ccswap cannot leave the account store permanently locked. Verified
+// crashed aaswap cannot leave the account store permanently locked. Verified
 // with a real second process, since that is the only way the guarantee is
 // actually exercised.
 func TestLockIsReleasedWhenTheHolderProcessExits(t *testing.T) {
-	if os.Getenv("CCSWAP_LOCK_HELPER") != "" {
+	if os.Getenv("AASWAP_LOCK_HELPER") != "" {
 		// Child: take the lock, announce it, and exit without releasing.
-		l := New(os.Getenv("CCSWAP_LOCK_HELPER"), 5*time.Second)
+		l := New(os.Getenv("AASWAP_LOCK_HELPER"), 5*time.Second)
 		acquired, err := l.Acquire()
 		if err != nil || !acquired {
 			os.Exit(2)
@@ -189,7 +189,7 @@ func TestLockIsReleasedWhenTheHolderProcessExits(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "store.lock")
 	cmd := exec.Command(os.Args[0], "-test.run=TestLockIsReleasedWhenTheHolderProcessExits")
-	cmd.Env = append(os.Environ(), "CCSWAP_LOCK_HELPER="+path)
+	cmd.Env = append(os.Environ(), "AASWAP_LOCK_HELPER="+path)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("helper process failed: %v\n%s", err, out)
 	}

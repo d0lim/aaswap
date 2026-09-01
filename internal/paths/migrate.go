@@ -11,16 +11,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
-// throwawayNames and throwawayPrefixes are entries any prior ccswap run may have
+// throwawayNames and throwawayPrefixes are entries any prior aaswap run may have
 // left in the backup root without user data being present: logger output and
 // the update-check / usage cache. A target holding only these counts as empty,
 // because wiping them loses no real state.
 var (
 	throwawayNames    = []string{"cache"}
-	throwawayPrefixes = []string{"ccswap.log"}
+	throwawayPrefixes = []string{"aaswap.log"}
 )
 
 // MigrateLegacyBackupDir moves ~/.claude-swap-backup to target when the layout
@@ -36,7 +36,7 @@ var (
 //     cleaning up. Just unlink the flag.
 //   - No flag, both paths exist — a real collision. Refuse, unless the target
 //     holds nothing but throwaway artifacts, which happens when a fresh box ran
-//     ccswap once (laying down cache/ and a log) and the legacy directory then
+//     aaswap once (laying down cache/ and a log) and the legacy directory then
 //     arrived from another machine via file sync. In that case wipe and migrate.
 //
 // It reports whether a move actually ran.
@@ -265,17 +265,17 @@ func isCrossDevice(err error) bool {
 func (r *Resolver) AdoptStore(source string) error {
 	target := r.BackupRoot()
 	if samePath(source, target) {
-		return fmt.Errorf("%w: the store is already ccswap's own", apperr.ErrConfig)
+		return fmt.Errorf("%w: the store is already aaswap's own", apperr.ErrConfig)
 	}
 	if exists(filepath.Join(target, RosterFileName)) {
-		return fmt.Errorf("%w: ccswap already has accounts at %s; "+
+		return fmt.Errorf("%w: aaswap already has accounts at %s; "+
 			"remove or move that store first", apperr.ErrConfig, target)
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		return fmt.Errorf("%w: preparing %s: %w", apperr.ErrConfig, target, err)
 	}
 	// A target with nothing but a cache and a log is not a store — it is what a
-	// single `ccswap list` leaves on a fresh machine, and it must not block an
+	// single `aaswap list` leaves on a fresh machine, and it must not block an
 	// import.
 	if exists(target) {
 		if err := wipeThrowawayArtifacts(target); err != nil {

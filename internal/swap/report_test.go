@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/testutil"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // fakeFetcher answers usage fetches without a network.
@@ -394,7 +394,7 @@ func TestStatusPayload(t *testing.T) {
 		}
 	})
 
-	t.Run("a live login ccswap does not manage", func(t *testing.T) {
+	t.Run("a live login aaswap does not manage", func(t *testing.T) {
 		f := newFixture(t)
 		f.twoAccounts()
 		f.setLiveIdentity("stranger@example.com", "", "", "")

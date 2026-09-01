@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
 )
 
 // LiveIdentity is who the machine is currently logged in as, read from Claude
@@ -165,7 +165,7 @@ func RejectLiveAPIKeyCapture(credentials string) error {
 		return nil
 	}
 	return fmt.Errorf("%w: the active login is an API-key account. Add it with "+
-		"`ccswap add-token sk-ant-api...` instead", apperr.ErrValidation)
+		"`aaswap add-token sk-ant-api...` instead", apperr.ErrValidation)
 }
 
 // RejectCrossKindCollision refuses to register a token whose identity already
@@ -238,7 +238,7 @@ func (s *Switcher) ResolveIdentifier(roster *Roster, identifier string) (string,
 		details[i] = fmt.Sprintf("%s [%s]", num, roster.Accounts[num].DisplayTag())
 	}
 	return "", false, fmt.Errorf("%w: email %q is ambiguous — it matches accounts: %s. "+
-		"Use the account number instead (for example, `ccswap switch 1`)",
+		"Use the account number instead (for example, `aaswap switch 1`)",
 		apperr.ErrConfig, identifier, strings.Join(details, ", "))
 }
 

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // Bounded retry for the active OAuth Keychain read.
@@ -242,7 +242,7 @@ func (s *Store) readGlobalConfig() (map[string]any, bool) {
 
 // deleteActiveKeychainEntry removes the active OAuth Keychain item, best effort.
 //
-// Claude Code reads the Keychain before the plaintext file, so once ccswap falls
+// Claude Code reads the Keychain before the plaintext file, so once aaswap falls
 // back to the file it must clear any stale Keychain entry or Claude Code would
 // resurrect it (#30337). Best-effort: when the Keychain is down the delete
 // cannot run, which is the documented recovery residual.
@@ -263,7 +263,7 @@ func (s *Store) deleteActiveKeychainEntry() bool {
 // credentials file at 0600.
 //
 // It uses the foreign-file writer: ~/.claude is Claude Code's directory, and
-// narrowing its mode is not ccswap's call to make.
+// narrowing its mode is not aaswap's call to make.
 func (s *Store) writeActiveCredentialsFile(credentials string) error {
 	return fsutil.WriteForeignFileAtomic(s.paths.CredentialsPath(), []byte(credentials))
 }

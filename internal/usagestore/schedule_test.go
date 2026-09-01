@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
 )
 
 func TestDueCandidatePicksTheStalest(t *testing.T) {

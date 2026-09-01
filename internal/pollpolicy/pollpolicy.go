@@ -41,7 +41,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 const (
