@@ -55,7 +55,7 @@ const (
 func (m Method) UpgradeCommand() string {
 	switch m {
 	case Homebrew:
-		return "brew upgrade ccswap"
+		return "brew upgrade --cask ccswap"
 	case GoInstall:
 		return "go install github.com/d0lim/ccswap/cmd/ccswap@latest"
 	}
@@ -76,9 +76,15 @@ func DetectMethod() Method {
 		executable = resolved
 	}
 
-	// A Homebrew install lives under the Cellar, whatever the prefix.
-	if strings.Contains(executable, string(filepath.Separator)+"Cellar"+string(filepath.Separator)) {
-		return Homebrew
+	// A Homebrew install lives under the prefix, whatever the prefix is. Two
+	// layouts, because ccswap ships as a CASK: casks stage under Caskroom,
+	// formulae under Cellar. Cellar is still checked — recognising one install
+	// shape too many costs nothing, while missing the real one costs the whole
+	// upgrade instruction.
+	for _, dir := range []string{"Caskroom", "Cellar"} {
+		if strings.Contains(executable, string(filepath.Separator)+dir+string(filepath.Separator)) {
+			return Homebrew
+		}
 	}
 	if gobin := os.Getenv("GOBIN"); gobin != "" && strings.HasPrefix(executable, gobin) {
 		return GoInstall
