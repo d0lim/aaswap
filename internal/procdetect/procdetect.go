@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"syscall"
 )
 
 // Session is one running Claude Code process.
@@ -163,17 +162,5 @@ func PIDAlive(pid int) bool {
 	if pid <= 1 {
 		return false
 	}
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = process.Signal(syscall.Signal(0))
-	if err == nil {
-		return true
-	}
-	return errorIsPermission(err)
-}
-
-func errorIsPermission(err error) bool {
-	return os.IsPermission(err)
+	return pidAlive(pid)
 }
