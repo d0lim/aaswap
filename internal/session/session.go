@@ -323,6 +323,15 @@ func (m *Manager) liveness() provider.Liveness {
 	return nil
 }
 
+// CanProbe reports whether the provider's own tool can be asked who a profile
+// is logged in as.
+//
+// Only Claude Code publishes such a command, so for every other provider a
+// verdict of Unknown means "nothing could be asked" rather than "the question
+// went unanswered" — two different things to tell a user, and the second one
+// names a binary they do not have.
+func (m *Manager) CanProbe() bool { return m.Probe != nil }
+
 // CanDetectSessions reports whether this provider can be asked what is running.
 //
 // The distinction the whole reseeding rule turns on: a provider that cannot be

@@ -198,7 +198,8 @@ func (m Model) askSwitch() (tea.Model, tea.Cmd) {
 
 	body := []string{
 		"",
-		m.styles.muted.Render("This replaces the live Claude Code credential."),
+		m.styles.muted.Render(fmt.Sprintf(
+			"This replaces the live %s credential.", m.spec.DisplayName())),
 	}
 	if m.hasManagedLiveLogin() {
 		body = append(body,

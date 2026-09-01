@@ -97,7 +97,7 @@ func TestLoginWithoutAnyoneToAsk(t *testing.T) {
 		if code := h.run("login"); code != ExitError {
 			t.Fatalf("exit = %d, want the unchanged error: %s", code, h.stdout())
 		}
-		wantContains(t, h.stderr(), "no active Claude account")
+		wantContains(t, h.stderr(), "no active Claude Code account")
 	})
 }
 

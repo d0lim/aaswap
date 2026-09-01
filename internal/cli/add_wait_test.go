@@ -106,7 +106,7 @@ func TestAddWithoutAWaitStillFailsFastWhenNoOneIsLoggedIn(t *testing.T) {
 	if code := h.run("login"); code != ExitError {
 		t.Fatalf("exit = %d, want a failure: %s", code, h.stdout())
 	}
-	wantContains(t, h.stderr(), "no active Claude account")
+	wantContains(t, h.stderr(), "no active Claude Code account")
 }
 
 // --json is a machine asking a question, and a machine cannot go and log in.

@@ -232,6 +232,17 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 		if manager.ArtifactsSayUsable(sessionDir, identity) {
 			return nil
 		}
+		if !manager.CanProbe() {
+			// Nothing could be asked, which is a different statement from a
+			// question that went unanswered — and naming `claude auth status`
+			// to someone running Codex points at a binary they may not have.
+			return fmt.Errorf("%w: the session profile for %s (%s) was seeded but "+
+				"carries no usable credential, and %s publishes no way to ask which "+
+				"account a profile is logged in as. The profile is left in place; "+
+				"store the account again with `aaswap --provider %s login --capture "+
+				"--name %s`, then retry",
+				apperr.ErrSession, num, account.Email, spec.DisplayName(), spec.Name, num)
+		}
 		return fmt.Errorf("%w: the session profile for %s (%s) could not be "+
 			"verified — `claude auth status` did not answer. The profile is left in "+
 			"place; check that `claude` is on your PATH, then retry",

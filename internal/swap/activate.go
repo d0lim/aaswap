@@ -520,7 +520,7 @@ func (s *Switcher) spliceLiveConfig(targetOAuth jsontext.Value, targetConfig obj
 func (s *Switcher) writeLiveConfig(config object) error {
 	data, err := json.Marshal(config, jsontext.WithIndent("  "))
 	if err != nil {
-		return fmt.Errorf("%w: encoding Claude's config: %w", apperr.ErrConfig, err)
+		return fmt.Errorf("%w: encoding the live config: %w", apperr.ErrConfig, err)
 	}
 	return fsutil.WriteForeignFileAtomic(s.Paths.GlobalConfigPath(), append(data, '\n'))
 }
@@ -563,7 +563,7 @@ type switchRollback struct {
 func (r *switchRollback) run() {
 	if r.configWritten && r.hadConfig {
 		if err := fsutil.WriteForeignFileAtomic(r.configPath, []byte(r.originalConfig)); err != nil {
-			slog.Error("failed to roll back Claude's config after a failed switch", "error", err)
+			slog.Error("failed to roll back the live config after a failed switch", "error", err)
 		}
 	}
 	if r.credsWritten && r.originalCreds != "" {

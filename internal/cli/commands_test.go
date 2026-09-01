@@ -72,7 +72,7 @@ func TestStatus(t *testing.T) {
 		if code := h.run("status"); code != ExitOK {
 			t.Fatalf("exit = %d: %s", code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "no active Claude account")
+		wantContains(t, h.stdout(), "no active Claude Code account")
 	})
 
 	t.Run("a managed login", func(t *testing.T) {
