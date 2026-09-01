@@ -145,3 +145,57 @@ func TestUpgradeRefusesWhenTheMaterialCannotMove(t *testing.T) {
 		t.Errorf("accounts = %v, want the credential-less account carried over", f.roster().Names())
 	}
 }
+
+// The upgrade lands the material in the CURRENT layout, not merely under a new
+// name in the old one.
+//
+// This is what folding the vault into version 2 buys: version 2 was never
+// released, so a person upgrading walks their live credentials exactly once.
+// Had the two changes shipped separately, the same tokens would have been moved
+// twice — and every move is a chance to lose one.
+func TestUpgradeLandsInTheVaultLayout(t *testing.T) {
+	f := newFixture(t)
+	f.seedLegacyStore(t, `{"activeAccountNumber":1,"sequence":[1],
+	  "accounts":{"1":{"email":"one@example.com","alias":"work"}}}`,
+		map[string]string{"1": "one@example.com"})
+
+	if _, err := f.EnsureUpgraded(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The account has a directory of its own, holding its credential.
+	dir := f.Creds.AccountDir("work", "one@example.com")
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("the upgraded account has no directory of its own: %v", err)
+	}
+	backup := f.Creds.BackupPath("work", "one@example.com")
+	if _, err := os.Stat(backup); err != nil {
+		t.Fatalf("the credential is not in the account's directory: %v", err)
+	}
+	if filepath.Dir(backup) != dir {
+		t.Errorf("the credential is at %q, outside the account's directory %q", backup, dir)
+	}
+
+	// And the flat copy the old layout used is gone. Two copies of one
+	// credential means the stale one outlives the next refresh.
+	stale := filepath.Join(f.BackupRoot(), "credentials", ".creds-1-one@example.com.enc")
+	if _, err := os.Stat(stale); err == nil {
+		t.Errorf("the pre-upgrade copy at %s was left behind", stale)
+	}
+}
+
+// The upgrade must not be able to delete what it just wrote.
+//
+// The old copies and the new ones have to be at genuinely different paths. An
+// earlier version of the unscoped view derived its directory by walking back up
+// from the scoped one and landed on the same place — and every test that seeded
+// through that same accessor agreed with the bug.
+func TestUpgradeReadsAndWritesDifferentPlaces(t *testing.T) {
+	f := newFixture(t)
+	legacy := f.Creds.Unscoped()
+	if legacy.BackupPath("1", "one@example.com") == f.Creds.BackupPath("1", "one@example.com") {
+		t.Fatalf("the legacy view and the current store share %s, so the upgrade's "+
+			"final step would delete the copy it had just written",
+			legacy.BackupPath("1", "one@example.com"))
+	}
+}

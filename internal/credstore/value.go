@@ -26,6 +26,12 @@ type Layout struct {
 	// back to Claude's, which is what an unrecognised provider gets.
 	LivePath string
 
+	// SecretName is that file's DECLARED path, relative to the provider's
+	// home. It names the stored copy inside an account's vault directory, so
+	// the backup of a Codex login is auth.json.enc rather than a name borrowed
+	// from Claude.
+	SecretName string
+
 	// Keychain says this provider's tool ALSO keeps the live credential in the
 	// macOS Keychain, so the two stores have to be reconciled.
 	//

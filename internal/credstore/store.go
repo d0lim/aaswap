@@ -86,6 +86,21 @@ func (s *Store) Unscoped() *Store {
 	return NewForProvider(s.paths, s.backupRoot, s.kc, "", Layout{Keychain: true})
 }
 
+// legacy reports that this store reads and writes the PRE-VAULT on-disk shape:
+// one flat .creds-<name>-<email>.enc per account, unscoped by provider.
+//
+// Derived from the absence of a provider rather than set as a flag, because
+// those are the same fact — an unscoped store IS the store as it existed before
+// providers, and there is no other reason to build one.
+//
+// Keeping the two layouts at DISTINCT paths is what makes the upgrade safe: it
+// reads the old copies through this view and writes the new ones through the
+// scoped store, then deletes the old. Were they the same directory, that last
+// step would delete what it had just written — which is how an earlier version
+// of Unscoped came to point at credentials/credentials, with every test that
+// seeded through the same accessor agreeing with the bug.
+func (s *Store) legacy() bool { return s.provider == "" }
+
 // CredentialsDir is where per-account .enc backups live.
 func (s *Store) CredentialsDir() string { return s.credentialsDir }
 

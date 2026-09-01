@@ -552,8 +552,7 @@ func TestNotKnowingIsNeverSuperseded(t *testing.T) {
 	}
 
 	t.Run("an unreadable backup", func(t *testing.T) {
-		testutil.MakeUnreadable(t, filepath.Join(
-			f.Creds.CredentialsDir(), ".creds-1-a@example.com.enc"))
+		testutil.MakeUnreadable(t, f.Creds.BackupPath("1", "a@example.com"))
 		if f.ProfileSuperseded(dir, "1", "a@example.com") {
 			t.Error("an unreadable backup was read as proof of a different generation")
 		}
