@@ -157,9 +157,6 @@ type Switcher struct {
 	FetchStagger time.Duration
 }
 
-// New returns a Switcher for the default provider.
-func New(r *paths.Resolver) *Switcher { return NewForProvider(r, ProviderClaude) }
-
 // NewForProvider returns a Switcher wired to one auth domain.
 //
 // The provider is chosen HERE rather than assigned afterwards, because the
