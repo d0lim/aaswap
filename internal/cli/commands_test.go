@@ -14,6 +14,8 @@ import (
 	"github.com/realiti4/claude-swap/internal/swap"
 	"github.com/realiti4/claude-swap/internal/usage"
 	"github.com/spf13/cobra"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 func TestListShowsEveryAccount(t *testing.T) {
@@ -751,13 +753,7 @@ func TestExportAndImportRoundTripThroughTheCLI(t *testing.T) {
 	}
 
 	// The file carries live refresh tokens.
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("the export's mode is %o, want 0600", perm)
-	}
+	testutil.AssertPerm(t, path, 0o600)
 
 	to := newHarness(t)
 	if code := to.run("import", path); code != ExitOK {

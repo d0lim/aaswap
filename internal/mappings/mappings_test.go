@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 var testNow = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -249,8 +251,15 @@ func TestUnknownEntryFieldsSurviveARewrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original := `{"schemaVersion":1,"mappings":{"` + key +
-		`":{"email":"a@example.com","organizationUuid":"","futureField":{"x":1}}}}`
+	// The key is a real path, and on Windows that means backslashes — which a
+	// raw string splices in as invalid JSON escapes. Marshal it instead of
+	// concatenating, or the fixture this test rests on never parses.
+	quotedKey, err := json.Marshal(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := `{"schemaVersion":1,"mappings":{` + string(quotedKey) +
+		`:{"email":"a@example.com","organizationUuid":"","futureField":{"x":1}}}}`
 	if err := os.WriteFile(s.Path(), []byte(original), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -279,11 +288,5 @@ func TestTheTableIsOwnerOnly(t *testing.T) {
 	if _, err := s.Set(root, Identity{Email: "a@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(s.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("mode = %o, want 0600", perm)
-	}
+	testutil.AssertPerm(t, s.Path(), 0o600)
 }

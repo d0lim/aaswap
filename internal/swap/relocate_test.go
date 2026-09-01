@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 // threeAccounts registers three switchable slots with slot 2 active.
@@ -172,19 +174,13 @@ func TestSwapRejections(t *testing.T) {
 // Unreadable is not absent. Committing a relocation on that reading would drop
 // the slot's live refresh token in favor of an empty destination.
 func TestARelocationAbortsOnAnUnreadableBackup(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("running as root, where a mode cannot make a file unreadable")
-	}
 	f := newFixture(t)
 	f.threeAccounts()
 	// A backup that EXISTS and cannot be read — not the same as absent. A
 	// corrupt .enc would not do: that is content-level and falls through to the
 	// Keychain by design.
-	encPath := filepath.Join(f.Creds.CredentialsDir(), ".creds-1-one@example.com.enc")
-	if err := os.Chmod(encPath, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(encPath, 0o600) })
+	testutil.MakeUnreadable(t, filepath.Join(f.Creds.CredentialsDir(),
+		".creds-1-one@example.com.enc"))
 	before := f.rawRoster()
 
 	_, _, err := f.SwapSlots("1", "3")

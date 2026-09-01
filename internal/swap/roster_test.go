@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 func TestAnAbsentRosterIsAnEmptyStart(t *testing.T) {
@@ -350,13 +352,7 @@ func TestTheRosterIsIndentedAndOwnerOnly(t *testing.T) {
 		t.Error("sequence.json has no trailing newline")
 	}
 
-	info, err := os.Stat(f.RosterPath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("mode = %o, want 0600", perm)
-	}
+	testutil.AssertPerm(t, f.RosterPath(), 0o600)
 }
 
 func hasLine(text, line string) bool {

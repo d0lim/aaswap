@@ -11,6 +11,7 @@ import (
 
 	"github.com/realiti4/claude-swap/internal/keychain"
 	"github.com/realiti4/claude-swap/internal/platform"
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 func init() {
@@ -139,20 +140,10 @@ func TestAnUncoveredKeychainFailureIsUnavailable(t *testing.T) {
 // A denied Keychain AND an unreadable fallback file is the most unreadable
 // state there is; reporting it as "no credentials" sent users to a re-login.
 func TestADeniedKeychainAndUnreadableFileStayUnavailable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("chmod-based permission denial is not meaningful on Windows")
-	}
-	if os.Geteuid() == 0 {
-		t.Skip("running as root; permission bits do not deny access")
-	}
 	s, fake := newTestStore(t, platform.MacOS)
 	fake.failGet = true
 	writeCredentialsFile(t, s, oauthJSON)
-	path := s.paths.CredentialsPath()
-	if err := os.Chmod(path, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	testutil.MakeUnreadable(t, s.paths.CredentialsPath())
 
 	got := s.ReadActive()
 	if !got.FileReadFailed {

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 // defaultProfile builds the ~/.claude a session mirrors from.
@@ -451,11 +453,5 @@ func TestTheSharedManifestIsOwnerOnly(t *testing.T) {
 	if err := f.SyncSharing(profile, source, ShareOptions{Customizations: true}); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(filepath.Join(profile, ShareManifest))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("mode = %o, want 0600", perm)
-	}
+	testutil.AssertPerm(t, filepath.Join(profile, ShareManifest), 0o600)
 }

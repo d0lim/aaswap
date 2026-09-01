@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/realiti4/claude-swap/internal/claudeapi"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 // twoAccounts registers two switchable slots and leaves slot 1 live.
@@ -590,9 +592,8 @@ func TestATornLiveConfigIsSalvagedNotDestroyed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if perm := info.Mode().Perm(); perm != 0o600 {
-			t.Errorf("the salvage copy's mode is %o, want 0600 — it may hold a secret", perm)
-		}
+		// It may hold a secret.
+		testutil.AssertPermInfo(t, name.Name(), info, 0o600)
 	}
 	if !salvaged {
 		t.Errorf("the torn config's bytes were not preserved; directory holds %v", names)
@@ -639,13 +640,8 @@ func TestSwitchDoesNotHardenTheHomeDirectory(t *testing.T) {
 	if _, err := f.Switch(t.Context(), SwitchRequest{Target: "2"}); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o755 {
-		t.Errorf("the config's parent directory was chmod'ed to %o", perm)
-	}
+	// The config's parent directory must not have been hardened underneath us.
+	testutil.AssertPerm(t, home, 0o755)
 }
 
 // A lookup that resolves to the departing slot's own uuid is its own rotation,

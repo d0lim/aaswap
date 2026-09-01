@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/realiti4/claude-swap/internal/testutil"
 )
 
 // writeSession puts one session record under a config directory.
@@ -128,17 +130,12 @@ func TestAnAbsentDirectoryIsQuiescent(t *testing.T) {
 
 // A directory that exists and cannot be listed IS indeterminate.
 func TestAnUnlistableDirectoryIsNotQuiescent(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("running as root, where a mode cannot make a directory unlistable")
-	}
 	dir := t.TempDir()
 	sessions := filepath.Join(dir, "sessions")
 	if err := os.MkdirAll(sessions, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(sessions, 0o000); err != nil {
-		t.Fatal(err)
-	}
+	testutil.MakeUnreadable(t, sessions)
 	t.Cleanup(func() { _ = os.Chmod(sessions, 0o700) })
 
 	if Quiescent(dir) {
