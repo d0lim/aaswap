@@ -30,6 +30,10 @@ const (
 	ProviderClaude = "claude"
 	// ProviderCodex is the OpenAI Codex CLI.
 	ProviderCodex = "codex"
+	// LegacyProvider owns everything a version 1 store held. It is Claude
+	// spelled for the one place where the reason matters: not "the default",
+	// but "the only provider that existed when the file was written".
+	LegacyProvider = ProviderClaude
 )
 
 // Providers lists every addressable provider, in the order they are shown.
@@ -101,7 +105,7 @@ type legacyFile struct {
 // Refuses rather than guesses. A file that cannot be read is not an empty
 // store: reading a torn one as "no accounts" is what let a later write rebuild
 // the roster from nothing, taking a live credential backup with it.
-func ParseFile(data []byte, provider string, now time.Time) (*File, []Rename, error) {
+func ParseFile(data []byte, now time.Time) (*File, []Rename, error) {
 	var probe map[string]jsontext.Value
 	if err := json.Unmarshal(data, &probe); err != nil || probe == nil {
 		return nil, nil, fmt.Errorf("%w: the account table could not be parsed as a "+
@@ -128,11 +132,19 @@ func ParseFile(data []byte, provider string, now time.Time) (*File, []Rename, er
 		return nil, nil, fmt.Errorf("%w: the account table could not be read (%v); "+
 			"repair or move it, then retry", apperr.ErrConfig, err)
 	}
-	return upgrade(legacy, provider, now)
+	return upgrade(legacy, now)
 }
 
 // upgrade turns a version 1 table into a version 2 one.
-func upgrade(legacy *legacyFile, provider string, now time.Time) (*File, []Rename, error) {
+//
+// Every account lands under Claude, whoever asked. A version 1 table predates
+// providers, so Claude Code is the only tool whose logins it can hold — and
+// filing them under the ASKING provider meant a user upgrading from ccswap
+// whose first command happened to be `aaswap --provider codex list` had every
+// Claude account migrated into the Codex section. `aaswap list` then showed
+// nothing, and a Codex switch wrote a Claude credential into ~/.codex/auth.json
+// over the login that worked.
+func upgrade(legacy *legacyFile, now time.Time) (*File, []Rename, error) {
 	file := &File{
 		SchemaVersion: SchemaVersion,
 		LastUpdated:   legacy.LastUpdated,
@@ -144,7 +156,7 @@ func upgrade(legacy *legacyFile, provider string, now time.Time) (*File, []Renam
 	}
 
 	roster := newRoster()
-	file.Providers[provider] = roster
+	file.Providers[LegacyProvider] = roster
 
 	// Slot order decides every collision, so the walk has to be the v1 reader's
 	// own order — sequence first, then whatever the sequence forgot. Ordering by

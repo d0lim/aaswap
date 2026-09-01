@@ -199,3 +199,70 @@ func TestUpgradeReadsAndWritesDifferentPlaces(t *testing.T) {
 			legacy.BackupPath("1", "one@example.com"))
 	}
 }
+
+// A version 1 store predates providers, and every account in it is Claude's.
+//
+// The upgrade filed them under whoever happened to ASK. So a user upgrading
+// from ccswap whose first command was `aaswap --provider codex list` had every
+// Claude account migrated into the Codex section, with the Claude credentials
+// written into the Codex vault. `aaswap list` then showed no accounts at all,
+// and `aaswap --provider codex switch` wrote a Claude credential into
+// ~/.codex/auth.json, over the Codex login that worked.
+//
+// One command, in the ordinary course of trying out a new provider.
+func TestAVersionOneStoreUpgradesToClaudeWhoeverAsks(t *testing.T) {
+	f := codexFixture(t)
+	f.seedLegacyStore(t, `{
+	  "accounts": {"1": {"email": "one@example.com"}, "2": {"email": "two@example.com"}},
+	  "order": ["1", "2"],
+	  "active": "1"
+	}`, map[string]string{"1": "one@example.com", "2": "two@example.com"})
+
+	if _, err := f.EnsureUpgraded(); err != nil {
+		t.Fatalf("upgrading while addressing Codex: %v", err)
+	}
+
+	file, _, err := f.StoreOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude := file.Providers[ProviderClaude]
+	if claude == nil || len(claude.Accounts) != 2 {
+		t.Fatalf("the Claude section holds %v, want both version 1 accounts",
+			file.Providers)
+	}
+	if codex := file.Providers[ProviderCodex]; codex != nil && len(codex.Accounts) != 0 {
+		t.Errorf("the Codex section holds %v, which came out of a Claude store",
+			codex.Accounts)
+	}
+}
+
+// And the credentials go to Claude's vault, not the asking provider's. A roster
+// that names them while the bytes sit somewhere else is a store where every
+// switch fails.
+func TestAVersionOneStoresCredentialsUpgradeToClaudes(t *testing.T) {
+	f := codexFixture(t)
+	f.seedLegacyStore(t, `{
+	  "accounts": {"1": {"email": "one@example.com"}},
+	  "order": ["1"],
+	  "active": "1"
+	}`, map[string]string{"1": "one@example.com"})
+
+	if _, err := f.EnsureUpgraded(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read through a Claude-scoped store, which is where the account now lives.
+	claudeStore := f.storeFor(ProviderClaude)
+	roster := mustRosterFor(t, f, ProviderClaude)
+	name := roster.Names()[0]
+	value, unreadable := claudeStore.ReadAccount(name, "one@example.com")
+	if unreadable || !strings.Contains(value, "tok-1") {
+		t.Errorf("Claude's store holds %q for %s, want the migrated credential",
+			value, name)
+	}
+	// And nothing was filed under the provider that happened to ask.
+	if value, _ := f.Creds.ReadAccount(name, "one@example.com"); value != "" {
+		t.Errorf("the Codex store holds %q, a Claude credential", value)
+	}
+}

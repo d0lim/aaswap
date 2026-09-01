@@ -268,3 +268,26 @@ func TestAConfiglessProviderStoresNoConfigBackup(t *testing.T) {
 		t.Errorf("%s was written holding %q, for a provider with no config", path, data)
 	}
 }
+
+// storeFor is a credential store scoped to another provider, for asserting
+// where the upgrade put things.
+func (f *fixture) storeFor(provider string) *credstore.Store {
+	f.t.Helper()
+	return credstore.NewForProvider(f.Paths, f.root,
+		keychain.NewWithRunner(refusingKeychain{}, 0), provider,
+		LiveLayout(f.Paths, provider))
+}
+
+// mustRosterFor reads one provider's section out of the shared table.
+func mustRosterFor(t *testing.T, f *fixture, provider string) *Roster {
+	t.Helper()
+	file, _, err := f.StoreOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster := file.For(provider)
+	if len(roster.Names()) == 0 {
+		t.Fatalf("%s holds no accounts: %v", provider, file.Providers)
+	}
+	return roster
+}

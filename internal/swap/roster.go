@@ -281,7 +281,7 @@ func (s *Switcher) readStore() (file *File, found bool, renames []Rename, err er
 		return nil, false, nil, fmt.Errorf("%w: %s exists but could not be read (%w); "+
 			"fix what is blocking the read, then retry", apperr.ErrConfig, path, readErr)
 	}
-	file, renames, err = ParseFile([]byte(text), s.provider(), s.now())
+	file, renames, err = ParseFile([]byte(text), s.now())
 	if err != nil {
 		return nil, false, nil, fmt.Errorf("%w (%s)", err, path)
 	}

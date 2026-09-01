@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// parse is ParseFile with the test's fixed clock and the default provider.
+// parse is ParseFile with the test's fixed clock.
 func parse(t *testing.T, raw string) (*File, []Rename) {
 	t.Helper()
-	file, renames, err := ParseFile([]byte(raw), ProviderClaude, testNow)
+	file, renames, err := ParseFile([]byte(raw), testNow)
 	if err != nil {
 		t.Fatalf("ParseFile: %v\n%s", err, raw)
 	}
@@ -235,7 +235,7 @@ func TestParseAnEmptyStore(t *testing.T) {
 func TestParseRefusesWhatItCannotRead(t *testing.T) {
 	for _, raw := range []string{`{"accounts":`, `[1,2,3]`, `null`, ``} {
 		t.Run(raw, func(t *testing.T) {
-			if _, _, err := ParseFile([]byte(raw), ProviderClaude, testNow); err == nil {
+			if _, _, err := ParseFile([]byte(raw), testNow); err == nil {
 				t.Errorf("ParseFile(%q) returned no error", raw)
 			}
 		})
