@@ -11,6 +11,9 @@ Codex 먼저** — 이 머신에서 실제로 로그인 상태를 확인할 수 
 
 ---
 
+> **구현 완료.** 이 문서는 설계이자 구현 기록이다. 계획과 실제가 갈린 곳은
+> §11에 모아 두었다 — 계획이 틀린 이유까지 적혀 있다.
+
 ## 0. 확정된 결정
 
 | 항목 | 결정 | 근거 |
@@ -30,9 +33,16 @@ Codex 먼저** — 이 머신에서 실제로 로그인 상태를 확인할 수 
 나머지 기능은 전부 "계정이 여러 개인 사람이 그걸 정리해서 쓴다"로 방어된다.
 회전 하나가 도구 전체의 성격을 규정한다.
 
-함께 사라지는 것: `internal/autoswitch/`, `internal/pace/`,
-`pollpolicy`의 적응형 스케줄(`list`용 캐시만 남는다), `switch --strategy`,
-settings의 autoswitch 섹션.
+함께 사라진 것: `internal/autoswitch/`(8파일), `aaswap auto`,
+`switch --strategy`, `switch --model`, `auto --once`를 위해 있던 종료코드
+운반자. 총 3,258줄.
+
+**계획과 달리 남긴 것**: `internal/pace/`와 `internal/pollpolicy/`. 둘 다
+회전이 아니라 **표시**를 섬긴다 — pace는 `list`에서 주간 창이 페이스보다
+앞서는 것을 표시하고, poll policy는 `list`가 엔드포인트를 두드리지 않게 하는
+캐던스다. settings의 autoswitch 섹션도 남았다: threshold와 model 키를
+`list`가 읽는다. 이름이 아직 "autoswitch"인 것은 이제 오해를 부르지만,
+그것만을 위해 settings 마이그레이션을 할 값은 없다.
 
 ---
 
@@ -45,17 +55,22 @@ settings의 autoswitch 섹션.
 // provider that does not declare one is not broken, it is a provider whose
 // commands needing that capability report it as unsupported — by name, with a
 // reason — instead of silently doing the wrong thing.
-type Provider struct {
+type Spec struct {
 	Name  string
 	Home  Home
 	Files []File
 
 	Login    *Login
 	Identity IdentitySource // nil → hash fallback (§4)
-	Refresh  Refresher      // nil → the only answer to an expired token is `login`
 	Usage    UsageSource    // nil → headroom is unknown, never zero
 	Session  *Session       // nil → `run` is unsupported here (§5)
 	Hazards  []Hazard       // state that survives a swap (§7)
+
+	// Declared facts rather than implementations: both need something the
+	// declaration must stay constructible without — an HTTP client, and a
+	// platform-specific store.
+	Refreshable bool // false → the only answer to an expired token is `login`
+	Keychain    bool // true → the live credential is in TWO stores (§2)
 }
 
 // Home is where the tool keeps everything, and how to repoint it.
@@ -122,8 +137,10 @@ model choice onto another."* 실제로 이 머신의 `config.toml`에는 `model`
 | Cursor | — / `~/.cursor` | **미상** | `cli-config.json` | 벤더 문서 |
 
 **Claude가 예외다.** 나머지는 홈 디렉터리 하나에 전부 들어 있고, Claude만 홈
-밖에 `~/.claude.json`이 있으며 macOS에서만 키체인을 쓴다. 지금 아키텍처가
-이 예외를 기준으로 세워져 있는 것이 일반화가 안 되는 원인이다.
+밖에 `~/.claude.json`이 있으며 macOS에서만 키체인을 쓴다. 구현 전 아키텍처가
+이 예외를 기준으로 세워져 있던 것이 일반화가 안 되던 원인이었다 — 그래서
+`Keychain`이 선언 항목이고, 선언하지 않은 프로바이더는 모든 OS에서 파일
+하나다.
 
 **Cursor는 secret 위치가 벤더 문서에도 없다.** 이건 조사 부족이 아니라
 설계 요구사항이다 — 모르는 채로도 지원할 수 있어야 한다. §4가 그 답이다.
@@ -194,8 +211,8 @@ type Liveness interface {
 }
 ```
 
-`SharedItems`/`HistoryItems`는 현재 `internal/session`에 Claude의 목록으로
-하드코딩돼 있다. 이건 프로바이더 데이터이므로 선언으로 옮긴다.
+`SharedItems`/`HistoryItems`는 `internal/session`에 Claude의 목록으로
+하드코딩돼 있었다. 프로바이더 데이터이므로 선언으로 옮겼다.
 
 ### 5.1 Liveness가 nil일 때 — fail-safe로 퇴화한다
 
@@ -385,17 +402,75 @@ Customizations에 있는 것은 모순이 아니다 — 스왑되지는 않지�
 
 ---
 
-## 10. 구현 순서
+## 10. 구현 결과
 
-1. **프로바이더 계약 + Role** — `internal/provider`에 선언 타입을 세우고,
-   claude/codex 선언을 채운다. 기존 6개의 `if provider == ProviderCodex` 분기를
-   선언 조회로 바꾼다.
-2. **신원 3단계** — 해시 폴백을 기본으로, 기존 파싱을 tier 1로. 수동 전환 감지
-   테스트를 여기서 세운다.
-3. **vault 마이그레이션** — v2 정의 확장. §8의 3단계 순서.
-4. **능력 매트릭스 + `doctor`** — `claudeOnly` 4곳을 선언 기반 검사로 교체.
-5. **`auto` 제거** — 4번 이후. 매트릭스가 서 있어야 무엇이 사라지는지 표로
-   확인된다.
-6. **명령 정리** — §6의 표.
+| 단계 | 상태 | 커밋 |
+|---|---|---|
+| 프로바이더 계약 + Role | ✅ | `feat(provider): declare providers instead of branching on them` |
+| 선언 조회로 분기 교체 | ✅ | `refactor: read the declaration instead of comparing provider names` |
+| 신원 3단계 (해시 폴백) | ✅ | 위 두 커밋 |
+| 프로바이더 무관 세션(`run`) | ✅ | `feat(session): run sessions for any provider that declares one` |
+| 능력 매트릭스 + `doctor` | ✅ | `feat(cli): report the capability matrix, and prove a provider can be added` |
+| vault 레이아웃 | ✅ | `feat(credstore): store an account's files in a directory of its own` |
+| `auto` 제거 | ✅ | `feat: remove automatic rate-limit rotation` |
+| 명령 정리 | ✅ | `refactor(cli): tidy the command surface` |
 
-각 단계는 컴파일 + `make check` 통과가 완료 조건이다.
+`make check`(vet, `go fix -diff`, golangci-lint 0 issues, 전체 테스트) 통과,
+`deadcode -test` 비어 있음.
+
+---
+
+## 11. 계획이 틀린 곳
+
+설계는 대부분 맞았지만 다섯 곳이 틀렸다. 구현하면서 드러난 것이므로 기록한다.
+
+**1. `pace`와 `pollpolicy`는 회전이 아니라 표시를 섬긴다.** §0.1은 이 둘이
+`auto`와 함께 사라진다고 적었다. 실제로는 `render`와 `jsonout`만 쓰고 있었다.
+지우면 `list`가 나빠지고 얻는 안전은 없다.
+
+**2. 파서의 거절은 권위 있는 답이다.** §4는 "파서가 거절하면 해시로 퇴화"로
+읽히게 썼다. 그렇게 구현했더니 Codex의 API-key 설치(주소가 정말로 없다)에
+OAuth 모양의 신원이 만들어졌고, 상위 계층이 그걸 틀린 경로로 보냈다.
+**파서를 선언한 프로바이더가 "없다"고 하면 그건 로그인에 대한 사실**이다.
+해시는 파서가 *없는* 프로바이더용이다.
+
+**3. 지문(fingerprint)은 best-effort여야 한다.** Claude는 신원을 config에,
+자격증명을 macOS 키체인에 둔다. 파일 읽기로는 secret에 닿지 못하므로 digest가
+비는데, 그렇다고 신원이 아닌 것은 아니다.
+
+**4. `account unclaimed`와 `account adopt`는 `doctor`에 흡수할 수 없다.**
+§6에 그렇게 적었지만 전자는 `--purge`로 자격증명을 파괴하고 후자는 다른
+설치본의 자격증명을 복사한다. 진단 명령이 할 일이 아니다. 실제 문제는
+**발견 가능성**이었으므로 `doctor`가 보고만 하고 명령은 남겼다.
+
+**5. vault는 API 변경이 아니라 레이아웃 변경이다.** §8은 "계정 하나가 파일
+하나"를 파일 트리로 바꾼다고 했고, 그러면 `ReadAccount`/`WriteAccount`의
+호출부 26개(전부 살아있는 자격증명 경로)를 건드려야 하는 것처럼 보였다.
+실제로는 경로 함수 두 개만 바꾸면 됐다. 다중 파일 지원은 이제 **추가**로
+가능하다.
+
+명령 수는 §6이 예상한 19개가 아니라 **23개**다. 4번 때문에 두 개가 남았고,
+`doctor`가 하나 늘었다.
+
+---
+
+## 12. 구현하면서 발견한 프로덕션 버그
+
+전부 `run`에 end-to-end 테스트가 없어서 숨어 있었다. `handOver`가 exec으로
+프로세스를 대체해 인프로세스 테스트가 불가능했기 때문인데, `App.HandOver`를
+주입 가능하게 만들어 해결했다.
+
+| 버그 | 증상 |
+|---|---|
+| `Manager.storedIdentity`가 `<root>/configs`를 읽는데 switcher는 `<root>/configs/<provider>`에 쓴다 | **Claude `run`이 전부 실패**했다 — "no stored config backup" |
+| `switch`가 config 없는 프로바이더에 config 신원을 요구 (두 경로) | **Codex `switch`가 전혀 동작하지 않았다.** e2e 테스트가 저장과 목록만 하고 활성화를 안 했다 |
+| `sessionManager`가 `Spec`을 설정하지 않음 | 모든 프로바이더가 Claude 선언을 씀 |
+| `defaultProfileDir`가 항상 `~/.claude`를 미러링 | Codex 프로필에 Claude 설정이 링크됨 |
+| `ExecProber`가 무엇을 띄웠든 `claude auth status`를 실행 | Codex 세션 검증이 항상 실패 |
+| `NewClaudeProfiles`가 `.credentials.json`을 하드코딩 | Codex 프로필에 Codex가 안 읽는 파일을 시딩 |
+| 첫 vault 구현에서 unscoped 스토어의 segment가 `claude`로 해석 | 업그레이드의 마지막 단계가 **방금 쓴 사본을 지운다** |
+
+마지막 것은 이 코드베이스에서 두 번째로 같은 모양이다(이전엔
+`Unscoped()`가 `credentials/credentials`를 가리켰다). 그래서 vault 사용
+여부를 필드가 아니라 **provider 유무에서 파생**시키고, 시딩 accessor를
+경유하지 않고 두 경로가 다름을 직접 단정하는 테스트를 두었다.
