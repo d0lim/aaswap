@@ -280,11 +280,11 @@ func TestErrorTypesAreTheTaxonomysNames(t *testing.T) {
 	}
 }
 
-func TestAddAndRemove(t *testing.T) {
+func TestLoginAndRemove(t *testing.T) {
 	h := newHarness(t)
 	h.login("1", "one@example.com")
 
-	if code := h.run("add"); code != ExitOK {
+	if code := h.run("login"); code != ExitOK {
 		t.Fatalf("add: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Added", "one@example.com")
@@ -885,7 +885,7 @@ func TestAutoThresholdFlagOverridesTheSetting(t *testing.T) {
 	wantContains(t, h.stdout(), "2")
 }
 
-func TestAddToken(t *testing.T) {
+func TestLoginWithAToken(t *testing.T) {
 	tests := []struct {
 		name      string
 		token     string
@@ -912,7 +912,7 @@ func TestAddToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := newHarness(t)
-			args := append([]string{"add-token", tt.token}, tt.flags...)
+			args := append([]string{"login", "--token", tt.token}, tt.flags...)
 			if code := h.run(args...); code != ExitOK {
 				t.Fatalf("exit = %d: %s", code, h.stderr())
 			}
@@ -946,11 +946,11 @@ func TestAddToken(t *testing.T) {
 
 // A token on the command line lands in the shell history, so piping it is worth
 // having.
-func TestAddTokenFromStdin(t *testing.T) {
+func TestLoginWithATokenFromStdin(t *testing.T) {
 	h := newHarness(t)
 	h.app.In = strings.NewReader("sk-ant-oat01-piped\n")
 
-	if code := h.run("add-token", "-"); code != ExitOK {
+	if code := h.run("login", "--token", "-"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	stored, _ := h.switcher.Creds.ReadAccount("setup-token", "setup-token@token.local")
@@ -961,12 +961,12 @@ func TestAddTokenFromStdin(t *testing.T) {
 
 // Identity is the address alone here, so two kinds sharing one could not be
 // told apart at switch time.
-func TestAddTokenRefusesACrossKindCollision(t *testing.T) {
+func TestLoginWithATokenRefusesACrossKindCollision(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add-token", "sk-ant-oat01-abc", "--email", "me@example.com"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-oat01-abc", "--email", "me@example.com"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	if code := h.run("add-token", "sk-ant-api03-abc", "--email", "me@example.com"); code != ExitError {
+	if code := h.run("login", "--token", "sk-ant-api03-abc", "--email", "me@example.com"); code != ExitError {
 		t.Fatalf("exit = %d, want a refusal", code)
 	}
 	wantContains(t, h.stderr(), "already exists as an OAuth account", "distinct --email")
@@ -974,12 +974,12 @@ func TestAddTokenRefusesACrossKindCollision(t *testing.T) {
 
 // A new token for an account already here refreshes it in place rather than
 // making a second slot.
-func TestAddTokenRefreshesInPlace(t *testing.T) {
+func TestLoginWithATokenRefreshesInPlace(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add-token", "sk-ant-oat01-first", "--email", "me@example.com"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-oat01-first", "--email", "me@example.com"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	if code := h.run("add-token", "sk-ant-oat01-second", "--email", "me@example.com"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-oat01-second", "--email", "me@example.com"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Updated the token")
@@ -997,15 +997,15 @@ func TestAddTokenRefreshesInPlace(t *testing.T) {
 	}
 }
 
-func TestAddTokenRejections(t *testing.T) {
+func TestLoginWithATokenRejections(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    []string
 		wantErr string
 	}{
-		{"an empty token", []string{"add-token", "   "}, "cannot be empty"},
-		{"a bad address", []string{"add-token", "tok", "--email", "not an email"}, "not a valid email"},
-		{"a numeric name", []string{"add-token", "tok", "--name", "0"}, "cannot be purely numeric"},
+		{"an empty token", []string{"login", "--token", "   "}, "cannot be empty"},
+		{"a bad address", []string{"login", "--token", "tok", "--email", "not an email"}, "not a valid email"},
+		{"a numeric name", []string{"login", "--token", "tok", "--name", "0"}, "cannot be purely numeric"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1030,7 +1030,7 @@ func TestAddTokenRejections(t *testing.T) {
 // blank.
 func TestATokenAccountReportsNoQuota(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add-token", "sk-ant-api03-abc"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-api03-abc"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	if code := h.run("list"); code != ExitOK {

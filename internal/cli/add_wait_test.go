@@ -44,7 +44,7 @@ func TestAddWaitCapturesTheLoginThatLands(t *testing.T) {
 		h.landLogin("two@example.com", "acct-2")
 	}()
 
-	if code := h.run("add", "--wait"); code != ExitOK {
+	if code := h.run("login", "--wait"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	<-landed
@@ -80,7 +80,7 @@ func TestAddWaitEndsOnAReLoginAndRefreshesInPlace(t *testing.T) {
 		h.landLogin("two@example.com", "acct-2")
 	}()
 
-	if code := h.run("add", "--wait"); code != ExitOK {
+	if code := h.run("login", "--wait"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	<-landed
@@ -103,7 +103,7 @@ func TestAddWaitEndsOnAReLoginAndRefreshesInPlace(t *testing.T) {
 // same error it has always been rather than a hang.
 func TestAddWithoutAWaitStillFailsFastWhenNoOneIsLoggedIn(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add"); code != ExitError {
+	if code := h.run("login"); code != ExitError {
 		t.Fatalf("exit = %d, want a failure: %s", code, h.stdout())
 	}
 	wantContains(t, h.stderr(), "no active Claude account")
@@ -113,7 +113,7 @@ func TestAddWithoutAWaitStillFailsFastWhenNoOneIsLoggedIn(t *testing.T) {
 func TestAddUnderJSONNeverWaits(t *testing.T) {
 	h := newHarness(t)
 	h.fastWait()
-	if code := h.run("add", "--json"); code != ExitError {
+	if code := h.run("login", "--json"); code != ExitError {
 		t.Fatalf("exit = %d, want a failure: %s", code, h.stdout())
 	}
 	payload := h.decodeJSON()

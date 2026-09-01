@@ -354,25 +354,9 @@ func accountRef(ref swap.AccountRef) jsonout.AccountRef {
 	return jsonout.AccountRef{Name: ref.Name, Email: ref.Email}
 }
 
-func (a *App) runAdd(cmd *cobra.Command, name string, wait bool) error {
-	s, err := a.switcher()
-	if err != nil {
-		return err
-	}
-	// Ahead of Add, never inside it: the capture must run against whatever is
-	// live at the moment it runs, and a wait that resolved into the same call
-	// would hand Add an identity read seconds before its own.
-	if wait || a.shouldWaitForLogin(s) {
-		if err := a.awaitLogin(cmd.Context(), s); err != nil {
-			return err
-		}
-	}
-	outcome, err := s.Add(cmd.Context(), swap.AddRequest{
-		Name: name, AssumeYes: a.assumeYes, Confirm: a.confirm,
-	})
-	if err != nil {
-		return err
-	}
+// reportAdd narrates a finished capture. Shared by every path that stores an
+// account, so they cannot drift in what they say about the same outcome.
+func (a *App) reportAdd(outcome swap.AddOutcome) error {
 	if outcome.Cancelled {
 		a.printer.Println(a.printer.Dimmed("Cancelled"))
 		return nil

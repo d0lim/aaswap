@@ -47,8 +47,7 @@ func (a *App) rootCommand() *cobra.Command {
 		a.listCommand(),
 		a.statusCommand(),
 		a.switchCommand(),
-		a.addCommand(),
-		a.addTokenCommand(),
+		a.loginCommand(),
 		a.runCommand(),
 		a.autoCommand(),
 		a.tuiCommand(),
@@ -167,32 +166,6 @@ func (a *App) switchCommand() *cobra.Command {
 		"also count these models' per-model weekly limits (comma-separated, or 'all')")
 	cmd.Flags().BoolVar(&force, "force", false,
 		"activate the stored credential without backing up the current login first")
-	silenceUsage(cmd)
-	return cmd
-}
-
-func (a *App) addCommand() *cobra.Command {
-	var name string
-	var wait bool
-	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "Capture the account you are currently logged in as",
-		Long: "Stores the live login's credential and config against a slot, so aaswap\n" +
-			"can switch back to it later.\n\n" +
-			"aaswap cannot log you in — Claude Code owns that flow — so adding another\n" +
-			"account means logging in with it first. With --wait, aaswap prints how to\n" +
-			"do that and captures the account the moment the login finishes, instead of\n" +
-			"making you come back and re-run this. In a terminal with no account logged\n" +
-			"in at all, it waits without being asked: the alternative is an error whose\n" +
-			"only advice is to go and log in.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.runAdd(cmd, name, wait)
-		},
-	}
-	cmd.Flags().StringVar(&name, "name", "", "give the account a name")
-	cmd.Flags().BoolVar(&wait, "wait", false,
-		"wait for a /login in Claude Code, then capture that account")
 	silenceUsage(cmd)
 	return cmd
 }
