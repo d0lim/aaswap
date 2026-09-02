@@ -92,15 +92,6 @@ var HistoryItems = []string{
 	"history.jsonl",
 }
 
-// AuthOverrideEnvVars would override the account inside Claude Code, so they
-// are dropped from a session's environment. Passing one through would make
-// `aaswap run 2` silently run as something else.
-var AuthOverrideEnvVars = []string{
-	"ANTHROPIC_API_KEY",
-	"ANTHROPIC_AUTH_TOKEN",
-	"CLAUDE_CODE_OAUTH_TOKEN",
-}
-
 // SlugifyEmail makes an address safe as a directory name.
 //
 // Uniqueness comes from the slot-number prefix on the directory, so this only
@@ -639,20 +630,26 @@ func (m *Manager) Remove(sessionDir string) error {
 
 // Environment builds the environment a session runs in.
 //
-// The auth overrides are DROPPED rather than passed through: any of them would
-// override the account inside Claude Code, making `aaswap run 2` silently run as
-// something else.
+// The provider's auth overrides are DROPPED rather than passed through: any of
+// them would override the account inside the tool, making `aaswap run work`
+// silently run as something else. The list is the declaration's, not a fixed
+// one: Claude's three variables mean nothing to Codex, and OPENAI_API_KEY —
+// which Codex prefers over its ChatGPT login — was passing straight through.
 func Environment(base []string, sessionDir string, spec provider.Spec) (env []string, scrubbed []string) {
 	homeEnv := "CLAUDE_CONFIG_DIR"
-	if s := spec.Session; s != nil && s.HomeEnv != "" {
-		homeEnv = s.HomeEnv
+	var overrides []string
+	if s := spec.Session; s != nil {
+		if s.HomeEnv != "" {
+			homeEnv = s.HomeEnv
+		}
+		overrides = s.AuthOverrides
 	}
 	for _, entry := range base {
 		name, _, _ := strings.Cut(entry, "=")
 		if name == homeEnv {
 			continue
 		}
-		if isAuthOverride(name) {
+		if slices.Contains(overrides, name) {
 			scrubbed = append(scrubbed, name)
 			continue
 		}
@@ -666,10 +663,6 @@ func Environment(base []string, sessionDir string, spec provider.Spec) (env []st
 		env = append(env, hazard.Env...)
 	}
 	return env, scrubbed
-}
-
-func isAuthOverride(name string) bool {
-	return slices.Contains(AuthOverrideEnvVars, name)
 }
 
 // writeJSONPrivate writes an owner-only JSON file.

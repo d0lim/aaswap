@@ -116,7 +116,7 @@ func TestAddWithNoLoginGoesStraightToWaiting(t *testing.T) {
 func TestTheWaitingModalSaysWhatToDoAndWhatNotTo(t *testing.T) {
 	m := twoAccounts(t)
 	frame := m.renderModal(m.waitingModal())
-	for _, want := range []string{"claude", "/login", "Do not run /logout first"} {
+	for _, want := range []string{"claude", "/login", "Do not log out first"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("the waiting modal does not say %q:\n%s", want, frame)
 		}

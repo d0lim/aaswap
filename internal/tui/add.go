@@ -169,17 +169,29 @@ func (m Model) startAwait() (tea.Model, tea.Cmd) {
 // waitingModal is the instruction sheet shown while waiting.
 func (m Model) waitingModal() *modal {
 	st := m.styles
+	// The instruction is the declaration's, not Claude's: "claude and then
+	// /login" told a Codex user to run a command Codex does not have.
+	launch, then := m.spec.Login.Steps()
+	var instruction string
+	switch {
+	case launch == "":
+		instruction = st.muted.Render("  In another terminal, log in with " + m.spec.DisplayName() + ",")
+	case then == "":
+		instruction = st.muted.Render("  In another terminal, run ") + st.accent.Render(launch) +
+			st.muted.Render(",")
+	default:
+		instruction = st.muted.Render("  In another terminal, run ") + st.accent.Render(launch) +
+			st.muted.Render(" and then ") + st.accent.Render(then) + st.muted.Render(",")
+	}
 	return &modal{
 		kind:  modalWaiting,
 		title: awaitFrames[m.awaitFrame%len(awaitFrames)] + " Waiting for a login",
 		body: []string{
 			"",
-			st.muted.Render("  In another terminal, run ") + st.accent.Render("claude") +
-				st.muted.Render(" and then ") + st.accent.Render("/login") +
-				st.muted.Render(","),
+			instruction,
 			st.muted.Render("  with the account you want to add."),
 			"",
-			st.yellow.Render("  Do not run /logout first — it can revoke the token"),
+			st.yellow.Render("  Do not log out first — the tool may revoke the token"),
 			st.yellow.Render("  stored for the account you are leaving."),
 			"",
 			st.muted.Render("  The account is captured as soon as the login finishes."),
