@@ -31,6 +31,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case liveProbedMsg:
 		return m.handleLiveProbed(msg)
 
+	case askProviderMsg:
+		return m.askProvider()
+
+	case providerOpenedMsg:
+		return m.handleProviderOpened(msg)
+
 	case addedMsg:
 		return m.handleAdded(msg)
 
@@ -111,6 +117,9 @@ func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "t":
 		return m.askAddToken()
 
+	case "p":
+		return m.askProvider()
+
 	case "r":
 		if m.busy != "" {
 			return m, nil
@@ -148,6 +157,8 @@ func (m Model) handleModalKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case modalInput:
 		return m.handleInputKey(key)
+	case modalPick:
+		return m.handlePickKey(key)
 	case modalWaiting:
 		// Only esc. Every other key is one a person pressed while reading the
 		// instructions, and cancelling a wait they meant to keep is not

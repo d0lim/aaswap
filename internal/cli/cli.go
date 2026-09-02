@@ -14,7 +14,6 @@
 package cli
 
 import (
-	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
@@ -213,14 +212,16 @@ func (a *App) emitJSON(payload any) {
 }
 
 // switcher builds the switcher for a command, for the provider this invocation
-// addresses.
+// addresses — asking, where nothing else says which.
 func (a *App) switcher() (*swap.Switcher, error) {
-	name := cmp.Or(a.provider, providerFromEnv(), swap.ProviderClaude)
-	// Refused before anything reads a store: a typo must not quietly create an
-	// empty section and report no accounts.
-	if !swap.KnownProvider(name) {
-		return nil, fmt.Errorf("%w: %q is not a provider this build manages. Known: %s",
-			apperr.ErrValidation, name, strings.Join(swap.Providers(), ", "))
+	name, choices, err := a.resolveProvider()
+	if err != nil {
+		return nil, err
+	}
+	if name == "" {
+		if name, err = a.pickProvider(choices); err != nil {
+			return nil, err
+		}
 	}
 	return a.switcherFor(name)
 }
