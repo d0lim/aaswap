@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -252,11 +253,22 @@ func (l *launched) env_(name string) (string, bool) {
 
 // onPath puts a stub executable named binary on PATH for this test, so
 // exec.LookPath resolves it without the real tool being installed.
+//
+// On Windows LookPath resolves a bare name only through PATHEXT, so the stub
+// needs one of those extensions — and a shell script would not run there
+// anyway. The auth probe does run the stub (`claude auth status`), and an empty
+// exit-0 answer reads as Unknown on every platform, which is what these tests
+// rely on.
 func (h *harness) onPath(t *testing.T, binary string) {
 	t.Helper()
 	dir := t.TempDir()
 	stub := filepath.Join(dir, binary)
-	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	body := "#!/bin/sh\nexit 0\n"
+	if runtime.GOOS == "windows" {
+		stub += ".cmd"
+		body = "@exit /b 0\r\n"
+	}
+	if err := os.WriteFile(stub, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
