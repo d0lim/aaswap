@@ -78,11 +78,10 @@ type AwaitOptions struct {
 // AwaitNewLogin blocks until Claude Code's live login names a DIFFERENT account
 // than it did when the wait began.
 //
-// This exists because aaswap cannot log anyone in. Claude Code owns the OAuth
-// flow, so registering a second account means a person leaving aaswap, running
-// /login, and coming back — and `aaswap add` refusing outright in the meantime
-// is a dead end rather than an instruction. Waiting turns the two halves into
-// one command.
+// The older of the two ways in. A sandboxed login (see LoginSandbox) is the
+// default now; this remains for a person who prefers to log in inside the
+// tool's own profile — a REPL /login, say — and wants aaswap watching when the
+// login lands rather than refusing outright in the meantime.
 //
 // "Different" is measured against the login present at the start, not against
 // the roster, so re-logging in as an account aaswap already stores also

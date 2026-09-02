@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"os/exec"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -69,13 +70,10 @@ type Model struct {
 	watch    bool
 	quitting bool
 
-	// awaitCancel stops a login wait, and is non-nil exactly while one is
-	// running. The wait outlives the keypress that started it — it can run for
-	// as long as it takes a person to log in elsewhere — so the only way to end
-	// it early is to hold its cancel here.
-	awaitCancel context.CancelFunc
-	// awaitFrame advances the waiting modal's marker.
-	awaitFrame int
+	// execTool hands the terminal to a process and takes it back when it
+	// exits: the tool's own login, run into a sandbox. Bubble Tea's own in
+	// production; a test's stand-in otherwise, since there is no terminal.
+	execTool func(*exec.Cmd, func(error) tea.Msg) tea.Cmd
 }
 
 // NewModel builds the dashboard. Without a switcher it opens on the provider
@@ -85,6 +83,7 @@ func NewModel(opts Options) Model {
 		styles:    newStyles(PaletteFor(opts.Theme)),
 		providers: opts.Providers,
 		open:      opts.Open,
+		execTool:  execProcess,
 		width:     80,
 		height:    24,
 	}
@@ -186,4 +185,9 @@ func tickCmd() tea.Cmd {
 
 func clearStatusCmd() tea.Cmd {
 	return tea.Tick(statusLinger, func(time.Time) tea.Msg { return clearStatusMsg{} })
+}
+
+// execProcess is Bubble Tea's terminal handover, in the shape the model holds.
+func execProcess(c *exec.Cmd, done func(error) tea.Msg) tea.Cmd {
+	return tea.ExecProcess(c, func(err error) tea.Msg { return done(err) })
 }

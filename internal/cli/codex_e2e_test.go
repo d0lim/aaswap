@@ -19,6 +19,15 @@ func (h *harness) codexLogin(email, accountID, plan string) {
 	if err := os.MkdirAll(r.CodexHome(), 0o700); err != nil {
 		h.t.Fatal(err)
 	}
+	if err := os.WriteFile(r.CodexAuthPath(), codexAuthJSON(h.t, email, accountID, plan), 0o600); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+// codexAuthJSON is a Codex auth.json for an account: a ChatGPT login whose
+// id_token carries the address and plan.
+func codexAuthJSON(t *testing.T, email, accountID, plan string) []byte {
+	t.Helper()
 	claims, err := json.Marshal(map[string]any{
 		"email": email,
 		"https://api.openai.com/auth": map[string]any{
@@ -26,7 +35,7 @@ func (h *harness) codexLogin(email, accountID, plan string) {
 		},
 	})
 	if err != nil {
-		h.t.Fatal(err)
+		t.Fatal(err)
 	}
 	enc := base64.RawURLEncoding.EncodeToString
 	token := strings.Join([]string{enc([]byte(`{"alg":"none"}`)), enc(claims), ""}, ".")
@@ -37,11 +46,9 @@ func (h *harness) codexLogin(email, accountID, plan string) {
 		},
 	})
 	if err != nil {
-		h.t.Fatal(err)
+		t.Fatal(err)
 	}
-	if err := os.WriteFile(r.CodexAuthPath(), auth, 0o600); err != nil {
-		h.t.Fatal(err)
-	}
+	return auth
 }
 
 // The whole point of the dimension: a second provider costs no commands and no

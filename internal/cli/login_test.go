@@ -3,10 +3,6 @@ package cli
 import (
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/d0lim/aaswap/internal/claudeapi"
-	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // choosing makes the harness interactive and answers every prompt with the
@@ -101,105 +97,6 @@ func TestLoginWithoutAnyoneToAsk(t *testing.T) {
 	})
 }
 
-// The argument `add` could never settle: when the live login is already stored,
-// "refresh this" and "add another" are both plausible and the command has no
-// way to know. So it asks, once, naming what it found.
-func TestLoginAsksWhenTheLiveLoginIsAlreadyStored(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"one": "one@example.com"})
-	h.login("one", "one@example.com")
-	asked := h.choosing("r")
-
-	if code := h.run("login"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	if len(*asked) != 1 {
-		t.Fatalf("asked %v, want exactly one question", *asked)
-	}
-	// The prompt has to name the account and the slot, or it is asking about
-	// nothing a person can identify.
-	if !strings.Contains((*asked)[0], "one@example.com") {
-		t.Errorf("the prompt does not name the account: %q", (*asked)[0])
-	}
-	wantContains(t, h.stdout(), "Updated credentials for")
-}
-
-// The same question, answered the other way, becomes the wait.
-func TestLoginCanWaitFromThePrompt(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"one": "one@example.com"})
-	h.login("one", "one@example.com")
-	h.choosing("w")
-	h.fastWait()
-
-	landed := make(chan struct{})
-	go func() {
-		defer close(landed)
-		time.Sleep(20 * time.Millisecond)
-		h.landLogin("two@example.com", "acct-2")
-	}()
-
-	if code := h.run("login"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	<-landed
-	wantContains(t, h.stdout(), "Waiting", "two@example.com", "Added")
-}
-
-// Declining changes nothing.
-func TestLoginCancelsCleanly(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"one": "one@example.com"})
-	h.login("one", "one@example.com")
-	h.choosing("q")
-
-	if code := h.run("login"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "Cancelled")
-}
-
-// An account whose refresh token is dead has exactly one plausible reason to be
-// logged in again. Asking would be asking a question with one answer.
-func TestLoginRefreshesADeadAccountWithoutAsking(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"one": "one@example.com"})
-	h.login("one", "one@example.com")
-	h.quarantine("one", "one@example.com")
-	asked := h.choosing("q") // would cancel, if it were asked
-
-	if code := h.run("login"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	if len(*asked) != 0 {
-		t.Errorf("asked %v about an account with one plausible answer", *asked)
-	}
-	wantContains(t, h.stdout(), "Updated credentials for")
-}
-
-// With nothing logged in there is nothing to ask about: the wait IS the answer.
-func TestLoginWaitsWithNoLiveLoginAndNoQuestion(t *testing.T) {
-	h := newHarness(t)
-	asked := h.choosing("q")
-	h.fastWait()
-
-	landed := make(chan struct{})
-	go func() {
-		defer close(landed)
-		time.Sleep(20 * time.Millisecond)
-		h.landLogin("two@example.com", "acct-2")
-	}()
-
-	if code := h.run("login"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	<-landed
-	if len(*asked) != 0 {
-		t.Errorf("asked %v when there was nothing to choose between", *asked)
-	}
-	wantContains(t, h.stdout(), "Added", "two@example.com")
-}
-
 // `login --name` still pins the handle, whichever path it takes.
 func TestLoginNamesTheAccount(t *testing.T) {
 	h := newHarness(t)
@@ -214,20 +111,5 @@ func TestLoginNamesTheAccount(t *testing.T) {
 	}
 	if roster.Accounts["work"] == nil {
 		t.Errorf("accounts = %v, want one called \"work\"", roster.Names())
-	}
-}
-
-// quarantine records that an account's stored refresh token was refused, which
-// is the state a re-login is the only sensible answer to.
-func (h *harness) quarantine(name, email string) {
-	h.t.Helper()
-	ids := map[string]usagestore.Identity{name: {Email: email}}
-	if _, err := h.switcher.Usage.Record(map[string]usagestore.FetchRecord{
-		name: {Error: claudeapi.KindInvalidGrant, StruckFP: "sha256:dead"},
-	}, ids, nil, nil); err != nil {
-		h.t.Fatal(err)
-	}
-	if !h.switcher.Usage.Entries(ids, nil)[name].TokenDead("") {
-		h.t.Fatal("the account was not quarantined")
 	}
 }

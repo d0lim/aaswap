@@ -48,6 +48,13 @@ type AddOutcome struct {
 	Unverified string
 	// Cancelled marks a confirmation the user declined. Nothing was changed.
 	Cancelled bool
+	// Activated marks a sandboxed login that was made the live login because
+	// nothing was logged in. See [Switcher.FinishLogin].
+	Activated bool
+	// ActivationFailed says why that could not be done, when it could not.
+	// The account is stored either way: a switch that fails after the filing
+	// is a switch to run again, not a login to repeat.
+	ActivationFailed string
 }
 
 // Add captures the machine's live Claude Code login into a managed slot.
@@ -77,13 +84,20 @@ func (s *Switcher) Add(ctx context.Context, req AddRequest) (AddOutcome, error) 
 		if err != nil {
 			return err
 		}
-		outcome, err = s.add(ctx, roster, req, name, identity)
+		outcome, err = s.addFrom(ctx, s, roster, req, name, identity, true)
 		return err
 	})
 	return outcome, err
 }
 
-func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, name string, identity LiveIdentity) (AddOutcome, error) {
+// addFrom files the login FROM reads as an account of this switcher.
+//
+// from is this switcher for an ordinary capture, and a sandbox for a login the
+// tool performed into one. Everything read — identity, credential, config, and
+// the drift checks against them — comes from there; everything written goes
+// here. activate says whether the filed account is the live login, which it is
+// for a capture by definition and is not for a sandbox.
+func (s *Switcher) addFrom(ctx context.Context, from *Switcher, roster *Roster, req AddRequest, name string, identity LiveIdentity, activate bool) (AddOutcome, error) {
 	existing, registered := roster.FindName(identity.Identity())
 
 	// No name given and the account is already registered: refresh in place.
@@ -91,7 +105,7 @@ func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, name
 	// holding one account, and the older one holding a credential the server
 	// has retired.
 	if name == "" && registered {
-		return s.refreshInPlace(ctx, roster, existing, identity)
+		return s.refreshInPlace(ctx, from, roster, existing, identity, activate)
 	}
 
 	num, plan, err := s.planName(roster, req, name, identity, existing, registered)
@@ -99,17 +113,17 @@ func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, name
 		return AddOutcome{Cancelled: plan.cancelled}, err
 	}
 
-	captured, err := s.captureVerified(ctx, identity)
+	captured, err := from.captureVerified(ctx, identity)
 	if err != nil {
 		return AddOutcome{}, err
 	}
-	config, err := s.ReadLiveConfig()
+	config, err := from.ReadLiveConfig()
 	if err != nil {
 		return AddOutcome{}, err
 	}
 	// Last, because it licenses the bytes just read. Ahead of the read, a
 	// /login landing in between would store a config the check never saw.
-	if err := s.RejectIdentityDrift(identity); err != nil {
+	if err := from.RejectIdentityDrift(identity); err != nil {
 		return AddOutcome{}, err
 	}
 
@@ -140,7 +154,9 @@ func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, name
 		// compare equal to every other identityless row.
 		Fingerprint: identity.Fingerprint,
 	})
-	roster.SetActive(num)
+	if activate {
+		roster.SetActive(num)
+	}
 	if err := s.WriteRoster(roster); err != nil {
 		return AddOutcome{}, err
 	}
@@ -154,18 +170,18 @@ func (s *Switcher) add(ctx context.Context, roster *Roster, req AddRequest, name
 
 // refreshInPlace re-captures the credential for an account already in the
 // store, leaving its name and added date alone.
-func (s *Switcher) refreshInPlace(ctx context.Context, roster *Roster, name string, identity LiveIdentity) (AddOutcome, error) {
+func (s *Switcher) refreshInPlace(ctx context.Context, from *Switcher, roster *Roster, name string, identity LiveIdentity, activate bool) (AddOutcome, error) {
 	account := roster.Accounts[name]
 
-	captured, err := s.captureVerified(ctx, identity)
+	captured, err := from.captureVerified(ctx, identity)
 	if err != nil {
 		return AddOutcome{}, err
 	}
-	config, err := s.ReadLiveConfig()
+	config, err := from.ReadLiveConfig()
 	if err != nil {
 		return AddOutcome{}, err
 	}
-	if err := s.RejectIdentityDrift(identity); err != nil {
+	if err := from.RejectIdentityDrift(identity); err != nil {
 		return AddOutcome{}, err
 	}
 
@@ -176,7 +192,9 @@ func (s *Switcher) refreshInPlace(ctx context.Context, roster *Roster, name stri
 	// with it — otherwise the next read compares the new credential against the
 	// digest of the one it replaced and reports a login that never happened.
 	account.Fingerprint = identity.Fingerprint
-	roster.SetActive(name)
+	if activate {
+		roster.SetActive(name)
+	}
 	if err := s.WriteRoster(roster); err != nil {
 		return AddOutcome{}, err
 	}

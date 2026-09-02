@@ -33,7 +33,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -636,33 +635,7 @@ func (m *Manager) Remove(sessionDir string) error {
 // one: Claude's three variables mean nothing to Codex, and OPENAI_API_KEY —
 // which Codex prefers over its ChatGPT login — was passing straight through.
 func Environment(base []string, sessionDir string, spec provider.Spec) (env []string, scrubbed []string) {
-	homeEnv := "CLAUDE_CONFIG_DIR"
-	var overrides []string
-	if s := spec.Session; s != nil {
-		if s.HomeEnv != "" {
-			homeEnv = s.HomeEnv
-		}
-		overrides = s.AuthOverrides
-	}
-	for _, entry := range base {
-		name, _, _ := strings.Cut(entry, "=")
-		if name == homeEnv {
-			continue
-		}
-		if slices.Contains(overrides, name) {
-			scrubbed = append(scrubbed, name)
-			continue
-		}
-		env = append(env, entry)
-	}
-	env = append(env, homeEnv+"="+sessionDir)
-	// Whatever this provider declares survives a swap and has to be disabled:
-	// Claude Code's Agent View daemon outlives a session and keeps using the
-	// account it started with.
-	for _, hazard := range spec.Hazards {
-		env = append(env, hazard.Env...)
-	}
-	return env, scrubbed
+	return provider.Environment(base, sessionDir, spec)
 }
 
 // writeJSONPrivate writes an owner-only JSON file.

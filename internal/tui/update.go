@@ -40,15 +40,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case addedMsg:
 		return m.handleAdded(msg)
 
-	case awaitTickMsg:
-		// Stops when the wait does. The marker is the only thing on screen
-		// that says the dashboard is still watching.
-		if m.awaitCancel == nil {
-			return m, nil
-		}
-		m.awaitFrame++
-		m.modal = m.waitingModal()
-		return m, awaitTickCmd()
+	case loginBegunMsg:
+		return m.handleLoginBegun(msg)
+
+	case loginRanMsg:
+		return m.handleLoginRan(msg)
 
 	case tickMsg:
 		if !m.watch {
@@ -73,8 +69,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKey routes a keypress, giving whatever overlay is open first refusal.
 func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Ahead of every overlay, because an overlay that can swallow ctrl+c is a
-	// dashboard someone cannot get out of — and the waiting modal, which takes
-	// only esc, would be exactly that.
+	// dashboard someone cannot get out of.
 	if key.String() == "ctrl+c" {
 		return m.quit()
 	}
@@ -112,7 +107,7 @@ func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.askAdd()
 
 	case "n":
-		return m.startAwait()
+		return m.startLogin()
 
 	case "t":
 		return m.askAddToken()
@@ -138,13 +133,9 @@ func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// quit leaves the dashboard, ending anything still running for it.
-//
-// A wait is a goroutine polling the live config. Quitting without ending it
-// leaves it running for as long as the process does.
+// quit leaves the dashboard.
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	m.quitting = true
-	m.stopAwait()
 	return m, tea.Quit
 }
 
@@ -159,17 +150,6 @@ func (m Model) handleModalKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleInputKey(key)
 	case modalPick:
 		return m.handlePickKey(key)
-	case modalWaiting:
-		// Only esc. Every other key is one a person pressed while reading the
-		// instructions, and cancelling a wait they meant to keep is not
-		// something to do on an ambiguous keystroke.
-		if key.String() == "esc" {
-			m.stopAwait()
-			m.modal = nil
-			m.status, m.statusErr = "Stopped waiting", false
-			return m, clearStatusCmd()
-		}
-		return m, nil
 	}
 
 	switch key.String() {

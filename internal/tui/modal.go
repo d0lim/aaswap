@@ -18,9 +18,6 @@ const (
 	modalNotice
 	// modalInput collects one line of text — a token — and submits it.
 	modalInput
-	// modalWaiting reports work that ends on its own, and is cancelled rather
-	// than answered.
-	modalWaiting
 	// modalPick chooses one row of a short list and runs onPick with it.
 	modalPick
 )
@@ -126,8 +123,6 @@ func (m Model) renderModal(md *modal) string {
 		b.WriteString(st.helpKey.Render("enter") + st.help.Render(" submit    ") +
 			st.helpKey.Render("ctrl+u") + st.help.Render(" clear    ") +
 			st.helpKey.Render("esc") + st.help.Render(" cancel"))
-	case modalWaiting:
-		b.WriteString(st.helpKey.Render("esc") + st.help.Render(" stop waiting"))
 	}
 
 	// Cap the modal so a long error wraps inside the frame instead of running
