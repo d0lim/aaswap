@@ -170,7 +170,8 @@ func TestRunWorksForCodex(t *testing.T) {
 	}
 	// The binary has to be Codex's own. Launching `claude` for a Codex account
 	// would run the wrong tool as the wrong account and look like it worked.
-	if filepath.Base(record.binary) != "codex" {
+	// Without the extension: the stub is codex.cmd on Windows.
+	if launched := filepath.Base(record.binary); strings.TrimSuffix(launched, filepath.Ext(launched)) != "codex" {
 		t.Errorf("launched %q, want codex", record.binary)
 	}
 	// Pinned by CODEX_HOME, or Codex reads the default home and runs as
