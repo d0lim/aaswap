@@ -83,7 +83,7 @@ homebrew_casks:
       # tag time, after the binaries have already been uploaded.
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/d0lim/aaswap
-    description: Switch between multiple Claude Code accounts
+    description: Manage several agent CLI logins (Claude Code, Codex) on one machine
     license: MIT
     # The download host and the homepage are the same here; saying so keeps
     # `brew audit` quiet.
