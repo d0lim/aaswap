@@ -2,6 +2,7 @@ package credstore
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -60,12 +61,14 @@ func TestCodexActiveCredentialWriteRoundTrips(t *testing.T) {
 	if string(data) != codexAuth {
 		t.Errorf("wrote %q", data)
 	}
-	info, err := os.Stat(r.CodexAuthPath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("mode = %o, want 0600 on a file holding a refresh token", perm)
+	if runtime.GOOS != "windows" { // POSIX modes are not meaningful there
+		info, err := os.Stat(r.CodexAuthPath())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("mode = %o, want 0600 on a file holding a refresh token", perm)
+		}
 	}
 	if got := s.ReadActive(); got.Value != codexAuth {
 		t.Errorf("read back %q", got.Value)

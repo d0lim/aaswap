@@ -3,6 +3,7 @@ package credstore
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,6 +29,9 @@ func newVaultStore(t *testing.T) *Store {
 // a provider whose login is several files then has nowhere to put the rest —
 // which is how a swap comes to copy some of an account and report success.
 func TestAnAccountsFilesLiveInItsOwnDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes are not meaningful on Windows")
+	}
 	s := newVaultStore(t)
 	if err := s.WriteAccount("work", "work@example.com", "creds-work"); err != nil {
 		t.Fatal(err)

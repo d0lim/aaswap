@@ -499,7 +499,10 @@ func validPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("the path is empty")
 	}
-	if filepath.IsAbs(path) {
+	// Rooted under either convention. filepath.IsAbs on Windows wants a drive
+	// letter, so "/etc/passwd" would pass there and escape the home the same
+	// way it does everywhere else.
+	if filepath.IsAbs(path) || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\") {
 		return fmt.Errorf("the path is absolute")
 	}
 	clean := filepath.Clean(path)
