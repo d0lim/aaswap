@@ -3,11 +3,12 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/swap"
-	"github.com/d0lim/aaswap/internal/usagestore"
 	"github.com/spf13/cobra"
 )
 
@@ -32,22 +33,21 @@ func (a *App) loginCommand() *cobra.Command {
 	var req loginRequest
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Store an account, logging in first if you need to",
-		Long: "aaswap cannot log you in — the agent's own CLI owns that flow — so\n" +
-			"storing an account means being logged in as it, or going and logging in.\n\n" +
-			"With no flags this looks at what is live and says what it will do. The\n" +
-			"one case it cannot decide alone is a live login already stored: refresh\n" +
-			"that account, or wait for a different one? Both are ordinary, so it\n" +
-			"asks rather than guessing.\n\n" +
-			"The flags are three answers to that question, for scripts and for\n" +
-			"people who already know:\n" +
-			"  --capture   store the account logged in now\n" +
-			"  --wait      wait for a /login elsewhere, then store that account\n" +
+		Short: "Log in and store the account",
+		Long: "Runs the tool's own login — the browser flow it would run anyway —\n" +
+			"pointed at a sandbox, and stores what lands there as an account. The\n" +
+			"login you already have is not read, not replaced and not logged out of;\n" +
+			"on a machine with no login, the new account becomes the live one.\n\n" +
+			"With no flags: a live login that is not stored yet is stored as it is,\n" +
+			"and otherwise the tool is run to log in. The flags are the other ways\n" +
+			"an account gets in:\n" +
+			"  --capture   store the account logged in now, and nothing else\n" +
+			"  --wait      wait for a login in the tool's own profile, then store it\n" +
 			"  --token     store a token you already have (where the provider's\n" +
 			"              format is known — `aaswap doctor` says which)\n\n" +
-			"Without a terminal, nothing is asked and nothing waits: an unstored\n" +
-			"live login is captured, a stored one is refreshed, and no login at all\n" +
-			"is an error.",
+			"Without a terminal nothing is run and nothing waits: an unstored live\n" +
+			"login is captured, a stored one is refreshed, and no login at all is\n" +
+			"an error.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runLogin(cmd, req)
@@ -55,7 +55,7 @@ func (a *App) loginCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&req.name, "name", "", "give the account a name")
 	cmd.Flags().BoolVar(&req.capture, "capture", false,
-		"store the account logged in now, without asking")
+		"store the account logged in now, without running a login")
 	cmd.Flags().BoolVar(&req.wait, "wait", false,
 		"wait for a login in the provider's own tool, then store that account")
 	cmd.Flags().StringVar(&req.token, "token", "",
@@ -94,98 +94,83 @@ func (a *App) runLogin(cmd *cobra.Command, req loginRequest) error {
 		if err := a.awaitLogin(cmd.Context(), s); err != nil {
 			return err
 		}
-	case !req.capture:
-		decision, err := a.decideLogin(s)
+	case req.capture || !a.interactive():
+		// Nothing to run without a terminal: Add reports the unchanged error.
+	default:
+		state, err := s.LiveState()
 		if err != nil {
 			return err
 		}
-		switch decision {
-		case loginCancel:
-			a.printer.Println(a.printer.Dimmed("Cancelled"))
-			return nil
-		case loginWait:
-			if err := a.awaitLogin(cmd.Context(), s); err != nil {
-				return err
-			}
+		// Live and unstored is the one state where running a login would be
+		// asking someone to log in as an account they are logged in as.
+		if !state.LoggedIn || state.Slot != "" {
+			return a.loginViaTool(cmd.Context(), s, req.name)
 		}
 	}
 	return a.captureInto(cmd.Context(), s, req.name)
 }
 
-// loginDecision is what the interactive path settled on.
-type loginDecision int
-
-const (
-	// loginCapture stores what is live now, which is also what a refresh is:
-	// Add tells the two apart from the identity itself.
-	loginCapture loginDecision = iota
-	loginWait
-	loginCancel
-)
-
-// decideLogin works out what `login` with no flags should do.
-//
-// Four states, and only one of them is a question. The rest have a single
-// plausible answer, and asking a question whose answer is already known trains
-// people to stop reading prompts.
-func (a *App) decideLogin(s *swap.Switcher) (loginDecision, error) {
-	state, err := s.LiveState()
+// loginViaTool runs the provider's own login into a sandbox and stores what
+// lands there.
+func (a *App) loginViaTool(ctx context.Context, s *swap.Switcher, name string) error {
+	spec := s.Spec()
+	sandbox, err := s.BeginLogin()
 	if err != nil {
-		return loginCancel, err
+		return err
+	}
+	argv := sandbox.Argv()
+
+	a.printer.Blank()
+	a.printer.Println(a.printer.Bold("Logging in with "+spec.DisplayName()+"."),
+		a.printer.Dimmed(" Finish the login it opens with the account you want to add."))
+	if _, live := s.LiveIdentity(); live {
+		a.printer.Println(a.printer.Dimmed("  The account you are logged in as now is left as it is."))
+	}
+	a.printer.Blank()
+
+	if err := a.runTool(ctx, argv, sandbox.Environment(os.Environ())); err != nil {
+		sandbox.Discard()
+		return fmt.Errorf("%w: `%s` did not complete: %w",
+			apperr.ErrConfig, strings.Join(argv, " "), err)
 	}
 
-	// Nothing live. Capturing is impossible and there is nothing to ask about,
-	// so the wait IS the answer — but only where someone can act on it.
-	if !state.LoggedIn {
-		if !a.interactive() {
-			return loginCapture, nil // Add reports the unchanged error
-		}
-		return loginWait, nil
+	outcome, err := s.FinishLogin(ctx, sandbox, swap.AddRequest{
+		Name: name, AssumeYes: a.assumeYes, Confirm: a.confirm,
+	})
+	if err != nil {
+		return err
 	}
-
-	// Live but unstored: exactly what the person asked for.
-	if state.Slot == "" {
-		return loginCapture, nil
+	if err := a.reportAdd(outcome); err != nil {
+		return err
 	}
-
-	// Live and stored. The one genuinely ambiguous case — unless the stored
-	// credential is dead, in which case being logged in as it again has one
-	// plausible reason.
-	if !a.interactive() || a.tokenIsDead(s, state) {
-		return loginCapture, nil
+	switch {
+	case outcome.Cancelled:
+	case outcome.Activated:
+		a.printer.Println(a.printer.Dimmed("  Now the live login, since nothing was logged in."))
+	case outcome.ActivationFailed != "":
+		a.printer.Warning("stored, but could not make it the live login: " + outcome.ActivationFailed)
+		a.printer.Println(a.printer.Dimmed("  Use it with:  "),
+			a.printer.Accent("aaswap switch "+outcome.Name))
+	default:
+		a.printer.Println(a.printer.Dimmed("  Use it with:  "),
+			a.printer.Accent("aaswap switch "+outcome.Name))
 	}
-
-	answer := a.choose(fmt.Sprintf(
-		"Logged in as %s [%s] — already stored as %s.",
-		state.Identity.Email, state.Identity.DisplayTag(), state.Slot),
-		[]Choice{
-			{Key: "r", Label: "refresh that account's stored credential"},
-			{Key: "w", Label: "wait for a different login, then add it"},
-			{Key: "q", Label: "cancel"},
-		})
-	switch answer {
-	case "r":
-		return loginCapture, nil
-	case "w":
-		return loginWait, nil
-	}
-	return loginCancel, nil
+	return nil
 }
 
-// tokenIsDead reports whether the live account's stored credential has already
-// been refused by the server.
-//
-// Best effort: an unreadable measurement table is not evidence either way, and
-// the cost of being wrong is one extra prompt.
-func (a *App) tokenIsDead(s *swap.Switcher, state swap.LiveState) bool {
-	if s.Usage == nil || state.Slot == "" {
-		return false
+// runTool runs the provider's login command to completion, on the terminal.
+func (a *App) runTool(ctx context.Context, argv, env []string) error {
+	if a.RunTool != nil {
+		return a.RunTool(ctx, argv, env)
 	}
-	ids := map[string]usagestore.Identity{state.Slot: {
-		Email:            state.Identity.Email,
-		OrganizationUUID: state.Identity.OrganizationUUID,
-	}}
-	return s.Usage.Entries(ids, nil)[state.Slot].TokenDead("")
+	binary, err := exec.LookPath(argv[0])
+	if err != nil {
+		return fmt.Errorf("`%s` was not found on your PATH", argv[0])
+	}
+	tool := exec.CommandContext(ctx, binary, argv[1:]...)
+	tool.Env = env
+	tool.Stdin, tool.Stdout, tool.Stderr = a.In, a.Out, a.Err
+	return tool.Run()
 }
 
 // interactive reports whether there is a person to ask.

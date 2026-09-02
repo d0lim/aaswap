@@ -68,9 +68,9 @@ func (m Model) dashboard() string {
 	case len(m.snapshot.Views) == 0:
 		sections = append(sections,
 			m.styles.muted.Render("  No accounts are managed yet."),
-			m.styles.muted.Render("  Press ")+m.styles.accent.Render("a")+
-				m.styles.muted.Render(" to add the account you are logged in as, or ")+
-				m.styles.accent.Render("n")+m.styles.muted.Render(" to wait for a /login."))
+			m.styles.muted.Render("  Press ")+m.styles.accent.Render("n")+
+				m.styles.muted.Render(" to log in, or ")+
+				m.styles.accent.Render("a")+m.styles.muted.Render(" to add the account you are logged in as."))
 	default:
 		sections = append(sections, m.accountList())
 	}
@@ -229,7 +229,7 @@ func (m Model) footer() string {
 // terminal. Rather than wrapping — which pushes an account row off a short
 // screen — it drops hints until what is left fits.
 var footerHints = [][2]string{
-	{"↑↓", "move"}, {"enter", "switch"}, {"a", "add"},
+	{"↑↓", "move"}, {"enter", "switch"}, {"n", "log in"}, {"a", "add"},
 	{"t", "token"}, {"d", "disable"}, {"r", "refresh"}, {"w", "watch"},
 }
 
@@ -274,8 +274,8 @@ func (m Model) renderHelp() string {
 		{"↑ / k", "move up"},
 		{"↓ / j", "move down"},
 		{"enter / s", "switch to the selected account"},
+		{"n", "log in to add another account"},
 		{"a", "add the account you are logged in as"},
-		{"n", "wait for a login, then add that account"},
 	}
 	// Listed only where it works. A key on the reference that reports
 	// "unsupported" when pressed is worse than an absent one: the reference is
@@ -301,7 +301,7 @@ func (m Model) renderHelp() string {
 	b.WriteString("\n\n" + st.muted.Render(fmt.Sprintf(
 		"Switching writes a live credential. It takes the store lock, so it may\n"+
 			"pause while another aaswap or a running %s holds it.\n\n"+
-			"aaswap cannot log you in — %s owns that flow. `n` waits for you to\n"+
-			"log in elsewhere and captures the account when it lands.", tool, tool)))
+			"`n` runs %s's own login into a sandbox and stores what lands there.\n"+
+			"The login you have now is not touched.", tool, tool)))
 	return st.modal.Render(b.String())
 }
