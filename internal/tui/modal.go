@@ -21,6 +21,8 @@ const (
 	// modalWaiting reports work that ends on its own, and is cancelled rather
 	// than answered.
 	modalWaiting
+	// modalPick chooses one row of a short list and runs onPick with it.
+	modalPick
 )
 
 // modal is the one overlay the dashboard can show at a time.
@@ -51,6 +53,15 @@ type modal struct {
 	// account it would become. Rendered under the field, and skipped when it
 	// returns nothing.
 	hint func(string) string
+
+	// options are a modalPick's rows, pick the marked one, and onPick turns
+	// the accepted index into the command to run. cancelQuits makes esc leave
+	// the program rather than the modal, for a question the dashboard cannot
+	// show anything without an answer to.
+	options     []pickOption
+	pick        int
+	onPick      func(int) tea.Cmd
+	cancelQuits bool
 }
 
 // visibleInput is what the field shows for what has been typed.
@@ -93,8 +104,19 @@ func (m Model) renderModal(md *modal) string {
 			}
 		}
 	}
+	if md.kind == modalPick {
+		b.WriteString(m.renderPick(md))
+	}
 	b.WriteString("\n\n")
 	switch md.kind {
+	case modalPick:
+		leave := " quit"
+		if !md.cancelQuits {
+			leave = " cancel"
+		}
+		b.WriteString(st.helpKey.Render("↑↓") + st.help.Render(" move    ") +
+			st.helpKey.Render("enter") + st.help.Render(" choose    ") +
+			st.helpKey.Render("esc") + st.help.Render(leave))
 	case modalConfirm:
 		b.WriteString(st.helpKey.Render("y") + st.help.Render(" confirm    ") +
 			st.helpKey.Render("n/esc") + st.help.Render(" cancel"))
