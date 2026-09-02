@@ -43,11 +43,6 @@ func TestDumpFrame(t *testing.T) {
 	t.Log("\n" + m.View().Content + "\n")
 
 	// The overlays, which the dashboard frame never shows together.
-	started, _ := m.startAwait()
-	waiting := started.(Model)
-	t.Log("\n" + waiting.View().Content + "\n")
-	waiting.stopAwait()
-
 	token, _ := m.askAddToken()
 	typed := token.(Model)
 	typed.modal.input = "sk-ant-api03-abcdefghijklmnop"

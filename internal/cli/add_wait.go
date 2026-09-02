@@ -10,11 +10,10 @@ import (
 
 // awaitLogin blocks until a different account is logged in, narrating the wait.
 //
-// aaswap cannot log anyone in — Claude Code owns the OAuth flow — so adding a
-// second account has always been two steps with a person in the middle: go run
-// /login, come back, run `aaswap add`. This closes the gap from aaswap's side.
-// It cannot drive the login, but it can tell the person exactly what to do and
-// be watching when they finish.
+// --wait: the login happens in the tool's own profile, and aaswap says what to
+// run and is watching when it lands. The default `login` runs the tool into a
+// sandbox instead; this is for whoever wants the live profile to be the one
+// that logs in.
 func (a *App) awaitLogin(ctx context.Context, s *swap.Switcher) error {
 	first := true
 	opts := a.awaitTuning

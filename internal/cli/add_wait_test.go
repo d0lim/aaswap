@@ -53,7 +53,7 @@ func TestAddWaitCapturesTheLoginThatLands(t *testing.T) {
 	// doing it the obvious wrong way.
 	wantContains(t, h.stdout(),
 		"one@example.com", "already stored as 1",
-		"/login", "Do not log out first", "Waiting",
+		"claude auth login", "Do not log out first", "Waiting",
 		"two@example.com", "Added")
 
 	roster, err := h.switcher.RosterOrEmpty()

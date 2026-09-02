@@ -33,6 +33,7 @@ package paths
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -363,4 +364,36 @@ func (r *Resolver) FindPredecessor() (Found, bool) {
 		}
 	}
 	return Found{}, false
+}
+
+// WithProviderHome is this resolver with one provider's home relocated, the
+// way exporting its home variable would relocate it for the tool.
+//
+// For a login sandbox: the tool is run with the variable set to a throwaway
+// directory, and everything aaswap then reads about that login has to resolve
+// against the same directory — the config beside it, the credential inside it,
+// and on macOS the Keychain item whose name is derived from the exported
+// string. Anything else the resolver knows is unchanged.
+//
+// The secure-storage override is dropped on purpose. Claude Code sources its
+// Keychain item from CLAUDE_SECURESTORAGE_CONFIG_DIR when that is defined, and
+// a sandbox that inherited it would land its credential in the caller's live
+// store rather than its own.
+func (r *Resolver) WithProviderHome(env, dir string) *Resolver {
+	clone := *r
+	clone.HomeOverrides = maps.Clone(r.HomeOverrides)
+	if clone.HomeOverrides == nil {
+		clone.HomeOverrides = map[string]string{}
+	}
+	switch env {
+	case ClaudeConfigDirEnv:
+		clone.ConfigDir = dir
+		clone.SecureStorageConfigDir, clone.SecureStorageConfigDirSet = "", false
+	case CodexHomeEnv:
+		clone.CodexHomeDir = dir
+	}
+	if env != "" {
+		clone.HomeOverrides[env] = dir
+	}
+	return &clone
 }

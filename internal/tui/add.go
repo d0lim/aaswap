@@ -2,10 +2,10 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -13,16 +13,6 @@ import (
 	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/swap"
 )
-
-// awaitFrameInterval is how fast the waiting modal's marker advances.
-//
-// Purely cosmetic, and that is the point: a wait for a person to go and log in
-// somewhere else can run for minutes, and a screen that never changes reads as
-// a hang.
-const awaitFrameInterval = 400 * time.Millisecond
-
-// awaitFrames is the marker's cycle.
-var awaitFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // --- messages ---------------------------------------------------------------
 
@@ -35,17 +25,23 @@ type liveProbedMsg struct {
 	err   error
 }
 
-// addedMsg carries a finished capture, token registration, or awaited login.
+// addedMsg carries a finished capture, token registration, or sandboxed login.
 type addedMsg struct {
 	outcome swap.AddOutcome
-	// awaited marks the result of a wait, whose cancellation is a normal
-	// outcome rather than a failure to report.
-	awaited bool
 	err     error
 }
 
-// awaitTickMsg advances the waiting modal's marker.
-type awaitTickMsg time.Time
+// loginBegunMsg carries an opened login sandbox, ready for the tool.
+type loginBegunMsg struct {
+	sandbox *swap.LoginSandbox
+	err     error
+}
+
+// loginRanMsg carries the tool's exit after a login was run into a sandbox.
+type loginRanMsg struct {
+	sandbox *swap.LoginSandbox
+	err     error
+}
 
 // --- commands ---------------------------------------------------------------
 
@@ -70,24 +66,18 @@ func addTokenCmd(s *swap.Switcher, token string) tea.Cmd {
 	}
 }
 
-// awaitAddCmd waits for a login and captures it, as one command.
-//
-// Both halves belong to the same goroutine because they are one operation: the
-// only reason to wait is to capture what lands, and handing the wait's result
-// back to the UI loop to start a second command would put a scheduling gap
-// between the login and the read of it.
-func awaitAddCmd(ctx context.Context, s *swap.Switcher) tea.Cmd {
+func beginLoginCmd(s *swap.Switcher) tea.Cmd {
 	return func() tea.Msg {
-		if _, err := s.AwaitNewLogin(ctx, swap.AwaitOptions{}); err != nil {
-			return addedMsg{awaited: true, err: err}
-		}
-		outcome, err := s.Add(ctx, swap.AddRequest{})
-		return addedMsg{outcome: outcome, awaited: true, err: err}
+		sandbox, err := s.BeginLogin()
+		return loginBegunMsg{sandbox: sandbox, err: err}
 	}
 }
 
-func awaitTickCmd() tea.Cmd {
-	return tea.Tick(awaitFrameInterval, func(t time.Time) tea.Msg { return awaitTickMsg(t) })
+func finishLoginCmd(s *swap.Switcher, sandbox *swap.LoginSandbox) tea.Cmd {
+	return func() tea.Msg {
+		outcome, err := s.FinishLogin(context.Background(), sandbox, swap.AddRequest{})
+		return addedMsg{outcome: outcome, err: err}
+	}
 }
 
 // --- key handlers -----------------------------------------------------------
@@ -99,7 +89,7 @@ func awaitTickCmd() tea.Cmd {
 // prompt that cannot say which of those it is about is not a prompt worth
 // showing.
 func (m Model) askAdd() (tea.Model, tea.Cmd) {
-	if m.busy != "" || m.awaitCancel != nil {
+	if m.busy != "" {
 		return m, nil
 	}
 	m.busy = "reading the live login"
@@ -114,9 +104,9 @@ func (m Model) handleLiveProbed(msg liveProbedMsg) (tea.Model, tea.Cmd) {
 		return m, clearStatusCmd()
 	}
 	if !msg.state.LoggedIn {
-		// Nothing to capture and nothing to ask about. The wait IS the answer
-		// to "add an account" on a machine with no login.
-		return m.startAwait()
+		// Nothing to capture and nothing to ask about. Logging in IS the
+		// answer to "add an account" on a machine with no login.
+		return m.startLogin()
 	}
 
 	st := m.styles
@@ -146,57 +136,60 @@ func (m Model) handleLiveProbed(msg liveProbedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// startAwait waits for a login to land, then captures it.
+// startLogin logs a new account in: the tool's own login, run into a sandbox,
+// and what lands there stored.
 //
-// This is the closest aaswap gets to logging anyone in. Claude Code owns the
-// OAuth flow, so the person has to go and run /login somewhere else — but they
-// do not have to come back, quit, and re-run anything: the dashboard is
-// watching and captures the account the moment it appears.
-func (m Model) startAwait() (tea.Model, tea.Cmd) {
-	if m.busy != "" || m.awaitCancel != nil {
+// The dashboard hands the terminal to the tool for the duration — a browser
+// login has a URL to print and possibly a code to paste — and takes it back
+// when the tool exits. The login the person already has is never touched.
+func (m Model) startLogin() (tea.Model, tea.Cmd) {
+	if m.busy != "" {
 		return m, nil
 	}
-	// Background rather than the program's context: cancellation here is the
-	// esc key, and it is held as the cancel func below. Quitting cancels it on
-	// the way out.
-	ctx, cancel := context.WithCancel(context.Background())
-	m.awaitCancel = cancel
-	m.awaitFrame = 0
-	m.modal = m.waitingModal()
-	return m, tea.Batch(awaitAddCmd(ctx, m.switcher), awaitTickCmd())
+	m.busy = "opening a login"
+	return m, beginLoginCmd(m.switcher)
 }
 
-// waitingModal is the instruction sheet shown while waiting.
-func (m Model) waitingModal() *modal {
-	st := m.styles
-	// The instruction is the declaration's, not Claude's: "claude and then
-	// /login" told a Codex user to run a command Codex does not have.
-	launch, then := m.spec.Login.Steps()
-	var instruction string
-	switch {
-	case launch == "":
-		instruction = st.muted.Render("  In another terminal, log in with " + m.spec.DisplayName() + ",")
-	case then == "":
-		instruction = st.muted.Render("  In another terminal, run ") + st.accent.Render(launch) +
-			st.muted.Render(",")
-	default:
-		instruction = st.muted.Render("  In another terminal, run ") + st.accent.Render(launch) +
-			st.muted.Render(" and then ") + st.accent.Render(then) + st.muted.Render(",")
+// handleLoginBegun runs the tool into the sandbox that was opened.
+func (m Model) handleLoginBegun(msg loginBegunMsg) (tea.Model, tea.Cmd) {
+	m.busy = ""
+	if msg.err != nil {
+		return m.failed("Login failed", msg.err)
 	}
-	return &modal{
-		kind:  modalWaiting,
-		title: awaitFrames[m.awaitFrame%len(awaitFrames)] + " Waiting for a login",
-		body: []string{
-			"",
-			instruction,
-			st.muted.Render("  with the account you want to add."),
-			"",
-			st.yellow.Render("  Do not log out first — the tool may revoke the token"),
-			st.yellow.Render("  stored for the account you are leaving."),
-			"",
-			st.muted.Render("  The account is captured as soon as the login finishes."),
-		},
+	argv := msg.sandbox.Argv()
+	binary, err := exec.LookPath(argv[0])
+	if err != nil {
+		msg.sandbox.Discard()
+		return m.failed("Login failed", fmt.Errorf("`%s` was not found on your PATH", argv[0]))
 	}
+	tool := exec.Command(binary, argv[1:]...)
+	tool.Env = msg.sandbox.Environment(os.Environ())
+	m.busy = "logging in"
+	sandbox := msg.sandbox
+	return m, m.execTool(tool, func(err error) tea.Msg {
+		return loginRanMsg{sandbox: sandbox, err: err}
+	})
+}
+
+// handleLoginRan files what the tool left, or says why it cannot.
+func (m Model) handleLoginRan(msg loginRanMsg) (tea.Model, tea.Cmd) {
+	m.busy = ""
+	if msg.err != nil {
+		msg.sandbox.Discard()
+		return m.failed("Login failed", fmt.Errorf("%s did not complete: %w",
+			strings.Join(msg.sandbox.Argv(), " "), msg.err))
+	}
+	m.busy = "storing the login"
+	return m, finishLoginCmd(m.switcher, msg.sandbox)
+}
+
+// failed shows a failure notice.
+func (m Model) failed(title string, err error) (tea.Model, tea.Cmd) {
+	m.modal = &modal{
+		kind: modalNotice, danger: true, title: title,
+		body: []string{"", m.styles.red.Render(err.Error())},
+	}
+	return m, nil
 }
 
 // askAddToken opens the field for a pasted token.
@@ -206,7 +199,7 @@ func (m Model) waitingModal() *modal {
 // invent is Claude's — which, written into another tool's credential file,
 // replaces a working login with one that tool cannot read.
 func (m Model) askAddToken() (tea.Model, tea.Cmd) {
-	if m.busy != "" || m.awaitCancel != nil {
+	if m.busy != "" {
 		return m, nil
 	}
 	if !m.spec.Can(provider.CapToken) {
@@ -271,22 +264,8 @@ func (m Model) handleInputKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleAdded(msg addedMsg) (tea.Model, tea.Cmd) {
 	m.busy = ""
-	if msg.awaited {
-		m.stopAwait()
-		m.modal = nil
-	}
 	if msg.err != nil {
-		// A cancelled wait is what esc does. Reporting it as a failure would
-		// make the escape hatch look like a fault.
-		if msg.awaited && errors.Is(msg.err, context.Canceled) {
-			m.status, m.statusErr = "Stopped waiting", false
-			return m, clearStatusCmd()
-		}
-		m.modal = &modal{
-			kind: modalNotice, danger: true, title: "Add failed",
-			body: []string{"", m.styles.red.Render(msg.err.Error())},
-		}
-		return m, nil
+		return m.failed("Add failed", msg.err)
 	}
 	if msg.outcome.Cancelled {
 		m.status, m.statusErr = "Cancelled", false
@@ -298,6 +277,12 @@ func (m Model) handleAdded(msg addedMsg) (tea.Model, tea.Cmd) {
 		verb = "Refreshed"
 	}
 	m.status = fmt.Sprintf("%s Account %s (%s)", verb, msg.outcome.Name, msg.outcome.Email)
+	switch {
+	case msg.outcome.Activated:
+		m.status += " — now the live login"
+	case msg.outcome.ActivationFailed != "":
+		m.status += " — stored, but not made live: " + msg.outcome.ActivationFailed
+	}
 	m.statusErr = false
 	if msg.outcome.Unverified != "" {
 		// Never silently. Registering with the ownership question unanswered is
@@ -316,15 +301,6 @@ func (m Model) handleAdded(msg addedMsg) (tea.Model, tea.Cmd) {
 	// The roster gained or changed a slot, so every row on screen is stale.
 	m.busy = "collecting"
 	return m, tea.Batch(collectCmd(m.switcher), clearStatusCmd())
-}
-
-// stopAwait tears down a wait in flight. Safe to call when none is running.
-func (m *Model) stopAwait() {
-	if m.awaitCancel == nil {
-		return
-	}
-	m.awaitCancel()
-	m.awaitCancel = nil
 }
 
 // tokenKindNote names what a pasted value will register as, for the field's

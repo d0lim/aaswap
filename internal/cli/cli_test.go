@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	json "encoding/json/v2"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -125,6 +126,12 @@ func newHarness(t *testing.T) *harness {
 		NewSwitcher: func(provider string) (*swap.Switcher, error) {
 			return build(provider), nil
 		},
+		// Never the real one. A test that reaches the login runner without
+		// injecting its own would otherwise run the real `claude auth login`
+		// — with a browser — against a sandbox under the temp home.
+		RunTool: func(context.Context, []string, []string) error {
+			return errors.New("no login runner was injected into this test")
+		},
 	}
 	return h
 }
@@ -144,6 +151,7 @@ func (h *harness) run(args ...string) int {
 		// Without this a `run` test exec()s the real binary and REPLACES the
 		// test process, which reads as a pass because the replacement exits 0.
 		HandOver:    h.app.HandOver,
+		RunTool:     h.app.RunTool,
 		provider:    h.app.provider,
 		awaitTuning: h.app.awaitTuning,
 	}

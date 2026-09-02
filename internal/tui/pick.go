@@ -55,7 +55,7 @@ func (m Model) canPickProvider() bool {
 // rather than at a prompt before the screen even opens. The same picker
 // serves `p`, which turns one dashboard into every tool's.
 func (m Model) askProvider() (tea.Model, tea.Cmd) {
-	if m.busy != "" || m.awaitCancel != nil || !m.canPickProvider() {
+	if m.busy != "" || !m.canPickProvider() {
 		return m, nil
 	}
 	options := make([]pickOption, 0, len(m.providers))

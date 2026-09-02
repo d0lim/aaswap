@@ -29,7 +29,10 @@ func claudeSpec() Spec {
 			{Path: ".credentials.json", Role: RoleSecret},
 			{Path: "settings.json", Role: RoleMachine, Optional: true},
 		},
-		Login:    &Login{Argv: []string{"claude", "/login"}},
+		// The subcommand rather than the REPL's /login: it can be run pointed
+		// at a sandbox and exits when the login is done, which is what lets
+		// aaswap log someone in without touching the login they have.
+		Login:    &Login{Argv: []string{"claude", "auth", "login", "--claudeai"}},
 		Identity: claudeIdentity{},
 		// The only tool whose token format aaswap knows well enough to store
 		// one a person pasted: two prefixes, two credential shapes.
