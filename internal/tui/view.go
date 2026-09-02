@@ -59,6 +59,8 @@ func (m Model) dashboard() string {
 	sections := []string{m.header()}
 
 	switch {
+	case !m.pointed():
+		sections = append(sections, m.styles.muted.Render("  choosing a tool…"))
 	case m.err != nil:
 		sections = append(sections, m.styles.red.Render("  "+m.err.Error()))
 	case m.snapshot == nil:
@@ -82,6 +84,9 @@ func (m Model) dashboard() string {
 func (m Model) header() string {
 	st := m.styles
 	left := st.title.Render(" aaswap")
+	if m.pointed() {
+		left += st.muted.Render(" · ") + st.accent.Render(m.spec.DisplayName())
+	}
 
 	var right []string
 	if m.watch {
@@ -248,9 +253,15 @@ func (m Model) hintBar() string {
 		return strings.Join(parts, separator)
 	}
 
-	bar := render(footerHints)
-	for shown := len(footerHints); shown > 0 && lipgloss.Width(bar) > m.width-1; shown-- {
-		bar = render(footerHints[:shown-1])
+	hints := footerHints
+	if m.canPickProvider() {
+		// Ahead of the rest: which tool the screen is about comes before
+		// anything done on it.
+		hints = slices.Concat([][2]string{{"p", "tool"}}, hints)
+	}
+	bar := render(hints)
+	for shown := len(hints); shown > 0 && lipgloss.Width(bar) > m.width-1; shown-- {
+		bar = render(hints[:shown-1])
 	}
 	return bar
 }
@@ -271,6 +282,9 @@ func (m Model) renderHelp() string {
 	// where someone looks to find out what the dashboard can do.
 	if m.spec.Can(provider.CapToken) {
 		rows = append(rows, [2]string{"t", "add a setup token or managed API key"})
+	}
+	if m.canPickProvider() {
+		rows = append(rows, [2]string{"p", "show another tool's accounts"})
 	}
 	rows = append(rows,
 		[2]string{"d", "disable or enable the selected account"},

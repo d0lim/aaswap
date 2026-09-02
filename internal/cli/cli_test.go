@@ -83,6 +83,11 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	h := &harness{t: t, now: testNow, byProvider: map[string]*swap.Switcher{}}
+	// Pinned the way a shell session pins it. Production has no default
+	// provider — it asks when the store cannot say — and a harness whose
+	// every test had to answer that question would drown the thing each test
+	// is about. Tests OF the choosing unpin it with t.Setenv(ProviderEnv, "").
+	t.Setenv(ProviderEnv, swap.ProviderClaude)
 
 	// One Switcher per provider, BUILT for it rather than relabelled. The
 	// credential store and the profile store are scoped by provider, so a

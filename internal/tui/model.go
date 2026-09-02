@@ -7,7 +7,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/d0lim/aaswap/internal/provider"
-	"github.com/d0lim/aaswap/internal/render"
 	"github.com/d0lim/aaswap/internal/swap"
 )
 
@@ -41,6 +40,12 @@ type Model struct {
 	styles styles
 	clock  func() time.Time
 
+	// providers is every tool the dashboard can be pointed at, and open
+	// builds the switcher for one. With more than one, `p` re-points it;
+	// with no switcher at all, the first thing on screen is the question.
+	providers []ProviderChoice
+	open      func(name string) (*swap.Switcher, error)
+
 	width, height int
 
 	// snapshot is the last completed collect pass, and order the slot numbers
@@ -73,16 +78,20 @@ type Model struct {
 	awaitFrame int
 }
 
-// NewModel builds the dashboard over a switcher.
-func NewModel(s *swap.Switcher, theme render.Theme) Model {
-	return Model{
-		switcher: s,
-		spec:     s.Spec(),
-		styles:   newStyles(PaletteFor(theme)),
-		clock:    s.Now,
-		width:    80,
-		height:   24,
+// NewModel builds the dashboard. Without a switcher it opens on the provider
+// picker, which needs Providers and Open.
+func NewModel(opts Options) Model {
+	m := Model{
+		styles:    newStyles(PaletteFor(opts.Theme)),
+		providers: opts.Providers,
+		open:      opts.Open,
+		width:     80,
+		height:    24,
 	}
+	if s := opts.Switcher; s != nil {
+		m.switcher, m.spec, m.clock = s, s.Spec(), s.Now
+	}
+	return m
 }
 
 func (m Model) now() time.Time {
@@ -100,10 +109,17 @@ func (m Model) selected() (swap.AccountView, bool) {
 	return m.snapshot.Views[m.cursor], true
 }
 
-// Init starts the first collect.
+// Init starts the first collect — or, with no tool chosen yet, asks.
 func (m Model) Init() tea.Cmd {
+	if m.switcher == nil {
+		return func() tea.Msg { return askProviderMsg{} }
+	}
 	return collectCmd(m.switcher)
 }
+
+// askProviderMsg opens the picker from Init, which returns a command rather
+// than a model and so cannot set the modal itself.
+type askProviderMsg struct{}
 
 // --- messages ---------------------------------------------------------------
 
