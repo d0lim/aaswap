@@ -131,7 +131,8 @@ aaswap account rename work dev
 
 No tool is the default. Where only one has accounts stored, every command
 addresses that one; where both do, or neither yet, a terminal asks which and
-the dashboard opens on the question (`p` re-asks). `--provider` or
+the dashboard opens on the question (`p` re-asks). `login` asks every time in
+a terminal, since a new account may be for either tool. `--provider` or
 `AASWAP_PROVIDER` settles it up front, and is the only way from a script:
 
 ```bash
