@@ -2,7 +2,6 @@ package swap
 
 import (
 	"encoding/json/jsontext"
-	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // TimestampLayout is how the roster stamps times: UTC, second resolution, no
@@ -47,12 +46,20 @@ type Account struct {
 	OrganizationUUID string `json:"organizationUuid,omitzero"`
 	OrganizationName string `json:"organizationName,omitzero"`
 	Added            string `json:"added,omitzero"`
-	Alias            string `json:"alias,omitzero"`
 	Kind             Kind   `json:"kind,omitzero"`
-	// Disabled excludes the slot from automatic selection while leaving it
+	// Disabled excludes the account from rotation while leaving it
 	// switchable by hand. Absent rather than false when off, matching how the
 	// record is written elsewhere.
 	Disabled bool `json:"disabled,omitzero"`
+
+	// Fingerprint digests the credential last stored for this account.
+	//
+	// Written for every account and load-bearing for one kind: a provider
+	// whose token format nobody has parsed has no address, and this is then
+	// the only thing that identifies it. For the rest it records the
+	// generation, which is what tells a re-login outside aaswap from the
+	// credential aaswap itself put there.
+	Fingerprint string `json:"fingerprint,omitzero"`
 
 	Extra map[string]jsontext.Value `json:",embed"`
 }
@@ -77,6 +84,9 @@ func (a *Account) AuthKind() Kind {
 type Identity struct {
 	Email            string
 	OrganizationUUID string
+	// Fingerprint identifies an account that has no address to be identified
+	// by. Set only when Email is empty — see LiveIdentity.Identity.
+	Fingerprint string
 }
 
 // Identity returns the slot's account identity.
@@ -84,61 +94,68 @@ func (a *Account) Identity() Identity {
 	if a == nil {
 		return Identity{}
 	}
+	if a.Email == "" {
+		return Identity{Fingerprint: a.Fingerprint}
+	}
 	return Identity{Email: a.Email, OrganizationUUID: a.OrganizationUUID}
 }
 
-// Roster is sequence.json: which slots exist, their order, and which one is
-// active.
+// Roster is one provider's accounts: which exist, their order, and which one
+// is live.
+//
+// One per provider, because the active account is per provider. Two tools being
+// logged in at once is the ordinary case, not an edge one, and a single active
+// pointer cannot say it.
 type Roster struct {
-	// ActiveAccountNumber is the slot last activated, or nil when none is.
-	ActiveAccountNumber *int   `json:"activeAccountNumber"`
-	LastUpdated         string `json:"lastUpdated,omitzero"`
-	// Sequence is the display and rotation order, held as ints because that is
-	// what is on disk.
-	Sequence []int `json:"sequence"`
-	// Accounts is keyed by slot number as a string, again matching the file.
+	// Active is the name last activated, empty when none is.
+	Active string `json:"active,omitzero"`
+	// Order is the display and rotation order.
+	Order []string `json:"order"`
+	// Accounts is keyed by name. The key IS the account's handle — there is no
+	// separate alias field, so a name and the thing it names cannot drift.
 	Accounts map[string]*Account `json:"accounts"`
 
 	Extra map[string]jsontext.Value `json:",embed"`
 }
 
 // newRoster returns an empty roster.
-func newRoster(now time.Time) *Roster {
-	return &Roster{
-		LastUpdated: Timestamp(now),
-		Sequence:    []int{},
-		Accounts:    map[string]*Account{},
-	}
+func newRoster() *Roster {
+	return &Roster{Order: []string{}, Accounts: map[string]*Account{}}
 }
 
-// Numbers returns every slot number, in the roster's own order, with any slot
-// missing from the sequence appended.
+// Names returns every account name, in the roster's own order, with any account
+// missing from the order appended.
 //
-// The sequence and the account map can disagree — a roster edited by hand, or a
-// write interrupted between the two — and a slot that exists must never become
-// invisible just because the ordering list forgot it.
-func (r *Roster) Numbers() []string {
+// The order list and the account map can disagree — a table edited by hand, or
+// a write interrupted between the two — and an account that exists must never
+// become invisible just because the ordering list forgot it.
+func (r *Roster) Names() []string {
 	if r == nil {
 		return nil
 	}
 	var out []string
 	seen := map[string]bool{}
-	for _, n := range r.Sequence {
-		num := strconv.Itoa(n)
-		if _, ok := r.Accounts[num]; ok && !seen[num] {
-			out = append(out, num)
-			seen[num] = true
+	for _, name := range r.Order {
+		if _, ok := r.Accounts[name]; ok && !seen[name] {
+			out = append(out, name)
+			seen[name] = true
 		}
 	}
-	for _, num := range sortedSlots(r.Accounts) {
-		if !seen[num] {
-			out = append(out, num)
+	for _, name := range sortedNames(r.Accounts) {
+		if !seen[name] {
+			out = append(out, name)
 		}
 	}
 	return out
 }
 
-// sortedSlots orders slot keys numerically, so "10" follows "9".
+// sortedNames orders account names alphabetically.
+func sortedNames[T any](accounts map[string]T) []string {
+	return slices.Sorted(maps.Keys(accounts))
+}
+
+// sortedSlots orders v1 slot keys numerically, so "10" follows "9". Used only
+// when reading a version 1 table.
 func sortedSlots[T any](accounts map[string]T) []string {
 	nums := slices.Collect(maps.Keys(accounts))
 	slices.SortFunc(nums, func(a, b string) int {
@@ -147,8 +164,6 @@ func sortedSlots[T any](accounts map[string]T) []string {
 		if aErr == nil && bErr == nil {
 			return ai - bi
 		}
-		// A non-numeric key is not something ccswap writes, but it must still
-		// order deterministically rather than crash the listing.
 		return cmpStrings(a, b)
 	})
 	return nums
@@ -164,138 +179,165 @@ func cmpStrings(a, b string) int {
 	return 0
 }
 
-// FindSlot returns the slot holding the given identity.
-func (r *Roster) FindSlot(identity Identity) (string, bool) {
+// FindName returns the account holding the given identity.
+func (r *Roster) FindName(identity Identity) (string, bool) {
 	if r == nil {
 		return "", false
 	}
-	for _, num := range r.Numbers() {
-		if r.Accounts[num].Identity() == identity {
-			return num, true
+	for _, name := range r.Names() {
+		if r.Accounts[name].Identity() == identity {
+			return name, true
 		}
 	}
 	return "", false
 }
 
-// NextNumber is the lowest slot number above every existing one.
-//
-// Deliberately not the lowest FREE number: reusing a number a user just removed
-// would make "account 3" mean a different account than it did a minute ago, in
-// a shell history full of `ccswap switch 3`.
-func (r *Roster) NextNumber() int {
-	highest := 0
-	if r != nil {
-		for num := range r.Accounts {
-			if n, err := strconv.Atoi(num); err == nil {
-				highest = max(highest, n)
-			}
-		}
+// TakenNames is every name already in use, for collision resolution.
+func (r *Roster) TakenNames() map[string]bool {
+	taken := map[string]bool{}
+	if r == nil {
+		return taken
 	}
-	return highest + 1
+	for name := range r.Accounts {
+		taken[name] = true
+	}
+	return taken
 }
 
-// Insert places an account at a slot, keeping the sequence ordered.
-func (r *Roster) Insert(num string, account *Account, now time.Time) {
+// NameFor picks the name a newly captured account will take: the address, with
+// a suffix when something already holds it.
+func (r *Roster) NameFor(email string) string {
+	return uniqueName(NameForEmail(email), r.TakenNames())
+}
+
+// Insert places an account under a name, appending it to the order.
+func (r *Roster) Insert(name string, account *Account) {
 	if r.Accounts == nil {
 		r.Accounts = map[string]*Account{}
 	}
-	r.Accounts[num] = account
-	if n, err := strconv.Atoi(num); err == nil && !slices.Contains(r.Sequence, n) {
-		r.Sequence = append(r.Sequence, n)
-		slices.Sort(r.Sequence)
+	r.Accounts[name] = account
+	if !slices.Contains(r.Order, name) {
+		r.Order = append(r.Order, name)
 	}
-	r.LastUpdated = Timestamp(now)
 }
 
-// Remove drops a slot from both the account map and the sequence.
-func (r *Roster) Remove(num string, now time.Time) {
-	delete(r.Accounts, num)
-	if n, err := strconv.Atoi(num); err == nil {
-		r.Sequence = slices.DeleteFunc(r.Sequence, func(s int) bool { return s == n })
-	}
-	if r.ActiveAccountNumber != nil && strconv.Itoa(*r.ActiveAccountNumber) == num {
-		// The active pointer must not outlive the slot it names, or the next
+// Remove drops an account from both the map and the order.
+func (r *Roster) Remove(name string) {
+	delete(r.Accounts, name)
+	r.Order = slices.DeleteFunc(r.Order, func(n string) bool { return n == name })
+	if r.Active == name {
+		// The active pointer must not outlive the account it names, or the next
 		// read reports an account that no longer exists.
-		r.ActiveAccountNumber = nil
+		r.Active = ""
 	}
-	r.LastUpdated = Timestamp(now)
 }
 
-// SetActive records which slot was last activated.
-func (r *Roster) SetActive(num string, now time.Time) {
-	if n, err := strconv.Atoi(num); err == nil {
-		r.ActiveAccountNumber = &n
+// Rename moves an account to a new name, keeping its place in the order.
+func (r *Roster) Rename(from, to string) {
+	account, ok := r.Accounts[from]
+	if !ok || from == to {
+		return
 	}
-	r.LastUpdated = Timestamp(now)
-}
-
-// Active returns the slot number last activated.
-func (r *Roster) Active() (string, bool) {
-	if r == nil || r.ActiveAccountNumber == nil {
-		return "", false
-	}
-	num := strconv.Itoa(*r.ActiveAccountNumber)
-	if _, ok := r.Accounts[num]; !ok {
-		// The pointer names a slot that is gone. Reporting it would send every
-		// caller looking for an account that does not exist.
-		return "", false
-	}
-	return num, true
-}
-
-// ReadRoster loads sequence.json, reporting false when it does not exist yet.
-//
-// An existing but unreadable roster is an ERROR, never an empty one. Reading a
-// torn file as "no accounts" is what let a subsequent write rebuild the roster
-// from nothing, taking a live credential backup with it.
-func (s *Switcher) ReadRoster() (*Roster, bool, error) {
-	path := s.RosterPath()
-	text, err := fsutil.ReadText(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, false, nil
+	delete(r.Accounts, from)
+	r.Accounts[to] = account
+	for i, name := range r.Order {
+		if name == from {
+			r.Order[i] = to
 		}
-		return nil, false, fmt.Errorf("%w: %s exists but could not be read (%w); "+
-			"fix what is blocking the read, then retry", apperr.ErrConfig, path, err)
 	}
-
-	// Decoded through a pointer so a file holding literal `null` comes back nil
-	// rather than as a zero Roster. Null is not an empty roster: it is a file
-	// that says nothing, and reading it as "no accounts" is the exact mistake
-	// this reader exists to prevent.
-	var roster *Roster
-	if err := json.Unmarshal([]byte(text), &roster); err != nil || roster == nil {
-		return nil, false, fmt.Errorf("%w: %s exists but could not be parsed as an "+
-			"account roster (%v); repair or move it, then retry — refusing to "+
-			"overwrite it unread", apperr.ErrConfig, path, err)
+	if r.Active == from {
+		r.Active = to
 	}
-	if roster.Accounts == nil {
-		roster.Accounts = map[string]*Account{}
-	}
-	return roster, true, nil
 }
 
-// RosterOrEmpty loads the roster, returning an empty one when the file does not
-// exist yet. An unreadable file is still an error.
+// SetActive records which account was last activated.
+func (r *Roster) SetActive(name string) { r.Active = name }
+
+// ActiveName returns the account last activated.
+func (r *Roster) ActiveName() (string, bool) {
+	if r == nil || r.Active == "" {
+		return "", false
+	}
+	if _, ok := r.Accounts[r.Active]; !ok {
+		// The pointer names an account that is gone. Reporting it would send
+		// every caller looking for something that does not exist.
+		return "", false
+	}
+	return r.Active, true
+}
+
+// readStore loads sequence.json in whatever schema it is written in.
+//
+// An existing but unreadable table is an ERROR, never an empty one. Reading a
+// torn file as "no accounts" is what let a subsequent write rebuild the table
+// from nothing, taking a live credential backup with it.
+func (s *Switcher) readStore() (file *File, found bool, renames []Rename, err error) {
+	path := s.RosterPath()
+	text, readErr := fsutil.ReadText(path)
+	if readErr != nil {
+		if errors.Is(readErr, fs.ErrNotExist) {
+			return nil, false, nil, nil
+		}
+		return nil, false, nil, fmt.Errorf("%w: %s exists but could not be read (%w); "+
+			"fix what is blocking the read, then retry", apperr.ErrConfig, path, readErr)
+	}
+	file, renames, err = ParseFile([]byte(text), s.now())
+	if err != nil {
+		return nil, false, nil, fmt.Errorf("%w (%s)", err, path)
+	}
+	return file, true, renames, nil
+}
+
+// StoreOrEmpty loads the whole table, returning an empty one when the file does
+// not exist yet.
+func (s *Switcher) StoreOrEmpty() (*File, []Rename, error) {
+	file, found, renames, err := s.readStore()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !found {
+		file = &File{}
+		file.normalize(s.now())
+	}
+	return file, renames, nil
+}
+
+// RosterOrEmpty loads this switcher's provider section.
 func (s *Switcher) RosterOrEmpty() (*Roster, error) {
-	roster, ok, err := s.ReadRoster()
+	file, _, err := s.StoreOrEmpty()
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return newRoster(s.now()), nil
-	}
-	return roster, nil
+	return file.For(s.provider()), nil
 }
 
-// WriteRoster publishes the roster atomically.
+// WriteRoster publishes one provider's section, leaving every other provider's
+// untouched.
+//
+// The file is re-read to merge rather than held from the earlier load: another
+// provider's section may have changed in between, and this must not be the
+// write that drops it. Safe because every mutation runs under the store lock.
 func (s *Switcher) WriteRoster(roster *Roster) error {
-	if roster.Sequence == nil {
-		// An explicit empty array, not null: the Python reader indexes it.
-		roster.Sequence = []int{}
+	file, _, err := s.StoreOrEmpty()
+	if err != nil {
+		return err
+	}
+	if roster.Order == nil {
+		roster.Order = []string{}
 	}
 	if roster.Accounts == nil {
 		roster.Accounts = map[string]*Account{}
 	}
-	return writeJSON(s.RosterPath(), roster)
+	file.Providers[s.provider()] = roster
+	file.LastUpdated = Timestamp(s.now())
+	file.SchemaVersion = SchemaVersion
+	return writeJSON(s.RosterPath(), file)
+}
+
+// provider is the provider this switcher operates on, defaulting to Claude.
+func (s *Switcher) provider() string {
+	if s.Provider == "" {
+		return ProviderClaude
+	}
+	return s.Provider
 }

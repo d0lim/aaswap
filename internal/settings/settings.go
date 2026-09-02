@@ -8,9 +8,9 @@
 // Reading is deliberately forgiving: a missing or corrupt file yields defaults
 // with a logged warning rather than an error, so a bad hand edit degrades to
 // default behaviour instead of bricking the CLI. Writing is deliberately
-// strict: `ccswap config set` rejects an out-of-range value loudly, so the user
+// strict: `aaswap config set` rejects an out-of-range value loudly, so the user
 // learns about the problem when setting it rather than through silently
-// degraded behaviour at `ccswap auto` time. [Spec] is the single source of truth
+// degraded behaviour at `aaswap auto` time. [Spec] is the single source of truth
 // for the bounds both paths use, so the lenient and strict sides cannot drift.
 package settings
 
@@ -20,7 +20,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 const (
@@ -31,24 +31,26 @@ const (
 	FileName = "settings.json"
 )
 
-// AutoSwitch holds the policy knobs for the auto-switch engine (`ccswap auto`).
+// AutoSwitch holds the usage-reporting knobs.
+//
+// Named for the rotation engine it used to configure, which is gone. Only what
+// the LISTING reads is left: the threshold it flags an account at, and the
+// models whose weekly limits count toward the binding window. The six keys that
+// configured the loop itself — interval, cooldown, hysteresis, strategy,
+// includeApiKeyAccounts, unhealthyTicks — are no longer offered, because a key
+// that reports success and changes nothing is worse than no key at all. An
+// existing settings.json keeps them: they are simply not read, and an unrelated
+// write leaves them where they are.
+//
+// The section keeps its name because renaming it means migrating every user's
+// settings.json, which is not worth doing on its own.
 //
 // Threshold is binding-window utilization — the higher of the 5h and 7d
-// percentages. At or above it the engine looks for a better account. It is 90
-// rather than 95 to leave margin for the macOS ~30s Keychain pickup tail and
-// for heavy subagent turns burning past the mark before a swap lands. A
-// proactive candidate must itself sit below the threshold — never land
-// somewhere that re-triggers next tick — and beat the active account's
-// utilization by at least HysteresisPct, so two accounts hovering at the line
-// never ping-pong while a strictly better account is always taken.
+// percentages. At or above it the listing flags the account as worth leaving.
+// It is 90 rather than 95 to leave margin for a heavy turn burning past the
+// mark between two polls.
 type AutoSwitch struct {
-	Threshold             float64
-	IntervalSeconds       float64
-	CooldownSeconds       float64
-	HysteresisPct         float64
-	Strategy              string
-	IncludeAPIKeyAccounts bool
-	UnhealthyTicks        int
+	Threshold float64
 	// Model is a comma-separated list of model display names ("Fable",
 	// "Fable,Opus"), or "all" for every scoped window an account reports. Each
 	// named model's per-model weekly limit is folded into the binding window,
@@ -73,25 +75,20 @@ type Settings struct {
 // Defaults returns the settings that apply when nothing is configured.
 func Defaults() Settings {
 	return Settings{
-		AutoSwitch: AutoSwitch{
-			Threshold:       90,
-			IntervalSeconds: 60,
-			CooldownSeconds: 300,
-			HysteresisPct:   10,
-			Strategy:        "best",
-			UnhealthyTicks:  3,
-		},
-		UI: UI{Theme: "auto"},
+		AutoSwitch: AutoSwitch{Threshold: 90},
+		UI:         UI{Theme: "auto"},
 	}
 }
 
 // Kind is a setting's value type, which decides how it is parsed and clamped.
 type Kind int
 
+// Only the kinds a live key uses. An int and a bool kind existed for the
+// rotation knobs; they went with them, because the parse and clamp branches
+// behind an unreachable kind are code no test can exercise and no user can
+// reach. A key that needs one brings it back along with its reader.
 const (
 	KindFloat Kind = iota
-	KindInt
-	KindBool
 	KindChoice
 	KindString
 )
@@ -99,7 +96,7 @@ const (
 // Spec is the metadata for one user-tunable settings.json key.
 //
 // It is the single source of truth for bounds and choices: both the lenient
-// clamp on load and the strict validation in `ccswap config set` read from here.
+// clamp on load and the strict validation in `aaswap config set` read from here.
 type Spec struct {
 	// Section is the top-level JSON section ("autoswitch", "ui").
 	Section string
@@ -124,50 +121,13 @@ func (s Spec) Dotted() string { return s.Section + "." + s.JSONKey }
 // Default is this key's value when it is absent from settings.json.
 func (s Spec) Default() any { return s.get(Defaults()) }
 
-// specs is the registry, in the order `ccswap config` lists them.
+// specs is the registry, in the order `aaswap config` lists them.
 var specs = []Spec{
 	{
 		Section: "autoswitch", JSONKey: "threshold", Kind: KindFloat, Lo: 50, Hi: 99.9,
 		Help: "Switch when the binding 5h/7d window reaches this pct",
 		get:  func(s Settings) any { return s.AutoSwitch.Threshold },
 		set:  func(s *Settings, v any) { s.AutoSwitch.Threshold = v.(float64) },
-	},
-	{
-		Section: "autoswitch", JSONKey: "intervalSeconds", Kind: KindFloat, Lo: 15, Hi: 3600,
-		Help: "Poll interval for the ccswap auto loop, in seconds",
-		get:  func(s Settings) any { return s.AutoSwitch.IntervalSeconds },
-		set:  func(s *Settings, v any) { s.AutoSwitch.IntervalSeconds = v.(float64) },
-	},
-	{
-		Section: "autoswitch", JSONKey: "cooldownSeconds", Kind: KindFloat, Lo: 0, Hi: 86400,
-		Help: "Minimum seconds between proactive switches",
-		get:  func(s Settings) any { return s.AutoSwitch.CooldownSeconds },
-		set:  func(s *Settings, v any) { s.AutoSwitch.CooldownSeconds = v.(float64) },
-	},
-	{
-		Section: "autoswitch", JSONKey: "hysteresisPct", Kind: KindFloat, Lo: 0, Hi: 50,
-		Help: "A target must beat the active account by this many pct",
-		get:  func(s Settings) any { return s.AutoSwitch.HysteresisPct },
-		set:  func(s *Settings, v any) { s.AutoSwitch.HysteresisPct = v.(float64) },
-	},
-	{
-		Section: "autoswitch", JSONKey: "strategy", Kind: KindChoice,
-		Choices: []string{"best", "consume-first"},
-		Help:    "How auto-switch picks the target account",
-		get:     func(s Settings) any { return s.AutoSwitch.Strategy },
-		set:     func(s *Settings, v any) { s.AutoSwitch.Strategy = v.(string) },
-	},
-	{
-		Section: "autoswitch", JSONKey: "includeApiKeyAccounts", Kind: KindBool,
-		Help: "Allow rotating onto managed API-key accounts (bill per token)",
-		get:  func(s Settings) any { return s.AutoSwitch.IncludeAPIKeyAccounts },
-		set:  func(s *Settings, v any) { s.AutoSwitch.IncludeAPIKeyAccounts = v.(bool) },
-	},
-	{
-		Section: "autoswitch", JSONKey: "unhealthyTicks", Kind: KindInt, Lo: 1, Hi: 100,
-		Help: "Consecutive failed polls before an account is unhealthy",
-		get:  func(s Settings) any { return s.AutoSwitch.UnhealthyTicks },
-		set:  func(s *Settings, v any) { s.AutoSwitch.UnhealthyTicks = v.(int) },
 	},
 	{
 		Section: "autoswitch", JSONKey: "model", Kind: KindString,

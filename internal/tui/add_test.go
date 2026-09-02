@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // errBoom stands in for any failure the store can return.
@@ -66,7 +66,7 @@ func TestTheAddPromptNamesWhatWillHappen(t *testing.T) {
 			name: "an account with no slot is a new registration",
 			state: swap.LiveState{LoggedIn: true, Identity: swap.LiveIdentity{
 				Email: "new@example.com", OrganizationName: "Acme"}},
-			want: []string{"Add the account", "new@example.com", "Acme", "new slot"},
+			want: []string{"Add the account", "new@example.com", "Acme", "new account"},
 		},
 		{
 			name: "an account already in a slot is a refresh of that slot",
@@ -116,7 +116,7 @@ func TestAddWithNoLoginGoesStraightToWaiting(t *testing.T) {
 func TestTheWaitingModalSaysWhatToDoAndWhatNotTo(t *testing.T) {
 	m := twoAccounts(t)
 	frame := m.renderModal(m.waitingModal())
-	for _, want := range []string{"claude", "/login", "Do not run /logout first"} {
+	for _, want := range []string{"claude", "/login", "Do not log out first"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("the waiting modal does not say %q:\n%s", want, frame)
 		}
@@ -188,7 +188,7 @@ func TestAFailedAddIsReported(t *testing.T) {
 func TestAnUnverifiedAddSaysSo(t *testing.T) {
 	m := twoAccounts(t)
 	next, _ := m.handleAdded(addedMsg{outcome: swap.AddOutcome{
-		Number: "3", Email: "new@example.com", Unverified: "the lookup did not resolve",
+		Name: "3", Email: "new@example.com", Unverified: "the lookup did not resolve",
 	}})
 	model := next.(Model)
 	if model.modal == nil || model.modal.kind != modalNotice {

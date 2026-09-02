@@ -1,4 +1,4 @@
-// Package testutil holds helpers shared across ccswap's test suites.
+// Package testutil holds helpers shared across aaswap's test suites.
 //
 // It exists for one job so far: making a file genuinely unreadable, which
 // several packages need and which no two operating systems agree on.

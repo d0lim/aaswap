@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // Update folds one message into the model.
@@ -192,13 +192,14 @@ func (m Model) askSwitch() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if view.IsActive {
-		m.status, m.statusErr = "Account "+view.Number+" is already active", false
+		m.status, m.statusErr = "Account "+view.Name+" is already active", false
 		return m, clearStatusCmd()
 	}
 
 	body := []string{
 		"",
-		m.styles.muted.Render("This replaces the live Claude Code credential."),
+		m.styles.muted.Render(fmt.Sprintf(
+			"This replaces the live %s credential.", m.spec.DisplayName())),
 	}
 	if m.hasManagedLiveLogin() {
 		body = append(body,
@@ -206,10 +207,10 @@ func (m Model) askSwitch() (tea.Model, tea.Cmd) {
 	}
 	m.modal = &modal{
 		kind:      modalConfirm,
-		title:     fmt.Sprintf("Switch to Account %s — %s?", view.Number, view.Account.Email),
+		title:     fmt.Sprintf("Switch to Account %s — %s?", view.Name, view.Account.Email),
 		body:      body,
 		busyLabel: "switching",
-		run:       switchCmd(m.switcher, view.Number, view.Account.Email),
+		run:       switchCmd(m.switcher, view.Name, view.Account.Email),
 	}
 	return m, nil
 }
@@ -241,7 +242,7 @@ func (m Model) toggleSelected() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.busy = "updating"
-	return m, toggleCmd(m.switcher, view.Number, !view.Account.Disabled)
+	return m, toggleCmd(m.switcher, view.Name, !view.Account.Disabled)
 }
 
 // --- result handling --------------------------------------------------------
@@ -311,7 +312,7 @@ func slotNumbers(snapshot *swap.Snapshot) []string {
 	}
 	out := make([]string, 0, len(snapshot.Views))
 	for _, view := range snapshot.Views {
-		out = append(out, view.Number)
+		out = append(out, view.Name)
 	}
 	return out
 }

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // fakeClock lets a test walk the re-probe cooldown without sleeping.

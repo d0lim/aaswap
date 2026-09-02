@@ -8,9 +8,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // Layout constants.
@@ -80,7 +81,7 @@ func (m Model) dashboard() string {
 // the whole store rather than of any one account.
 func (m Model) header() string {
 	st := m.styles
-	left := st.title.Render(" ccswap")
+	left := st.title.Render(" aaswap")
 
 	var right []string
 	if m.watch {
@@ -113,7 +114,7 @@ func (m Model) accountList() string {
 // windows or the single reason it has none.
 func (m Model) accountBlock(index int, view swap.AccountView) string {
 	st := m.styles
-	entry := m.snapshot.Entries[view.Number]
+	entry := m.snapshot.Entries[view.Name]
 
 	cursor := "  "
 	if index == m.cursor {
@@ -133,10 +134,7 @@ func (m Model) accountBlock(index int, view swap.AccountView) string {
 		email = st.emailOn.Render(view.Account.Email)
 	}
 
-	head := fmt.Sprintf("%s%s %s %s", cursor, marker, st.slot.Render(view.Number), email)
-	if alias := view.Account.Alias; alias != "" {
-		head += st.muted.Render("  (" + alias + ")")
-	}
+	head := fmt.Sprintf("%s%s %s %s", cursor, marker, st.slot.Render(view.Name), email)
 	if view.Account.Disabled {
 		head += st.muted.Render("  out of rotation")
 	}
@@ -260,28 +258,36 @@ func (m Model) hintBar() string {
 // renderHelp is the full key reference, which the footer only samples.
 func (m Model) renderHelp() string {
 	st := m.styles
+	tool := m.spec.DisplayName()
 	rows := [][2]string{
 		{"↑ / k", "move up"},
 		{"↓ / j", "move down"},
 		{"enter / s", "switch to the selected account"},
 		{"a", "add the account you are logged in as"},
-		{"n", "wait for a /login, then add that account"},
-		{"t", "add a setup token or managed API key"},
-		{"d", "disable or enable the selected account"},
-		{"r", "collect now"},
-		{"w", "toggle watch mode (re-collect every 30s)"},
-		{"?", "close this help"},
-		{"q / esc", "quit"},
+		{"n", "wait for a login, then add that account"},
 	}
+	// Listed only where it works. A key on the reference that reports
+	// "unsupported" when pressed is worse than an absent one: the reference is
+	// where someone looks to find out what the dashboard can do.
+	if m.spec.Can(provider.CapToken) {
+		rows = append(rows, [2]string{"t", "add a setup token or managed API key"})
+	}
+	rows = append(rows,
+		[2]string{"d", "disable or enable the selected account"},
+		[2]string{"r", "collect now"},
+		[2]string{"w", "toggle watch mode (re-collect every 30s)"},
+		[2]string{"?", "close this help"},
+		[2]string{"q / esc", "quit"},
+	)
 	var b strings.Builder
 	b.WriteString(st.title.Render("Keys"))
 	for _, row := range rows {
 		b.WriteString("\n" + st.helpKey.Render(fmt.Sprintf("%-10s", row[0])) + st.help.Render(row[1]))
 	}
-	b.WriteString("\n\n" + st.muted.Render(
+	b.WriteString("\n\n" + st.muted.Render(fmt.Sprintf(
 		"Switching writes a live credential. It takes the store lock, so it may\n"+
-			"pause while another ccswap or a running Claude Code holds it.\n\n"+
-			"ccswap cannot log you in — Claude Code owns that flow. `n` waits for you\n"+
-			"to run /login elsewhere and captures the account when it lands."))
+			"pause while another aaswap or a running %s holds it.\n\n"+
+			"aaswap cannot log you in — %s owns that flow. `n` waits for you to\n"+
+			"log in elsewhere and captures the account when it lands.", tool, tool)))
 	return st.modal.Render(b.String())
 }

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
 )
 
 // CaptureResult is the credential a capture read, plus what could not be

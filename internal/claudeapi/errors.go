@@ -20,7 +20,7 @@ const (
 	// quarantine on it, so nothing ambiguous may map here.
 	KindInvalidGrant ErrorKind = "invalid_grant"
 
-	// KindInvalidClient means ccswap's OAuth client credential was rejected.
+	// KindInvalidClient means aaswap's OAuth client credential was rejected.
 	// Systemic — it says nothing about any one slot, so it lands no strike.
 	KindInvalidClient ErrorKind = "invalid_client"
 
@@ -30,7 +30,7 @@ const (
 	KindNoRefreshToken ErrorKind = "no_refresh_token"
 
 	// KindTransient is every failure that may resolve on its own: network
-	// blips, 5xx, and — deliberately — any 4xx body ccswap could not parse a
+	// blips, 5xx, and — deliberately — any 4xx body aaswap could not parse a
 	// verdict out of. A misclassified transient costs one retry; a
 	// misclassified permanent wrongly quarantines a live account.
 	KindTransient ErrorKind = "transient"
@@ -54,10 +54,10 @@ const (
 // to the usage endpoint after one.
 const (
 	// KindStoreUnmirrored means the secure-storage config dir override is in
-	// effect, so the store ccswap would write is not the one Claude Code reads.
+	// effect, so the store aaswap would write is not the one Claude Code reads.
 	KindStoreUnmirrored ErrorKind = "store-unmirrored"
 
-	// KindConsumeBusy means another ccswap surface holds this slot's gate.
+	// KindConsumeBusy means another aaswap surface holds this slot's gate.
 	KindConsumeBusy ErrorKind = "consume-busy"
 
 	// KindStashUnreadable means the slot's stashed successor credential cannot
@@ -103,10 +103,10 @@ var permanentRefreshKinds = []ErrorKind{KindInvalidGrant, KindNoRefreshToken}
 // generic string it displaced. The test in this package enforces that.
 var errorNotes = map[ErrorKind]string{
 	KindStoreUnmirrored: "CLAUDE_SECURESTORAGE_CONFIG_DIR set — unset it or run from a normal shell",
-	KindInvalidClient:   "ccswap's OAuth client was rejected — systemic, not this account",
-	KindConsumeBusy:     "another ccswap surface holds the slot — retries next pass",
+	KindInvalidClient:   "aaswap's OAuth client was rejected — systemic, not this account",
+	KindConsumeBusy:     "another aaswap surface holds the slot — retries next pass",
 	KindStashUnreadable: "this slot's stashed successor is unreadable — unlock the keychain " +
-		"or fix the file, then retry; `ccswap unclaimed` inspects it",
+		"or fix the file, then retry; `aaswap account unclaimed` inspects it",
 }
 
 // Note returns the user-facing explanation for a kind, falling back to the kind

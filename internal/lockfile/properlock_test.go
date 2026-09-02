@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 // fastOpts keeps the lock protocol's shape while collapsing its timings, so the
@@ -202,7 +202,7 @@ func TestProperOptionsDefaults(t *testing.T) {
 
 // The staleness split is load-bearing: Claude Code runs stale: 60000 on the
 // credential locks and the older 10s on the config lock. Getting these the
-// wrong way round would let ccswap steal a lock a live Claude Code still holds.
+// wrong way round would let aaswap steal a lock a live Claude Code still holds.
 func TestStalenessConstantsMatchClaudeCode(t *testing.T) {
 	if CredentialsStaleness != 60*time.Second {
 		t.Errorf("CredentialsStaleness = %v, want 60s to match Claude Code's stale: 60000", CredentialsStaleness)

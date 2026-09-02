@@ -5,43 +5,85 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
-// ConfigBackupPath is where a slot's captured ~/.claude.json lives.
+// ConfigBackupPath is where an account's captured config lives.
+//
+// Named for Claude Code because Claude Code is the only provider that has one:
+// a provider whose credential IS the login stores nothing here. If a second
+// such provider arrives, the name comes with it — renaming it now would move
+// every existing Claude backup for no present gain.
 func (s *Switcher) ConfigBackupPath(accountNum, email string) string {
 	return filepath.Join(s.ConfigsDir(), fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email))
 }
 
-// ReadAccountConfig reads a slot's captured config, returning empty when there
-// is none.
+// ReadAccountConfig reads an account's captured config, returning empty when
+// there is none.
 func (s *Switcher) ReadAccountConfig(accountNum, email string) string {
-	data, err := os.ReadFile(s.ConfigBackupPath(accountNum, email))
+	return s.readConfigIn(s.ConfigsDir(), accountNum, email)
+}
+
+// readConfigIn reads a captured config out of a given directory, so the upgrade
+// can write into Claude's rather than the addressed provider's.
+func (s *Switcher) readConfigIn(dir, accountNum, email string) string {
+	data, err := os.ReadFile(filepath.Join(dir,
+		filepath.Base(s.ConfigBackupPath(accountNum, email))))
 	if err != nil {
 		return ""
 	}
 	return string(data)
 }
 
-// WriteAccountConfig stores a slot's captured config with owner-only
-// permissions.
-func (s *Switcher) WriteAccountConfig(accountNum, email, config string) error {
-	if err := os.MkdirAll(s.ConfigsDir(), 0o700); err != nil {
+// writeConfigIn stores a captured config in a given directory.
+func (s *Switcher) writeConfigIn(dir, accountNum, email, config string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("%w: creating the configs directory: %w", apperr.ErrConfig, err)
 	}
-	path := s.ConfigBackupPath(accountNum, email)
+	path := filepath.Join(dir, filepath.Base(s.ConfigBackupPath(accountNum, email)))
 	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
 		return fmt.Errorf("%w: writing %s: %w", apperr.ErrConfig, path, err)
 	}
 	return nil
 }
 
-// IsSwitchable reports whether a slot can be activated without re-adding the
-// account: it needs BOTH a stored credential and a stored config.
+// readLegacyConfig reads a captured config from the pre-provider layout, for
+// the upgrade.
+func (s *Switcher) readLegacyConfig(accountNum, email string) string {
+	data, err := os.ReadFile(filepath.Join(s.legacyConfigsDir(),
+		fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email)))
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// WriteAccountConfig stores an account's captured config with owner-only
+// permissions.
 //
-// Both, because activating with one and not the other logs the user in as one
-// account while their projects and settings say another. It tolerates a stale
-// sequence entry pointing at a record that is gone.
+// A no-op for a provider that declares no config. There is nothing to store —
+// the credential is the whole login — and what was being stored was an empty
+// object: written on every capture, read by nothing, and named after another
+// tool, for anyone who opened the store to puzzle over.
+func (s *Switcher) WriteAccountConfig(accountNum, email, config string) error {
+	if _, hasConfig := s.spec().ConfigFile(); !hasConfig {
+		return nil
+	}
+	return s.writeConfigIn(s.ConfigsDir(), accountNum, email, config)
+}
+
+// IsSwitchable reports whether an account can be activated without storing it
+// again: it needs a stored credential, and a stored config where the provider
+// has one.
+//
+// Both for Claude, because activating with one and not the other logs the user
+// in as one account while their projects and settings say another. For a
+// provider whose credential IS the login there is no second half to be missing,
+// and demanding one meant the requirement was satisfied by an empty file that
+// existed only to satisfy it — so a store restored from an export had switchable
+// accounts reporting as unswitchable.
+//
+// It tolerates a stale sequence entry pointing at a record that is gone.
 func (s *Switcher) IsSwitchable(roster *Roster, accountNum string) bool {
 	account, ok := roster.Accounts[accountNum]
 	if !ok {
@@ -49,6 +91,9 @@ func (s *Switcher) IsSwitchable(roster *Roster, accountNum string) bool {
 	}
 	if value, _ := s.Creds.ReadAccount(accountNum, account.Email); value == "" {
 		return false
+	}
+	if _, hasConfig := s.spec().ConfigFile(); !hasConfig {
+		return true
 	}
 	return s.ReadAccountConfig(accountNum, account.Email) != ""
 }
@@ -62,7 +107,7 @@ func (s *Switcher) IsSwitchable(roster *Roster, accountNum string) bool {
 // never costs its stored login.
 func (s *Switcher) SwitchableNumbers(roster *Roster) []string {
 	var out []string
-	for _, num := range roster.Numbers() {
+	for _, num := range roster.Names() {
 		if roster.Accounts[num].Disabled {
 			continue
 		}
@@ -76,7 +121,7 @@ func (s *Switcher) SwitchableNumbers(roster *Roster) []string {
 // DisabledNumbers lists the slots the user has held out of rotation.
 func (s *Switcher) DisabledNumbers(roster *Roster) []string {
 	var out []string
-	for _, num := range roster.Numbers() {
+	for _, num := range roster.Names() {
 		if roster.Accounts[num].Disabled {
 			out = append(out, num)
 		}
@@ -84,7 +129,7 @@ func (s *Switcher) DisabledNumbers(roster *Roster) []string {
 	return out
 }
 
-// SetDisabled holds an account out of automatic selection, or returns it.
+// SetDisabled holds an account out of rotation, or returns it.
 //
 // Reports whether anything changed, so a caller can say "already disabled"
 // rather than claiming an edit it did not make.
@@ -104,7 +149,6 @@ func (s *Switcher) SetDisabled(identifier string, disabled bool) (num, email str
 		}
 		changed = true
 		account.Disabled = disabled
-		roster.LastUpdated = Timestamp(s.now())
 		return s.WriteRoster(roster)
 	})
 	if err != nil {
@@ -117,8 +161,8 @@ func (s *Switcher) SetDisabled(identifier string, disabled bool) (num, email str
 // is none or the live login is unmanaged.
 //
 // Deliberately NO fallback to the roster's recorded active slot. An unmanaged
-// live login must report nothing rather than a guessed slot, or the auto-switch
-// engine would evaluate the wrong account's usage and overwrite a login ccswap
+// live login must report nothing rather than a guessed slot, or the rotation
+// engine would evaluate the wrong account's usage and overwrite a login aaswap
 // does not own. Use [Switcher.HasLiveLogin] to tell the two negative cases
 // apart.
 func (s *Switcher) CurrentNumber(roster *Roster) (string, bool) {
@@ -126,7 +170,7 @@ func (s *Switcher) CurrentNumber(roster *Roster) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return roster.FindSlot(live.Identity())
+	return roster.FindName(live.Identity())
 }
 
 // HasLiveLogin reports whether the machine carries any live account identity.

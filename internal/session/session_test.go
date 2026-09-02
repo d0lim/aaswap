@@ -7,17 +7,19 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/provider"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -67,9 +69,12 @@ func newFixture(t *testing.T) *fixture {
 		Manager: &Manager{
 			BackupRoot: root,
 			Platform:   platform.Linux,
-			Creds:      credstore.New(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
-			Probe:      probe,
-			Now:        func() time.Time { return testNow },
+			Creds:      credstore.NewForProvider(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0), "claude", credstore.Layout{Keychain: true}),
+			// A nil Keychain is the file-only shape, which is what Linux is
+			// and what every non-macOS host gets.
+			Profiles: provider.NewProfiles(provider.MustLookup(provider.Claude), platform.Linux, nil),
+			Probe:    probe,
+			Now:      func() time.Time { return testNow },
 		},
 	}
 }
@@ -117,8 +122,8 @@ func TestTwoAddressesMayShareASlug(t *testing.T) {
 	if SlugifyEmail("a/b@x.com") != SlugifyEmail("a\\b@x.com") {
 		t.Skip("these do not collide, which is fine; the point is the prefix carries uniqueness")
 	}
-	one := DirFor("/root", "1", "a/b@x.com")
-	two := DirFor("/root", "2", "a\\b@x.com")
+	one := DirFor("/root", "claude", "1", "a/b@x.com")
+	two := DirFor("/root", "claude", "2", "a\\b@x.com")
 	if one == two {
 		t.Error("two slots produced the same profile directory")
 	}
@@ -244,7 +249,7 @@ func TestBootstrapRefusals(t *testing.T) {
 		{
 			name:    "no stored credential",
 			setup:   func(f *fixture) {},
-			wantErr: []string{"no stored credentials", "ccswap add --slot 1"},
+			wantErr: []string{"no stored credentials", "aaswap login --capture --name 1"},
 		},
 		{
 			name: "no stored config",
@@ -547,8 +552,7 @@ func TestNotKnowingIsNeverSuperseded(t *testing.T) {
 	}
 
 	t.Run("an unreadable backup", func(t *testing.T) {
-		testutil.MakeUnreadable(t, filepath.Join(
-			f.Creds.CredentialsDir(), ".creds-1-a@example.com.enc"))
+		testutil.MakeUnreadable(t, f.Creds.BackupPath("1", "a@example.com"))
 		if f.ProfileSuperseded(dir, "1", "a@example.com") {
 			t.Error("an unreadable backup was read as proof of a different generation")
 		}
@@ -572,7 +576,8 @@ func TestEnvironmentDropsAuthOverrides(t *testing.T) {
 		"HOME=/home/u",
 		"CLAUDE_CONFIG_DIR=/somewhere/else",
 	}
-	env, scrubbed := Environment(base, "/profiles/2-a_example.com")
+	env, scrubbed := Environment(base, "/profiles/2-a_example.com",
+		provider.MustLookup(provider.Claude))
 
 	joined := strings.Join(env, "\n")
 	for _, gone := range []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"} {
@@ -630,10 +635,10 @@ func readConfig(t *testing.T, path string) map[string]any {
 	return out
 }
 
-// Profiles outlive the rename from cswap to ccswap, and every marker is named
+// Profiles outlive the rename from ccswap to aaswap, and every marker is named
 // after the command. An old spelling that goes unseen is not a lost file but a
 // behavior change: the stale marker stops deferring an invalidation, the share
-// manifest stops naming the links ccswap may remove, and the mirror marker lets
+// manifest stops naming the links aaswap may remove, and the mirror marker lets
 // the one-time MCP migration run a second time against already-mirrored
 // servers.
 func TestMarkersWrittenUnderTheOldNameAreAdopted(t *testing.T) {
@@ -642,7 +647,7 @@ func TestMarkersWrittenUnderTheOldNameAreAdopted(t *testing.T) {
 	} {
 		t.Run(current, func(t *testing.T) {
 			dir := t.TempDir()
-			legacy := filepath.Join(dir, strings.Replace(current, ".ccswap-", ".cswap-", 1))
+			legacy := filepath.Join(dir, strings.Replace(current, ".aaswap-", ".ccswap-", 1))
 			if legacy == filepath.Join(dir, current) {
 				t.Fatalf("%q does not carry the command name, so the test proves nothing", current)
 			}
@@ -668,12 +673,12 @@ func TestMarkersWrittenUnderTheOldNameAreAdopted(t *testing.T) {
 }
 
 // Adoption must never overwrite a marker that already exists under the current
-// name: the current one is what this ccswap wrote, and a leftover old file is
+// name: the current one is what this aaswap wrote, and a leftover old file is
 // by definition the older truth.
 func TestAdoptionNeverOverwritesACurrentMarker(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ShareManifest)
-	legacy := filepath.Join(dir, strings.Replace(ShareManifest, ".ccswap-", ".cswap-", 1))
+	legacy := filepath.Join(dir, strings.Replace(ShareManifest, ".aaswap-", ".ccswap-", 1))
 	if err := os.WriteFile(path, []byte("current"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -689,5 +694,74 @@ func TestAdoptionNeverOverwritesACurrentMarker(t *testing.T) {
 	}
 	if string(data) != "current" {
 		t.Errorf("contents = %q, want the current marker left alone", data)
+	}
+}
+
+// Each provider's session has to be pinned by ITS OWN home variable. Setting
+// Claude's for a Codex session would leave Codex reading the default home and
+// running as whoever is logged in there — a launch that looks like it worked.
+func TestEnvironmentPinsTheProvidersOwnHome(t *testing.T) {
+	for _, tc := range []struct{ provider, want string }{
+		{provider.Claude, "CLAUDE_CONFIG_DIR"},
+		{provider.Codex, "CODEX_HOME"},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			spec := provider.MustLookup(tc.provider)
+			env, _ := Environment([]string{"PATH=/usr/bin"}, "/profiles/p", spec)
+			if !slices.Contains(env, tc.want+"=/profiles/p") {
+				t.Errorf("env = %v, want %s pointing at the profile", env, tc.want)
+			}
+		})
+	}
+}
+
+// A provider's declared hazards reach the launched process, or a daemon that
+// outlives the session keeps using the account it started with.
+func TestEnvironmentInjectsDeclaredHazards(t *testing.T) {
+	spec := provider.MustLookup(provider.Claude)
+	env, _ := Environment(nil, "/profiles/p", spec)
+	if !slices.Contains(env, "CLAUDE_CODE_DISABLE_AGENT_VIEW=1") {
+		t.Errorf("env = %v, want Claude's Agent View disabled", env)
+	}
+}
+
+// A profile is a whole synthetic home. One address at two tools is the ordinary
+// case for one person, and an unscoped path gave both the same directory: two
+// live credentials and two sets of shared links under one manifest.
+func TestAProfileDirectoryBelongsToOneProvider(t *testing.T) {
+	claude := DirFor("/root", "claude", "work", "me@example.com")
+	codex := DirFor("/root", "codex", "work", "me@example.com")
+	if claude == codex {
+		t.Fatalf("both providers use %s", claude)
+	}
+	// Every profile lives under one root, so anything that walks them — a
+	// cleanup, an audit — has a single place to look.
+	for _, dir := range []string{claude, codex} {
+		if !strings.HasPrefix(dir, filepath.Join("/root", "sessions")+string(filepath.Separator)) {
+			t.Errorf("%s is outside the sessions root", dir)
+		}
+	}
+}
+
+// Claude keeps the unsuffixed path. Profiles outlive a change here — each holds
+// a copy of a credential and a manifest of links aaswap created — and moving
+// them would orphan both with nothing left to clean them up.
+func TestClaudeKeepsTheExistingProfilePath(t *testing.T) {
+	want := filepath.Join("/root", "sessions", "work-me_example.com")
+	for _, provider := range []string{"claude", ""} {
+		if got := DirFor("/root", provider, "work", "me@example.com"); got != want {
+			t.Errorf("DirFor(%q) = %q, want the existing %q", provider, got, want)
+		}
+	}
+}
+
+// A provider's own directory sits beside the profiles rather than among them,
+// so nothing can read one as the other. An account's directory always carries
+// an address, which is what makes that safe.
+func TestAProviderDirectoryCannotBeReadAsAProfile(t *testing.T) {
+	profile := DirFor("/root", "claude", "codex", "someone@example.com")
+	scope := filepath.Dir(DirFor("/root", "codex", "work", "me@example.com"))
+	if profile == scope {
+		t.Errorf("an account named codex collides with Codex's own directory at %s", scope)
 	}
 }

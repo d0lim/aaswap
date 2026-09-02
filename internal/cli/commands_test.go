@@ -2,20 +2,18 @@ package cli
 
 import (
 	"context"
-	json "encoding/json/v2"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
 	"github.com/spf13/cobra"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 func TestListShowsEveryAccount(t *testing.T) {
@@ -27,7 +25,7 @@ func TestListShowsEveryAccount(t *testing.T) {
 	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Account 1", "one@example.com", "Account 2", "two@example.com", "40%", "10%")
+	wantContains(t, h.stdout(), "1", "one@example.com", "2", "two@example.com", "40%", "10%")
 }
 
 func TestListOnAnEmptyStoreExplainsWhatToDo(t *testing.T) {
@@ -35,7 +33,7 @@ func TestListOnAnEmptyStoreExplainsWhatToDo(t *testing.T) {
 	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts are managed yet", "ccswap add")
+	wantContains(t, h.stdout(), "No accounts are managed yet", "aaswap login")
 }
 
 // The JSON surface is what scripts consume, so it must be exactly one object
@@ -74,7 +72,7 @@ func TestStatus(t *testing.T) {
 		if code := h.run("status"); code != ExitOK {
 			t.Fatalf("exit = %d: %s", code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "no active Claude account")
+		wantContains(t, h.stdout(), "no active Claude Code account")
 	})
 
 	t.Run("a managed login", func(t *testing.T) {
@@ -85,7 +83,7 @@ func TestStatus(t *testing.T) {
 		if code := h.run("status"); code != ExitOK {
 			t.Fatalf("exit = %d: %s", code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "Account 1", "one@example.com", "40%")
+		wantContains(t, h.stdout(), "1", "one@example.com", "40%")
 	})
 
 	t.Run("an unmanaged login says how to store it", func(t *testing.T) {
@@ -95,7 +93,7 @@ func TestStatus(t *testing.T) {
 		if code := h.run("status"); code != ExitOK {
 			t.Fatalf("exit = %d: %s", code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "ccswap add")
+		wantContains(t, h.stdout(), "stranger@example.com", "Not managed", "aaswap login")
 	})
 
 	t.Run("as JSON, an absent login is null", func(t *testing.T) {
@@ -118,7 +116,7 @@ func TestSwitchToAnAccount(t *testing.T) {
 	if code := h.run("switch", "2"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Account 2", "two@example.com")
+	wantContains(t, h.stdout(), "2", "two@example.com")
 	if live := h.switcher.Creds.ReadActive().Value; !strings.Contains(live, "tok-2") {
 		t.Errorf("the live credential is %q", live)
 	}
@@ -133,91 +131,33 @@ func TestBareSwitchRotates(t *testing.T) {
 	if code := h.run("switch"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Account 3")
+	wantContains(t, h.stdout(), "3")
 
 	h.login("3", "three@example.com")
 	if code := h.run("switch"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Account 1")
+	wantContains(t, h.stdout(), "1")
 }
 
 func TestSwitchByAliasAndEmail(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
 	h.login("1", "one@example.com")
-	if code := h.run("alias", "2", "work"); code != ExitOK {
+	if code := h.run("account", "rename", "2", "work"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 
-	for _, identifier := range []string{"work", "two@example.com", "2"} {
+	for _, identifier := range []string{"work", "two@example.com"} {
 		h.login("1", "one@example.com")
 		if code := h.run("switch", identifier); code != ExitOK {
 			t.Fatalf("switch %q: exit = %d: %s", identifier, code, h.stderr())
 		}
-		wantContains(t, h.stdout(), "Account 2")
+		wantContains(t, h.stdout(), "two@example.com")
 	}
 }
 
-// The strategy only recommends a move it can prove lands on more headroom.
-func TestSwitchWithTheBestStrategy(t *testing.T) {
-	t.Run("moves to more headroom", func(t *testing.T) {
-		h := newHarness(t)
-		h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-		h.login("1", "one@example.com")
-		h.measuring(map[string]*usage.Result{"1": measured(80), "2": measured(20)})
-
-		if code := h.run("switch", "--strategy", "best"); code != ExitOK {
-			t.Fatalf("exit = %d: %s", code, h.stderr())
-		}
-		wantContains(t, h.stdout(), "Account 2")
-	})
-
-	t.Run("stays rather than moving somewhere worse", func(t *testing.T) {
-		h := newHarness(t)
-		h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-		h.login("1", "one@example.com")
-		h.measuring(map[string]*usage.Result{"1": measured(20), "2": measured(80)})
-
-		if code := h.run("switch", "--strategy", "best"); code != ExitOK {
-			t.Fatalf("exit = %d: %s", code, h.stderr())
-		}
-		wantContains(t, h.stdout(), "most headroom", "Staying put")
-		if live := h.switcher.Creds.ReadActive().Value; !strings.Contains(live, "tok-1") {
-			t.Error("a stay-put decision switched anyway")
-		}
-	})
-
-	t.Run("says so when nothing can be measured", func(t *testing.T) {
-		h := newHarness(t)
-		h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-		h.login("1", "one@example.com")
-		// No fetcher: nothing is measurable.
-		if code := h.run("switch", "--strategy", "best"); code != ExitOK {
-			t.Fatalf("exit = %d: %s", code, h.stderr())
-		}
-		wantContains(t, h.stdout(), "unknown", "Staying put")
-	})
-}
-
-// Unknown is not exhausted: an account whose usage could not be measured stays
-// a candidate, or a failing endpoint would strand the user.
-func TestNextAvailableSkipsOnlyProvenExhaustion(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com", "3": "three@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{
-		"1": measured(50),
-		"2": measured(100), // at its limit — skipped
-		// slot 3 is unmeasurable, and therefore still a candidate
-	})
-
-	if code := h.run("switch", "--strategy", "next-available"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "Account 3")
-}
-
+// The payload names both ends of the move, so a wrapper can log what changed.
 func TestSwitchJSONCarriesBothSides(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
@@ -231,11 +171,11 @@ func TestSwitchJSONCarriesBothSides(t *testing.T) {
 		t.Errorf("switched = %v", payload["switched"])
 	}
 	from := payload["from"].(map[string]any)
-	if from["number"] != float64(1) || from["email"] != "one@example.com" {
+	if from["name"] != "1" || from["email"] != "one@example.com" {
 		t.Errorf("from = %v", from)
 	}
 	to := payload["to"].(map[string]any)
-	if to["number"] != float64(2) {
+	if to["name"] != "2" {
 		t.Errorf("to = %v", to)
 	}
 }
@@ -271,7 +211,7 @@ func TestAFailureInJSONModeIsAnEnvelope(t *testing.T) {
 // type must not break a consumer's branch.
 func TestErrorTypesAreTheTaxonomysNames(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("remove", "nobody", "--json", "--yes"); code != ExitError {
+	if code := h.run("account", "remove", "nobody", "--json", "--yes"); code != ExitError {
 		t.Fatalf("exit = %d", code)
 	}
 	envelope := h.decodeJSON()["error"].(map[string]any)
@@ -280,19 +220,19 @@ func TestErrorTypesAreTheTaxonomysNames(t *testing.T) {
 	}
 }
 
-func TestAddAndRemove(t *testing.T) {
+func TestLoginAndRemove(t *testing.T) {
 	h := newHarness(t)
 	h.login("1", "one@example.com")
 
-	if code := h.run("add"); code != ExitOK {
+	if code := h.run("login"); code != ExitOK {
 		t.Fatalf("add: exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Added", "Account 1", "one@example.com")
+	wantContains(t, h.stdout(), "Added", "one@example.com")
 
-	if code := h.run("remove", "1", "--yes"); code != ExitOK {
+	if code := h.run("account", "remove", "one", "--yes"); code != ExitOK {
 		t.Fatalf("remove: exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Removed", "Account 1")
+	wantContains(t, h.stdout(), "Removed", "one@example.com")
 
 	roster, err := h.switcher.RosterOrEmpty()
 	if err != nil {
@@ -309,8 +249,8 @@ func TestDestructiveCommandsAskFirst(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"remove", []string{"remove", "1"}},
-		{"purge", []string{"purge"}},
+		{"remove", []string{"account", "remove", "1"}},
+		{"remove --all", []string{"account", "remove", "--all"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -347,7 +287,7 @@ func TestNoWayToAskIsARefusal(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com"})
 	h.app.In = nil
 
-	if code := h.run("purge"); code != ExitOK {
+	if code := h.run("account", "remove", "--all"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	roster, err := h.switcher.RosterOrEmpty()
@@ -355,7 +295,7 @@ func TestNoWayToAskIsARefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(roster.Accounts) != 1 {
-		t.Error("a purge ran with nobody to confirm it")
+		t.Error("every account was removed with nobody to confirm it")
 	}
 }
 
@@ -364,10 +304,10 @@ func TestDisableAndEnable(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
 	h.login("1", "one@example.com")
 
-	if code := h.run("disable", "2"); code != ExitOK {
+	if code := h.run("account", "disable", "2"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Disabled", "Account 2")
+	wantContains(t, h.stdout(), "Disabled", "2")
 
 	// A disabled account is out of rotation but still an explicit target.
 	if code := h.run("switch", "2"); code != ExitOK {
@@ -375,12 +315,12 @@ func TestDisableAndEnable(t *testing.T) {
 	}
 
 	// Saying it twice reports the state rather than claiming an edit.
-	if code := h.run("disable", "2"); code != ExitOK {
+	if code := h.run("account", "disable", "2"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "already disabled")
 
-	if code := h.run("enable", "2"); code != ExitOK {
+	if code := h.run("account", "enable", "2"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Enabled", "back in the rotation")
@@ -392,84 +332,10 @@ func TestDisablingTheLastAccountWarns(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com"})
 	h.login("1", "one@example.com")
 
-	if code := h.run("disable", "1"); code != ExitOK {
+	if code := h.run("account", "disable", "1"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No accounts remain in rotation", "ccswap enable")
-}
-
-func TestAliasCommands(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-
-	if code := h.run("alias", "1", "Work"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	// Normalized to lowercase, so resolution is unambiguous.
-	wantContains(t, h.stdout(), `"work"`)
-
-	if code := h.run("alias"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "work", "Account 1")
-
-	// A second slot cannot take the same name.
-	if code := h.run("alias", "2", "work"); code != ExitError {
-		t.Fatalf("exit = %d, want a conflict", code)
-	}
-	wantContains(t, h.stderr(), "already used by account 1")
-
-	if code := h.run("alias", "1", "--unset"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "Removed")
-}
-
-func TestAliasRejections(t *testing.T) {
-	tests := []struct {
-		name    string
-		alias   string
-		wantErr string
-	}{
-		{"purely numeric", "3", "purely numeric"},
-		// Passed after "--" so the shell's flag parser hands it through as the
-		// argument it is.
-		{"leading dash", "-x", "cannot start with"},
-		{"illegal characters", "my alias", "may only contain"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newHarness(t)
-			h.seed(map[string]string{"1": "one@example.com"})
-			if code := h.run("alias", "1", "--", tt.alias); code != ExitError {
-				t.Fatalf("exit = %d, want a rejection", code)
-			}
-			wantContains(t, h.stderr(), tt.wantErr)
-		})
-	}
-}
-
-func TestSwapAndMove(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-
-	if code := h.run("swap", "1", "2"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "Swapped", "1", "2")
-
-	roster, err := h.switcher.RosterOrEmpty()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if roster.Accounts["1"].Email != "two@example.com" {
-		t.Errorf("slot 1 = %q", roster.Accounts["1"].Email)
-	}
-
-	if code := h.run("move", "1", "5"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "Moved", "slot 5")
+	wantContains(t, h.stdout(), "No accounts remain in rotation", "aaswap account enable")
 }
 
 func TestConfig(t *testing.T) {
@@ -530,20 +396,37 @@ func TestConfigRejectsBadInput(t *testing.T) {
 	}
 }
 
-func TestConfigPath(t *testing.T) {
+// Which file the settings came from is part of listing them, not a command of
+// its own: one line is not worth a verb.
+func TestConfigListNamesTheFile(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("config", "path"); code != ExitOK {
+	if code := h.run("config", "list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "settings.json")
+
+	if code := h.run("config", "list", "--json"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	payload := h.decodeJSON()
+	path, _ := payload["path"].(string)
+	if !strings.Contains(path, "settings.json") {
+		t.Errorf("path = %q, want the settings file", path)
+	}
+	if _, ok := payload["settings"].([]any); !ok {
+		t.Errorf("the payload carries no settings: %v", payload)
+	}
 }
 
-// A --model flag overrides the stored setting for this run only.
-func TestTheModelFlagOverridesTheSettingForOneRun(t *testing.T) {
+// The model setting decides which per-model weekly windows a listing counts.
+//
+// Display only. It used to steer the headroom comparison a rotation strategy
+// made, and that comparison is gone — see docs/PROVIDERS.md.
+func TestTheModelSettingReachesTheListing(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
 	h.login("1", "one@example.com")
-	// Account-wide, slot 1 has more headroom. Its Fable window is spent.
+	// Account-wide, slot 1 is comfortable. Its Fable window is spent.
 	h.measuring(map[string]*usage.Result{
 		"1": {
 			FiveHour: &usage.Window{Pct: 10}, SevenDay: &usage.Window{Pct: 10},
@@ -552,17 +435,15 @@ func TestTheModelFlagOverridesTheSettingForOneRun(t *testing.T) {
 		"2": {FiveHour: &usage.Window{Pct: 50}, SevenDay: &usage.Window{Pct: 50}},
 	})
 
-	// Without the flag, slot 1 is the better account and it stays.
-	if code := h.run("switch", "--strategy", "best"); code != ExitOK {
+	if code := h.run("config", "set", "autoswitch.model", "Fable"); code != ExitOK {
+		t.Fatalf("setting the model: exit = %d: %s", code, h.stderr())
+	}
+	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "Staying put")
-
-	// Counting the Fable window, slot 1 is at its limit for that model.
-	if code := h.run("switch", "--strategy", "best", "--model", "Fable"); code != ExitOK {
-		t.Fatalf("exit = %d: %s", code, h.stderr())
-	}
-	wantContains(t, h.stdout(), "Account 2")
+	// The spent per-model window has to be visible, or counting it changed
+	// nothing a person can see.
+	wantContains(t, h.stdout(), "Fable")
 }
 
 func TestUnclaimedListingAndPurge(t *testing.T) {
@@ -582,17 +463,17 @@ func TestUnclaimedListingAndPurge(t *testing.T) {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 
-	if code := h.run("unclaimed"); code != ExitOK {
+	if code := h.run("account", "unclaimed"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "reason:", "the config named slot 1", "--purge")
+	wantContains(t, h.stdout(), "reason:", "the config named 1", "--purge")
 
-	if code := h.run("unclaimed", "--purge", "all", "--yes"); code != ExitOK {
+	if code := h.run("account", "unclaimed", "--purge", "all", "--yes"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Dropped")
 
-	if code := h.run("unclaimed"); code != ExitOK {
+	if code := h.run("account", "unclaimed"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "No preserved credentials")
@@ -600,73 +481,10 @@ func TestUnclaimedListingAndPurge(t *testing.T) {
 
 func TestUnclaimedOnAnEmptyStore(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("unclaimed"); code != ExitOK {
+	if code := h.run("account", "unclaimed"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "No preserved credentials")
-}
-
-// The flag spellings are in people's shell history and their scripts.
-func TestLegacyFlagSpellingsStillWork(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{"--list", []string{"--list"}, "Account 1"},
-		{"--status", []string{"--status"}, "Account 1"},
-		{"--switch-to", []string{"--switch-to", "2"}, "Account 2"},
-		{"--switch-to with an equals sign", []string{"--switch-to=2"}, "Account 2"},
-		{"--switch rotates", []string{"--switch"}, "Account 2"},
-		{"--list with a flag after it", []string{"--list", "--json"}, `"schemaVersion"`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newHarness(t)
-			h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-			h.login("1", "one@example.com")
-
-			if code := h.run(tt.args...); code != ExitOK {
-				t.Fatalf("exit = %d: %s", code, h.stderr())
-			}
-			wantContains(t, h.stdout(), tt.want)
-		})
-	}
-}
-
-func TestTranslateLegacyFlags(t *testing.T) {
-	tests := []struct {
-		in   []string
-		want []string
-	}{
-		{[]string{"--list"}, []string{"list"}},
-		{[]string{"--list", "--json"}, []string{"list", "--json"}},
-		{[]string{"--switch"}, []string{"switch"}},
-		{[]string{"--switch", "--strategy", "best"}, []string{"switch", "--strategy", "best"}},
-		{[]string{"--switch-to", "2"}, []string{"switch", "2"}},
-		{[]string{"--remove-account=3"}, []string{"remove", "3"}},
-		// A verb is left alone.
-		{[]string{"list", "--json"}, []string{"list", "--json"}},
-		// A flag that is not a legacy spelling passes through, so cobra reports
-		// it rather than this silently swallowing it.
-		{[]string{"--nonsense"}, []string{"--nonsense"}},
-		// Only the FIRST token is translated: a later one is an argument.
-		{[]string{"alias", "1", "--list"}, []string{"alias", "1", "--list"}},
-		{nil, nil},
-	}
-	for _, tt := range tests {
-		got := translateLegacyFlags(tt.in)
-		if len(got) != len(tt.want) {
-			t.Errorf("translateLegacyFlags(%v) = %v, want %v", tt.in, got, tt.want)
-			continue
-		}
-		for i := range got {
-			if got[i] != tt.want[i] {
-				t.Errorf("translateLegacyFlags(%v) = %v, want %v", tt.in, got, tt.want)
-				break
-			}
-		}
-	}
 }
 
 // No arguments is a request for help, not a failure.
@@ -743,7 +561,7 @@ func TestExportAndImportRoundTripThroughTheCLI(t *testing.T) {
 	from.login("1", "one@example.com")
 
 	path := filepath.Join(t.TempDir(), "accounts.json")
-	if code := from.run("export", path); code != ExitOK {
+	if code := from.run("account", "export", path); code != ExitOK {
 		t.Fatalf("export: exit = %d: %s", code, from.stderr())
 	}
 	// The summary is on stderr, so a piped export yields nothing but the file.
@@ -756,7 +574,7 @@ func TestExportAndImportRoundTripThroughTheCLI(t *testing.T) {
 	testutil.AssertPerm(t, path, 0o600)
 
 	to := newHarness(t)
-	if code := to.run("import", path); code != ExitOK {
+	if code := to.run("account", "import", path); code != ExitOK {
 		t.Fatalf("import: exit = %d: %s", code, to.stderr())
 	}
 	wantContains(t, to.stdout(), "Imported", "one@example.com", "two@example.com")
@@ -776,7 +594,7 @@ func TestExportToStdoutIsPureJSON(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com"})
 
-	if code := h.run("export", "-"); code != ExitOK {
+	if code := h.run("account", "export", "-"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	payload := h.decodeJSON()
@@ -795,14 +613,14 @@ func TestExportToStdoutIsPureJSON(t *testing.T) {
 func TestImportFromStdin(t *testing.T) {
 	from := newHarness(t)
 	from.seed(map[string]string{"1": "one@example.com"})
-	if code := from.run("export", "-"); code != ExitOK {
+	if code := from.run("account", "export", "-"); code != ExitOK {
 		t.Fatalf("export: exit = %d: %s", code, from.stderr())
 	}
 	envelope := from.stdout()
 
 	to := newHarness(t)
 	to.app.In = strings.NewReader(envelope)
-	if code := to.run("import", "-"); code != ExitOK {
+	if code := to.run("account", "import", "-"); code != ExitOK {
 		t.Fatalf("import: exit = %d: %s", code, to.stderr())
 	}
 	wantContains(t, to.stdout(), "Imported", "one@example.com")
@@ -817,7 +635,7 @@ func TestImportRefusesAnEncryptedEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := h.run("import", path); code != ExitError {
+	if code := h.run("account", "import", path); code != ExitError {
 		t.Fatalf("exit = %d, want a refusal", code)
 	}
 	wantContains(t, h.stderr(), "Decrypt it before importing", "gpg")
@@ -825,7 +643,7 @@ func TestImportRefusesAnEncryptedEnvelope(t *testing.T) {
 
 func TestImportOfAMissingFile(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("import", filepath.Join(t.TempDir(), "nope.json")); code != ExitError {
+	if code := h.run("account", "import", filepath.Join(t.TempDir(), "nope.json")); code != ExitError {
 		t.Fatalf("exit = %d", code)
 	}
 	wantContains(t, h.stderr(), "import file not found")
@@ -836,31 +654,31 @@ func TestMappings(t *testing.T) {
 	h.seed(map[string]string{"1": "one@example.com"})
 	dir := t.TempDir()
 
-	if code := h.run("map", "1", dir); code != ExitOK {
+	if code := h.run("dir", "map", "1", dir); code != ExitOK {
 		t.Fatalf("map: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Mapped", "one@example.com")
 
-	if code := h.run("mappings"); code != ExitOK {
+	if code := h.run("dir", "list"); code != ExitOK {
 		t.Fatalf("mappings: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "one@example.com")
 
-	if code := h.run("unmap", dir); code != ExitOK {
+	if code := h.run("dir", "unmap", dir); code != ExitOK {
 		t.Fatalf("unmap: exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Unmapped")
 
-	if code := h.run("mappings"); code != ExitOK {
+	if code := h.run("dir", "list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	wantContains(t, h.stdout(), "No directories are mapped", "ccswap map")
+	wantContains(t, h.stdout(), "No directories are mapped", "aaswap dir map")
 }
 
 func TestMappingAnUnknownAccount(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com"})
-	if code := h.run("map", "nobody@example.com", t.TempDir()); code != ExitError {
+	if code := h.run("dir", "map", "nobody@example.com", t.TempDir()); code != ExitError {
 		t.Fatalf("exit = %d", code)
 	}
 	wantContains(t, h.stderr(), "does not match any managed account")
@@ -905,124 +723,8 @@ func TestSplitRunArgs(t *testing.T) {
 	}
 }
 
-func TestAutoOnce(t *testing.T) {
-	tests := []struct {
-		name     string
-		setup    func(*harness)
-		wantCode int
-		wantSaid string
-	}{
-		{
-			name: "nothing to do",
-			setup: func(h *harness) {
-				h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-				h.login("1", "one@example.com")
-				h.measuring(map[string]*usage.Result{"1": measured(50), "2": measured(10)})
-			},
-			wantCode: 2,
-			wantSaid: "below-threshold",
-		},
-		{
-			name: "a switch",
-			setup: func(h *harness) {
-				h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-				h.login("1", "one@example.com")
-				h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
-			},
-			wantCode: 0,
-			wantSaid: "account 2",
-		},
-		{
-			name: "nowhere to go",
-			setup: func(h *harness) {
-				h.seed(map[string]string{"1": "one@example.com"})
-				h.login("1", "one@example.com")
-				h.measuring(map[string]*usage.Result{"1": measured(95)})
-			},
-			wantCode: 3,
-			wantSaid: "no-candidates",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newHarness(t)
-			tt.setup(h)
-
-			if code := h.run("auto", "--once"); code != tt.wantCode {
-				t.Fatalf("exit = %d, want %d: %s%s", code, tt.wantCode, h.stdout(), h.stderr())
-			}
-			wantContains(t, h.stdout(), tt.wantSaid)
-		})
-	}
-}
-
 // The event stream is one JSON object per line, so a consumer can tail it.
-func TestAutoJSONIsOneEventPerLine(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
-
-	if code := h.run("auto", "--once", "--json"); code != 0 {
-		t.Fatalf("exit = %d: %s%s", code, h.stdout(), h.stderr())
-	}
-
-	var kinds []string
-	for line := range strings.SplitSeq(strings.TrimSpace(h.stdout()), "\n") {
-		var event map[string]any
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			t.Fatalf("a line is not one JSON object: %v\n%s", err, line)
-		}
-		if event["schemaVersion"] != float64(jsonout.SchemaVersion) {
-			t.Errorf("schemaVersion = %v", event["schemaVersion"])
-		}
-		if event["ts"] == "" {
-			t.Errorf("an event carries no timestamp: %v", event)
-		}
-		kinds = append(kinds, event["event"].(string))
-	}
-	if !slices.Contains(kinds, "poll") || !slices.Contains(kinds, "switch") {
-		t.Errorf("events = %v, want a poll and a switch", kinds)
-	}
-}
-
-// A dry run reports the decision and changes nothing.
-func TestAutoDryRun(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{"1": measured(95), "2": measured(10)})
-
-	if code := h.run("auto", "--once", "--dry-run"); code != 0 {
-		t.Fatalf("exit = %d: %s%s", code, h.stdout(), h.stderr())
-	}
-	wantContains(t, h.stdout(), "would switch")
-	if live := h.switcher.Creds.ReadActive().Value; !strings.Contains(live, "tok-1") {
-		t.Errorf("a dry run moved the live login: %q", live)
-	}
-}
-
-// A flag overrides the stored policy for one run only.
-func TestAutoThresholdFlagOverridesTheSetting(t *testing.T) {
-	h := newHarness(t)
-	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
-	h.login("1", "one@example.com")
-	h.measuring(map[string]*usage.Result{"1": measured(60), "2": measured(10)})
-
-	// At the default threshold, 60% is fine.
-	if code := h.run("auto", "--once"); code != 2 {
-		t.Fatalf("exit = %d, want no action: %s", code, h.stdout())
-	}
-
-	// Lowered, it is not.
-	if code := h.run("auto", "--once", "--threshold", "50"); code != 0 {
-		t.Fatalf("exit = %d, want a switch: %s%s", code, h.stdout(), h.stderr())
-	}
-	wantContains(t, h.stdout(), "account 2")
-}
-
-func TestAddToken(t *testing.T) {
+func TestLoginWithAToken(t *testing.T) {
 	tests := []struct {
 		name      string
 		token     string
@@ -1034,11 +736,11 @@ func TestAddToken(t *testing.T) {
 			// A synthesized label, because these tokens carry no address and
 			// making the user invent one is noise.
 			name: "a setup token", token: "sk-ant-oat01-abcdef",
-			wantKind: swap.KindOAuth, wantEmail: "setup-token-1@token.local",
+			wantKind: swap.KindOAuth, wantEmail: "setup-token@token.local",
 		},
 		{
 			name: "a managed API key", token: "sk-ant-api03-abcdef",
-			wantKind: swap.KindAPIKey, wantEmail: "api-key-1@token.local",
+			wantKind: swap.KindAPIKey, wantEmail: "api-key@token.local",
 		},
 		{
 			name: "with an address", token: "sk-ant-oat01-abcdef",
@@ -1049,7 +751,7 @@ func TestAddToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := newHarness(t)
-			args := append([]string{"add-token", tt.token}, tt.flags...)
+			args := append([]string{"login", "--token", tt.token}, tt.flags...)
 			if code := h.run(args...); code != ExitOK {
 				t.Fatalf("exit = %d: %s", code, h.stderr())
 			}
@@ -1059,7 +761,8 @@ func TestAddToken(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			account := roster.Accounts["1"]
+			name := roster.Names()[0]
+			account := roster.Accounts[name]
 			if account == nil || account.Email != tt.wantEmail {
 				t.Fatalf("roster = %+v", roster.Accounts)
 			}
@@ -1067,7 +770,7 @@ func TestAddToken(t *testing.T) {
 				t.Errorf("kind = %q, want %q", account.AuthKind(), tt.wantKind)
 			}
 
-			stored, _ := h.switcher.Creds.ReadAccount("1", tt.wantEmail)
+			stored, _ := h.switcher.Creds.ReadAccount(name, tt.wantEmail)
 			if tt.wantKind == swap.KindAPIKey {
 				// Stored raw: that is what Claude Code's API-key axis reads.
 				if stored != tt.token {
@@ -1082,14 +785,14 @@ func TestAddToken(t *testing.T) {
 
 // A token on the command line lands in the shell history, so piping it is worth
 // having.
-func TestAddTokenFromStdin(t *testing.T) {
+func TestLoginWithATokenFromStdin(t *testing.T) {
 	h := newHarness(t)
 	h.app.In = strings.NewReader("sk-ant-oat01-piped\n")
 
-	if code := h.run("add-token", "-"); code != ExitOK {
+	if code := h.run("login", "--token", "-"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	stored, _ := h.switcher.Creds.ReadAccount("1", "setup-token-1@token.local")
+	stored, _ := h.switcher.Creds.ReadAccount("setup-token", "setup-token@token.local")
 	if !strings.Contains(stored, "sk-ant-oat01-piped") {
 		t.Errorf("the stored credential is %q", stored)
 	}
@@ -1097,12 +800,12 @@ func TestAddTokenFromStdin(t *testing.T) {
 
 // Identity is the address alone here, so two kinds sharing one could not be
 // told apart at switch time.
-func TestAddTokenRefusesACrossKindCollision(t *testing.T) {
+func TestLoginWithATokenRefusesACrossKindCollision(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add-token", "sk-ant-oat01-abc", "--email", "me@example.com"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-oat01-abc", "--email", "me@example.com"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	if code := h.run("add-token", "sk-ant-api03-abc", "--email", "me@example.com"); code != ExitError {
+	if code := h.run("login", "--token", "sk-ant-api03-abc", "--email", "me@example.com"); code != ExitError {
 		t.Fatalf("exit = %d, want a refusal", code)
 	}
 	wantContains(t, h.stderr(), "already exists as an OAuth account", "distinct --email")
@@ -1110,12 +813,12 @@ func TestAddTokenRefusesACrossKindCollision(t *testing.T) {
 
 // A new token for an account already here refreshes it in place rather than
 // making a second slot.
-func TestAddTokenRefreshesInPlace(t *testing.T) {
+func TestLoginWithATokenRefreshesInPlace(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add-token", "sk-ant-oat01-first", "--email", "me@example.com"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-oat01-first", "--email", "me@example.com"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
-	if code := h.run("add-token", "sk-ant-oat01-second", "--email", "me@example.com"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-oat01-second", "--email", "me@example.com"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "Updated the token")
@@ -1127,21 +830,21 @@ func TestAddTokenRefreshesInPlace(t *testing.T) {
 	if len(roster.Accounts) != 1 {
 		t.Errorf("the account was duplicated: %+v", roster.Accounts)
 	}
-	stored, _ := h.switcher.Creds.ReadAccount("1", "me@example.com")
+	stored, _ := h.switcher.Creds.ReadAccount("me", "me@example.com")
 	if !strings.Contains(stored, "second") {
 		t.Errorf("the stored credential is %q", stored)
 	}
 }
 
-func TestAddTokenRejections(t *testing.T) {
+func TestLoginWithATokenRejections(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    []string
 		wantErr string
 	}{
-		{"an empty token", []string{"add-token", "   "}, "cannot be empty"},
-		{"a bad address", []string{"add-token", "tok", "--email", "not an email"}, "not a valid email"},
-		{"a slot of zero", []string{"add-token", "tok", "--slot", "0"}, ""},
+		{"an empty token", []string{"login", "--token", "   "}, "cannot be empty"},
+		{"a bad address", []string{"login", "--token", "tok", "--email", "not an email"}, "not a valid email"},
+		{"a numeric name", []string{"login", "--token", "tok", "--name", "0"}, "cannot be purely numeric"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1166,11 +869,89 @@ func TestAddTokenRejections(t *testing.T) {
 // blank.
 func TestATokenAccountReportsNoQuota(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add-token", "sk-ant-api03-abc"); code != ExitOK {
+	if code := h.run("login", "--token", "sk-ant-api03-abc"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	if code := h.run("list"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	wantContains(t, h.stdout(), "API key", "no quota")
+}
+
+// A name is where an account's credential is filed, so renaming has to move
+// stored material — not just relabel a row.
+func TestRenameMovesTheStoredMaterial(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"work": "one@example.com"})
+
+	if code := h.run("account", "rename", "work", "Personal"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "Renamed", "work", "personal")
+
+	roster, err := h.switcher.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roster.Accounts["personal"] == nil {
+		t.Fatalf("accounts = %v, want one called \"personal\"", roster.Names())
+	}
+	if _, still := roster.Accounts["work"]; still {
+		t.Error("the old name survived")
+	}
+	if value, _ := h.switcher.Creds.ReadAccount("personal", "one@example.com"); value == "" {
+		t.Error("the credential did not move with the name")
+	}
+	if value, _ := h.switcher.Creds.ReadAccount("work", "one@example.com"); value != "" {
+		t.Error("the credential was left behind under the old name")
+	}
+}
+
+// Taking a name another account holds would file two accounts in one place.
+func TestRenameRefusesAHeldName(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"work": "one@example.com", "spare": "two@example.com"})
+
+	if code := h.run("account", "rename", "work", "spare"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	}
+	wantContains(t, h.stderr(), "already")
+}
+
+// --all and an account name are two different requests, and doing either one
+// silently when both were given would remove more or less than was asked.
+func TestRemoveRefusesAllTogetherWithAnAccount(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+	h.app.Confirm = func(string) bool { return true }
+
+	if code := h.run("account", "remove", "--all", "1"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	}
+	roster, err := h.switcher.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Accounts) != 1 {
+		t.Error("a refused removal changed the roster anyway")
+	}
+}
+
+// Naming nothing at all is a request that cannot be carried out, and must not
+// become "remove everything".
+func TestRemoveWithNoAccountRefuses(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+	h.app.Confirm = func(string) bool { return true }
+
+	if code := h.run("account", "remove"); code != ExitError {
+		t.Fatalf("exit = %d, want a refusal: %s", code, h.stdout())
+	}
+	roster, err := h.switcher.RosterOrEmpty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Accounts) != 1 {
+		t.Error("removing with no argument removed something")
+	}
 }

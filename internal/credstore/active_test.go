@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 func init() {
@@ -358,7 +358,7 @@ func TestDeleteActiveKeychainEntry(t *testing.T) {
 	})
 }
 
-// ~/.claude belongs to Claude Code; narrowing its mode is not ccswap's call, and
+// ~/.claude belongs to Claude Code; narrowing its mode is not aaswap's call, and
 // the parent of ~/.claude.json is the user's home directory.
 func TestActiveCredentialsFileDoesNotHardenItsDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {

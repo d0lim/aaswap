@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/buildinfo"
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/transfer"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/buildinfo"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/transfer"
 	"github.com/spf13/cobra"
 )
 
@@ -22,8 +22,8 @@ func (a *App) exportCommand() *cobra.Command {
 		Use:   "export PATH",
 		Short: "Write accounts to a portable file",
 		Long: "Use \"-\" to write to stdout, which is how you add your own encryption:\n" +
-			"  ccswap export - | gpg -c > accounts.gpg\n\n" +
-			"The file carries live refresh tokens in the clear. ccswap does not encrypt\n" +
+			"  aaswap account export - | gpg -c > accounts.gpg\n\n" +
+			"The file carries live refresh tokens in the clear. aaswap does not encrypt\n" +
 			"it, because your own tools do that better than a scheme invented here.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -43,7 +43,7 @@ func (a *App) importCommand() *cobra.Command {
 		Use:   "import PATH",
 		Short: "Restore accounts from a portable file",
 		Long: "Use \"-\" to read from stdin:\n" +
-			"  gpg -d accounts.gpg | ccswap import -\n\n" +
+			"  gpg -d accounts.gpg | aaswap account import -\n\n" +
 			"An account that already exists here is left alone unless --force says\n" +
 			"otherwise — except one whose stored credential is quarantined as dead,\n" +
 			"which a plain import replaces.",
@@ -136,7 +136,7 @@ func (a *App) runImport(source string, force bool) error {
 
 	if a.json {
 		type row struct {
-			Number  string   `json:"number"`
+			Name    string   `json:"name"`
 			Email   string   `json:"email"`
 			Outcome string   `json:"outcome"`
 			Notes   []string `json:"notes,omitzero"`
@@ -144,7 +144,7 @@ func (a *App) runImport(source string, force bool) error {
 		rows := make([]row, len(result.Accounts))
 		for i, account := range result.Accounts {
 			rows[i] = row{
-				Number: account.Number, Email: account.Email,
+				Name: account.Name, Email: account.Email,
 				Outcome: string(account.Outcome), Notes: account.Notes,
 			}
 		}
@@ -159,7 +159,7 @@ func (a *App) runImport(source string, force bool) error {
 		transfer.Skipped:   "Skipped",
 	}
 	for _, account := range result.Accounts {
-		line := fmt.Sprintf("%s (slot %s)", account.Email, account.Number)
+		line := fmt.Sprintf("%s (%s)", account.Email, account.Name)
 		if account.Outcome == transfer.Skipped {
 			a.printer.Println(a.printer.Dimmed(verbs[account.Outcome] + " " + line))
 		} else {

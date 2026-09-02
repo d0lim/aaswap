@@ -5,7 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/d0lim/ccswap/internal/render"
+	"github.com/d0lim/aaswap/internal/render"
 )
 
 // Palette is the TUI's colors for one terminal background.

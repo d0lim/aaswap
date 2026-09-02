@@ -1,4 +1,4 @@
-// Package cli is ccswap's command surface.
+// Package cli is aaswap's command surface.
 //
 // It is a package rather than living in main so it can be tested: every command
 // writes through an [App]'s streams and returns an error, and nothing calls
@@ -6,14 +6,15 @@
 //
 // # Two spellings of one interface
 //
-// Commands are verbs — `ccswap list`, `ccswap switch 2` — and every one of them
-// also answers to the flag spelling it replaced (`ccswap --list`, `ccswap
+// Commands are verbs — `aaswap list`, `aaswap switch 2` — and every one of them
+// also answers to the flag spelling it replaced (`aaswap --list`, `aaswap
 // --switch-to 2`). The flags are hidden from help so the verbs are the one
 // documented interface, but they keep working: they are in people's shell
 // history and their scripts.
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
@@ -23,13 +24,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/session"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/session"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
@@ -57,10 +58,24 @@ type App struct {
 
 	// NewSwitcher builds the switcher a command operates on. Injected so tests
 	// substitute a fixture.
-	NewSwitcher func() (*swap.Switcher, error)
+	NewSwitcher func(provider string) (*swap.Switcher, error)
 
 	// Confirm asks a yes-or-no question. Nil falls back to reading In.
 	Confirm func(prompt string) bool
+
+	// Choose asks a multiple-choice question, returning the key chosen. Nil
+	// falls back to reading In — and, because a non-nil Choose is by
+	// definition someone to ask, setting it makes the App interactive.
+	Choose func(prompt string, options []Choice) string
+
+	// HandOver replaces the real process handover. Nil uses it.
+	//
+	// `run` normally exec()s the provider's binary and never returns, which
+	// cannot be exercised in process — so it never was. Injecting it is what
+	// lets the session tests assert WHICH binary was launched and in what
+	// environment, the two things a multi-provider launch can get wrong while
+	// looking like it worked.
+	HandOver func(binary string, args, env []string) error
 
 	printer *render.Printer
 	errs    *render.Printer
@@ -69,8 +84,9 @@ type App struct {
 	json bool
 	// assumeYes answers every confirmation with yes.
 	assumeYes bool
-	// overrides are the policy knobs a flag may override for this run.
-	overrides settings.Overrides
+	// provider is the auth domain this invocation addresses. Empty means the
+	// default, which is Claude.
+	provider string
 	// awaitTuning collapses the login wait's polling cadence. Zero uses the
 	// production one; a test sets it so the wait is not measured in seconds.
 	// OnWaiting is always supplied by awaitLogin and never read from here.
@@ -90,12 +106,23 @@ func New() *App {
 	return app
 }
 
-func defaultSwitcher() (*swap.Switcher, error) {
-	resolver, err := paths.FromEnv()
+// ProviderEnv pins the provider for a shell session, so it does not have to be
+// repeated on every command.
+const ProviderEnv = "AASWAP_PROVIDER"
+
+// providerFromEnv reads the pinned provider, empty when none is set.
+func providerFromEnv() string {
+	return strings.TrimSpace(os.Getenv(ProviderEnv))
+}
+
+func defaultSwitcher(provider string) (*swap.Switcher, error) {
+	// Every provider's home variable, so one this build knows only by
+	// declaration still has its home honoured.
+	resolver, err := paths.FromEnv(swap.ProviderHomeEnvs()...)
 	if err != nil {
 		return nil, err
 	}
-	s := swap.New(resolver)
+	s := swap.NewForProvider(resolver, provider)
 	s.Settings = settings.Load(resolver.BackupRoot())
 	return s, nil
 }
@@ -114,19 +141,12 @@ func (a *App) Execute(ctx context.Context, args []string) int {
 	}
 
 	root := a.rootCommand()
-	args = translateLegacyFlags(args)
 	a.configureLogging(hasFlag(args, "--debug"), hasFlag(args, "--json"))
 	root.SetArgs(args)
 	root.SetOut(a.Out)
 	root.SetErr(a.Err)
 
 	if err := root.ExecuteContext(ctx); err != nil {
-		// An outcome carried as an exit code is not a failure to report: the
-		// command already said everything it had to say, in the shape the
-		// caller asked for.
-		if code, ok := errors.AsType[exitCode](err); ok {
-			return int(code)
-		}
 		return a.reportError(err)
 	}
 	return ExitOK
@@ -192,19 +212,49 @@ func (a *App) emitJSON(payload any) {
 	_, _ = a.Out.Write(append(data, '\n'))
 }
 
-// switcher builds the switcher for a command, applying this run's overrides.
+// switcher builds the switcher for a command, for the provider this invocation
+// addresses.
 func (a *App) switcher() (*swap.Switcher, error) {
-	s, err := a.NewSwitcher()
+	name := cmp.Or(a.provider, providerFromEnv(), swap.ProviderClaude)
+	// Refused before anything reads a store: a typo must not quietly create an
+	// empty section and report no accounts.
+	if !swap.KnownProvider(name) {
+		return nil, fmt.Errorf("%w: %q is not a provider this build manages. Known: %s",
+			apperr.ErrValidation, name, strings.Join(swap.Providers(), ", "))
+	}
+	return a.switcherFor(name)
+}
+
+// switcherFor builds the switcher for a NAMED provider, for the one command
+// whose subject is not the provider the invocation addresses: adopting a
+// predecessor store, which held only Claude Code accounts whatever the caller
+// was pointed at.
+func (a *App) switcherFor(name string) (*swap.Switcher, error) {
+	s, err := a.NewSwitcher(name)
 	if err != nil {
 		return nil, err
 	}
-	s.Settings.AutoSwitch = settings.Clamp(settings.MergeCLI(s.Settings.AutoSwitch, a.overrides))
+	s.Settings.AutoSwitch = settings.Clamp(s.Settings.AutoSwitch)
 	// A replaced backup credential leaves that slot's session profile holding
 	// the previous generation, which still passes the local reuse check. The
 	// switcher does not know about profiles, so the command layer — which does
 	// — supplies the invalidation.
 	s.OnBackupWritten = func(accountNum, email string) {
 		a.invalidateSessionProfile(s, accountNum, email)
+	}
+
+	// Before any command touches the store. A table written by an older release
+	// addresses accounts by slot number and files their credentials the same
+	// way; every command below assumes names. Doing it here rather than inside
+	// each command means there is exactly one place where the two shapes meet.
+	moved, err := s.EnsureUpgraded()
+	if err != nil {
+		return nil, err
+	}
+	if moved > 0 && !a.json {
+		a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+			"Upgraded %d account(s) to the current store format. They are addressed "+
+				"by name now — run `aaswap list` to see them.", moved)))
 	}
 	return s, nil
 }
@@ -220,8 +270,8 @@ func (a *App) invalidateSessionProfile(s *swap.Switcher, accountNum, email strin
 	switch outcome {
 	case session.MarkFailed:
 		a.errs.Warning(fmt.Sprintf(
-			"account %s's credential changed but its session profile could not be "+
-				"invalidated; `ccswap run %s` may keep using the superseded one until "+
+			"%s's credential changed but its session profile could not be "+
+				"invalidated; `aaswap run %s` may keep using the superseded one until "+
 				"you remove the profile: %v", accountNum, accountNum, err))
 	case session.Marked:
 		a.printer.Println(a.printer.Dimmed(

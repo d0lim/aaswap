@@ -1,17 +1,6 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
 # superpowers session planning artifacts (not part of the project)
 docs/superpowers/
 
 # Go build artifacts
-/ccswap
+/aaswap
 /dist/

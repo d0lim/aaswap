@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 var base = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -33,7 +33,7 @@ func newFixture(t *testing.T) *fixture {
 	dir := t.TempDir()
 	f := &fixture{t: t, now: base, dir: dir, acct: Identity{Email: "one@example.com"}}
 	f.ids = map[string]Identity{"1": f.acct}
-	f.store = New(dir)
+	f.store = NewForProvider(dir, "claude")
 	f.store.Now = func() time.Time { return f.now }
 	// Sequential rather than random, so a failed assertion names a token a
 	// human can find in the file.
@@ -351,7 +351,7 @@ func TestTheOnDiskShapeIsStable(t *testing.T) {
 // The table lives in the cache directory, which is throwaway by construction.
 func TestTheStoreLivesInTheCacheDirectory(t *testing.T) {
 	dir := t.TempDir()
-	s := New(dir)
+	s := NewForProvider(dir, "claude")
 	if got, want := s.Path(), filepath.Join(dir, "usage.json"); got != want {
 		t.Errorf("Path = %q, want %q", got, want)
 	}

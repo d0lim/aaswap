@@ -1,4 +1,4 @@
-// Package tui is ccswap's interactive dashboard.
+// Package tui is aaswap's interactive dashboard.
 //
 // # Why a redesign rather than a port
 //
@@ -10,7 +10,7 @@
 // [tea.Cmd], and its result arrives as a message.
 //
 // That rule earns its keep in this program specifically. A collect pass can
-// wait seconds on the store lock while another ccswap or a live Claude Code
+// wait seconds on the store lock while another aaswap or a live Claude Code
 // holds it. A dashboard that froze there would look crashed at precisely the
 // moment it is reporting on someone's credentials.
 package tui
@@ -23,9 +23,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // Options configures one dashboard run.
@@ -62,7 +62,7 @@ func Run(ctx context.Context, opts Options) error {
 	_, err := program.Run()
 	// Leaving is not failing. Bubble Tea reports both ways out as errors —
 	// ErrInterrupted for its own Ctrl-C handler, ErrProgramKilled for the
-	// cancelled context ccswap's signal handler produces — and passing either
+	// cancelled context aaswap's signal handler produces — and passing either
 	// upward would hand the shell a non-zero status for a normal quit.
 	//
 	// Matched on the sentinels rather than inferred from ctx.Err(), so the two

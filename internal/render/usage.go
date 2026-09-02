@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/pace"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/pace"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // sentinelNotes explain a derived state in the terms a user can act on.
@@ -22,7 +22,7 @@ var sentinelNotes = map[string]string{
 	"foreign credential":   "the live credential belongs to another account — a switch repairs it",
 	"api key":              "API key (no quota)",
 	"keychain unavailable": "keychain unavailable — locked or in use; try again",
-	"re-login needed":      "re-login needed — the refresh token is dead; log in with Claude Code, then run: ccswap add",
+	"re-login needed":      "re-login needed — the refresh token is dead; log in again, then run: aaswap login --capture",
 }
 
 // SentinelNote explains a sentinel, falling back to the sentinel itself so an

@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // RecheckCooldown is how long after a Keychain failure the store waits before
@@ -37,7 +37,7 @@ const RecheckCooldown = 60 * time.Second
 // The distinction matters because an empty read means opposite things in the
 // two worlds. If the Keychain simply could not be asked, an empty result proves
 // nothing and the user must not be told to re-add an account whose backup is
-// alive but unread. If ccswap deliberately wrote the credential to the file,
+// alive but unread. If aaswap deliberately wrote the credential to the file,
 // nothing failed, the file is the authority, and an empty read means the slot
 // really is empty.
 type capability struct {
@@ -138,7 +138,7 @@ func (c *capability) observe[T any](fn func() (T, error)) (T, error) {
 	// later write fell back. Measured: a read times out, the Keychain recovers
 	// and the cooldown lapses, then a write pins and the verdict is stuck
 	// forever, with degraded=true, "keychain unavailable" on every usage pass,
-	// and `ccswap add` refused.
+	// and `aaswap add` refused.
 	//
 	// Cleared unconditionally rather than only when the decision was unprobed:
 	// the decision is about which backend to use and is deliberately sticky,

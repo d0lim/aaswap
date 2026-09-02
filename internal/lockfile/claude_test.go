@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 func testResolver(t *testing.T) *paths.Resolver {
@@ -71,7 +71,7 @@ func TestLockDirectoriesHonorConfigDir(t *testing.T) {
 	}
 }
 
-// Claude Code's refresh path takes both credential locks, so ccswap must hold
+// Claude Code's refresh path takes both credential locks, so aaswap must hold
 // both for the exclusion to actually cover the refresh window.
 func TestCredentialsLockTakesBothLocks(t *testing.T) {
 	r := testResolver(t)

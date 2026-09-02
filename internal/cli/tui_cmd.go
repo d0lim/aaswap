@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/tui"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -14,7 +14,7 @@ import (
 // machine-readable form. Refusing beats emitting an empty envelope a script
 // would then branch on as if it meant something.
 var errJSONUnsupported = fmt.Errorf(
-	"%w: the dashboard is interactive and has no --json form; use `ccswap list --json`",
+	"%w: the dashboard is interactive and has no --json form; use `aaswap list --json`",
 	apperr.ErrConfig)
 
 // errNotATerminal is what a redirected or piped invocation gets.
@@ -24,7 +24,7 @@ var errJSONUnsupported = fmt.Errorf(
 // who piped the command in a script and needs to be told which command to use
 // instead.
 var errNotATerminal = fmt.Errorf(
-	"%w: the dashboard needs a terminal; use `ccswap list`, or `ccswap list --json` from a script",
+	"%w: the dashboard needs a terminal; use `aaswap list`, or `aaswap list --json` from a script",
 	apperr.ErrConfig)
 
 func (a *App) tuiCommand() *cobra.Command {
@@ -34,8 +34,8 @@ func (a *App) tuiCommand() *cobra.Command {
 		Short:   "Open the interactive dashboard",
 		Long: "An interactive account list: usage bars, reset times, and switching\n" +
 			"without retyping a slot number.\n\n" +
-			"Needs a terminal. With output redirected, use `ccswap list` instead —\n" +
-			"and `ccswap list --json` when a program is reading it.",
+			"Needs a terminal. With output redirected, use `aaswap list` instead —\n" +
+			"and `aaswap list --json` when a program is reading it.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runTUI(cmd)

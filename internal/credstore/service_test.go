@@ -7,11 +7,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
-// The derivation is pinned against Claude Code's own: ccswap and Claude Code must
+// The derivation is pinned against Claude Code's own: aaswap and Claude Code must
 // name the same Keychain item, or neither can see the other's credential.
 func TestKeychainServiceName(t *testing.T) {
 	t.Run("is a stable 8-hex-digit suffix", func(t *testing.T) {

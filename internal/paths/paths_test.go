@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
-// These tests pin ccswap's path resolution to Claude Code's own. If they drift,
-// ccswap reads the wrong files and misattributes accounts (issue #16).
+// These tests pin aaswap's path resolution to Claude Code's own. If they drift,
+// aaswap reads the wrong files and misattributes accounts (issue #16).
 
 func TestClaudeConfigHome(t *testing.T) {
 	home := t.TempDir()

@@ -1,4 +1,4 @@
-// Package claudeapi is the only place ccswap talks to Anthropic over the
+// Package claudeapi is the only place aaswap talks to Anthropic over the
 // network: the OAuth token endpoint, the profile endpoint that resolves a token
 // to an account identity, and the usage endpoint that reports rate-limit
 // windows.
@@ -43,7 +43,7 @@ const (
 	DefaultProfileURL = "https://api.anthropic.com/api/oauth/profile"
 	DefaultUsageURL   = "https://api.anthropic.com/api/oauth/usage"
 
-	// ClientID identifies ccswap to the token endpoint. It is not a secret —
+	// ClientID identifies aaswap to the token endpoint. It is not a secret —
 	// public OAuth clients have no secret to keep — and is the same value
 	// Claude Code itself presents.
 	ClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -182,7 +182,7 @@ func classify(err error) (ErrorKind, *time.Duration) {
 	return KindUnknown, nil
 }
 
-// errBadResponse marks a body the endpoint sent that ccswap could not decode.
+// errBadResponse marks a body the endpoint sent that aaswap could not decode.
 //
 // The decode is wrapped rather than classified by inspecting the JSON package's
 // own error types, so this stays correct across encoding/json changes and does

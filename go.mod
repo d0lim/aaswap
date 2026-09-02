@@ -1,4 +1,4 @@
-module github.com/d0lim/ccswap
+module github.com/d0lim/aaswap
 
 go 1.27.0
 

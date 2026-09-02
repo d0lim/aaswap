@@ -1,14 +1,15 @@
 package swap
 
 import (
-	json "encoding/json/v2"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
 )
 
 // LiveIdentity is who the machine is currently logged in as, read from Claude
@@ -18,11 +19,45 @@ type LiveIdentity struct {
 	OrganizationUUID string
 	OrganizationName string
 	AccountUUID      string
+
+	// Fingerprint digests the credential this identity was read from.
+	//
+	// It names the generation rather than the account, which makes it the one
+	// thing that can answer "did someone log in outside aaswap" — an address
+	// compares equal across a re-login, and the token behind it does not.
+	Fingerprint string
 }
 
 // Identity narrows a live identity to the composite that names an account.
+//
+// The address and its organization when there is one. The fingerprint only
+// when there is not: a provider whose token format nobody has parsed has
+// nothing else to be identified by, and leaving the composite empty would make
+// every such account compare equal to every other.
 func (l LiveIdentity) Identity() Identity {
+	if l.Email == "" {
+		return Identity{Fingerprint: l.Fingerprint}
+	}
 	return Identity{Email: l.Email, OrganizationUUID: l.OrganizationUUID}
+}
+
+// SameAccount reports whether two live reads describe the same ACCOUNT.
+//
+// Every field except the fingerprint, which identifies the credential
+// GENERATION rather than the account. A token refresh landing between two reads
+// changes it while the account is unchanged, and counting that as drift refuses
+// the re-login of the very account being captured.
+//
+// The exception is a provider with no address: there the fingerprint is the only
+// identifying field there is, so a changed one has to read as a different
+// account. aaswap genuinely cannot tell the two apart, and refusing is the safe
+// side of that.
+func (l LiveIdentity) SameAccount(other LiveIdentity) bool {
+	if l.Email == "" || other.Email == "" {
+		return l == other
+	}
+	l.Fingerprint, other.Fingerprint = "", ""
+	return l == other
 }
 
 // DisplayTag is how an account's org context reads to a person.
@@ -55,29 +90,38 @@ func (a *Account) DisplayTag() string {
 // identity, and treating it as one would let every comparison against it
 // succeed vacuously.
 func (s *Switcher) LiveIdentity() (LiveIdentity, bool) {
-	data, ok := readObjectLenient(s.Paths.GlobalConfigPath())
+	spec := s.spec()
+	identity, ok := spec.Resolve(s.readLiveFiles(spec))
 	if !ok {
-		return LiveIdentity{}, false
-	}
-	raw, ok := data["oauthAccount"]
-	if !ok {
-		return LiveIdentity{}, false
-	}
-	var account struct {
-		EmailAddress     string `json:"emailAddress"`
-		OrganizationUUID string `json:"organizationUuid"`
-		OrganizationName string `json:"organizationName"`
-		AccountUUID      string `json:"accountUuid"`
-	}
-	if err := json.Unmarshal(raw, &account); err != nil || account.EmailAddress == "" {
 		return LiveIdentity{}, false
 	}
 	return LiveIdentity{
-		Email:            account.EmailAddress,
-		OrganizationUUID: account.OrganizationUUID,
-		OrganizationName: account.OrganizationName,
-		AccountUUID:      account.AccountUUID,
+		Email:            identity.Email,
+		OrganizationUUID: identity.OrganizationUUID,
+		OrganizationName: identity.OrganizationName,
+		AccountUUID:      identity.AccountUUID,
+		Fingerprint:      identity.Fingerprint,
 	}, true
+}
+
+// readLiveFiles reads the provider's declared files from their live locations,
+// keyed by declared path.
+//
+// One pass, and every field of the resulting identity comes from it. Reading
+// twice — once for the address and once near the write — lets a login landing
+// in between pair one account's token with another's metadata, which is
+// precisely the failure the ownership guards exist to close.
+//
+// An unreadable file is simply absent from the map. The declaration says which
+// files are optional; the resolver decides what their absence means.
+func (s *Switcher) readLiveFiles(spec providerpkg.Spec) map[string]string {
+	files := map[string]string{}
+	for path, location := range s.liveFileLocations(spec) {
+		if data, err := os.ReadFile(location); err == nil {
+			files[path] = string(data)
+		}
+	}
+	return files
 }
 
 // LiveIdentityMatches reports whether the live config names this identity right
@@ -104,12 +148,12 @@ func (s *Switcher) LiveIdentityMatches(identity Identity) bool {
 // account's identity on another's credential — labelled as one account,
 // containing another.
 //
-// The comparison is against the WHOLE triple that was read, never a rebuild
+// The comparison is against the WHOLE identity that was read, never a rebuild
 // from its parts: a rebuild describes no real account, so the guard would never
 // match and would refuse every time rather than only on a race.
 func (s *Switcher) RejectIdentityDrift(verified LiveIdentity) error {
 	now, ok := s.LiveIdentity()
-	if ok && now == verified {
+	if ok && now.SameAccount(verified) {
 		return nil
 	}
 	current := "unknown"
@@ -164,8 +208,8 @@ func RejectLiveAPIKeyCapture(credentials string) error {
 	if !credstore.LooksLikeAPIKey(credentials) {
 		return nil
 	}
-	return fmt.Errorf("%w: the active login is an API-key account. Add it with "+
-		"`ccswap add-token sk-ant-api...` instead", apperr.ErrValidation)
+	return fmt.Errorf("%w: the active login is an API-key account. Store it with "+
+		"`aaswap login --token sk-ant-api...` instead", apperr.ErrValidation)
 }
 
 // RejectCrossKindCollision refuses to register a token whose identity already
@@ -178,7 +222,7 @@ func RejectLiveAPIKeyCapture(credentials string) error {
 // The default token labels never collide, so this only ever fires on a forced
 // address.
 func (s *Switcher) RejectCrossKindCollision(roster *Roster, email string, isAPIKey bool) error {
-	num, ok := roster.FindSlot(Identity{Email: email})
+	num, ok := roster.FindName(Identity{Email: email})
 	if !ok {
 		return nil
 	}
@@ -190,7 +234,7 @@ func (s *Switcher) RejectCrossKindCollision(roster *Roster, email string, isAPIK
 	if existing == incoming {
 		return nil
 	}
-	return fmt.Errorf("%w: %q already exists as an %s account (slot %s); cannot add it "+
+	return fmt.Errorf("%w: %q already exists as an %s account (%s); cannot add it "+
 		"as an %s account. Pass a distinct --email",
 		apperr.ErrValidation, email, kindLabel(existing), num, kindLabel(incoming))
 }
@@ -213,17 +257,27 @@ func kindLabel(k Kind) string {
 // across two organizations is two accounts with two quotas, and picking one
 // would silently switch the user to an account they did not name.
 func (s *Switcher) ResolveIdentifier(roster *Roster, identifier string) (string, bool, error) {
-	if isDigits(identifier) {
-		return identifier, true, nil
+	if roster == nil || identifier == "" {
+		return "", false, nil
 	}
-	if num, ok := findByAlias(roster, identifier); ok {
-		return num, true, nil
+	// The name is the key, so an exact hit needs no search. Case-folded because
+	// names are stored lowercased and a person typing one should not have to
+	// remember that.
+	//
+	// A name and an address can never collide, so the order below is not a
+	// precedence rule to reason about: NormalizeName refuses "@", and every
+	// address has one.
+	wanted := strings.ToLower(identifier)
+	for name := range roster.Accounts {
+		if name == wanted {
+			return name, true, nil
+		}
 	}
 
 	var matches []string
-	for _, num := range roster.Numbers() {
-		if roster.Accounts[num].Email == identifier {
-			matches = append(matches, num)
+	for _, name := range roster.Names() {
+		if strings.EqualFold(roster.Accounts[name].Email, identifier) {
+			matches = append(matches, name)
 		}
 	}
 	switch len(matches) {
@@ -234,39 +288,12 @@ func (s *Switcher) ResolveIdentifier(roster *Roster, identifier string) (string,
 	}
 
 	details := make([]string, len(matches))
-	for i, num := range matches {
-		details[i] = fmt.Sprintf("%s [%s]", num, roster.Accounts[num].DisplayTag())
+	for i, name := range matches {
+		details[i] = fmt.Sprintf("%s [%s]", name, roster.Accounts[name].DisplayTag())
 	}
 	return "", false, fmt.Errorf("%w: email %q is ambiguous — it matches accounts: %s. "+
-		"Use the account number instead (for example, `ccswap switch 1`)",
-		apperr.ErrConfig, identifier, strings.Join(details, ", "))
-}
-
-// findByAlias resolves an alias case-insensitively.
-//
-// An empty alias never matches. Accounts without one store no alias at all, and
-// comparing against the empty string would otherwise match the first aliasless
-// account in the roster.
-func findByAlias(roster *Roster, alias string) (string, bool) {
-	if alias == "" || roster == nil {
-		return "", false
-	}
-	want := strings.ToLower(alias)
-	for _, num := range roster.Numbers() {
-		if strings.ToLower(roster.Accounts[num].Alias) == want {
-			return num, true
-		}
-	}
-	return "", false
-}
-
-// AliasInUse reports which other slot already holds an alias.
-func AliasInUse(roster *Roster, alias, excludeNum string) (string, bool) {
-	num, ok := findByAlias(roster, alias)
-	if !ok || num == excludeNum {
-		return "", false
-	}
-	return num, true
+		"Use the account name instead (for example, `aaswap switch %s`)",
+		apperr.ErrConfig, identifier, strings.Join(details, ", "), matches[0])
 }
 
 func isDigits(s string) bool {

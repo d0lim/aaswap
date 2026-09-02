@@ -1,7 +1,7 @@
 // Package paths resolves where Claude Code keeps its config and credentials,
-// and where ccswap keeps its backups.
+// and where aaswap keeps its backups.
 //
-// The resolution rules mirror Claude Code's own so ccswap reads and writes the
+// The resolution rules mirror Claude Code's own so aaswap reads and writes the
 // very same files (from the claude-code source):
 //
 //   - Config home: CLAUDE_CONFIG_DIR if set, else ~/.claude.
@@ -10,8 +10,8 @@
 //     .claude.json sits at the home directory by default, not inside .claude/.
 //   - Credentials: <config-home>/.credentials.json.
 //
-// The ccswap backup root follows the XDG Base Directory Specification on
-// Linux and WSL ($XDG_DATA_HOME/ccswap) and uses ~/.ccswap-backup on macOS and
+// The aaswap backup root follows the XDG Base Directory Specification on
+// Linux and WSL ($XDG_DATA_HOME/aaswap) and uses ~/.aaswap-backup on macOS and
 // Windows.
 //
 // # Why a Resolver instead of package functions
@@ -37,13 +37,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // Backup directory names.
 //
-// ccswap keeps its own store, separate from the claude-swap project it was
+// aaswap keeps its own store, separate from the claude-swap project it was
 // forked from. That is not cosmetic. Both projects stamp the same schema
 // version numbers into settings.json, usage.json and the roster, and the
 // version is how each decides whether a file is one it understands — the
@@ -52,25 +52,18 @@ import (
 // so the first one to bump it would silently wipe the other's state. Sharing a
 // backup root only looks like compatibility.
 //
-// A claude-swap store is therefore FOREIGN. See [Resolver.ClaudeSwapRoots] and
-// the `ccswap import-store` command, which moves one over on request.
+// A predecessor's store is therefore FOREIGN. See [Resolver.Predecessors] and
+// the `aaswap account adopt` command, which moves one over on request.
 const (
 	// BackupDirName is the XDG data directory, used on Linux and WSL.
-	BackupDirName = "ccswap"
+	BackupDirName = "aaswap"
 	// RosterFileName is the account table's name inside a backup root. Named
 	// here because "is there a store at this path" is a question about
-	// locations, and both ccswap's own roots and a foreign one answer it.
+	// locations, and both aaswap's own roots and a foreign one answer it.
 	RosterFileName = "sequence.json"
 	// LegacyBackupDirName is the pre-XDG backup directory, still the layout
 	// used on macOS and Windows.
-	LegacyBackupDirName = ".ccswap-backup"
-)
-
-// claude-swap's own backup directory names, which ccswap only ever reads, and
-// only when asked to import.
-const (
-	claudeSwapDirName       = "claude-swap"
-	claudeSwapLegacyDirName = ".claude-swap-backup"
+	LegacyBackupDirName = ".aaswap-backup"
 )
 
 // Resolver answers every "where does that file live" question from a fixed set
@@ -79,6 +72,11 @@ const (
 type Resolver struct {
 	// Home is the user's home directory ($HOME, or %USERPROFILE% on Windows).
 	Home string
+	// CodexHomeDir is CODEX_HOME, or "" when unset. Codex's counterpart to
+	// CLAUDE_CONFIG_DIR, and the same warning applies: it relocates a live
+	// tool's whole directory.
+	CodexHomeDir string
+
 	// ConfigDir is CLAUDE_CONFIG_DIR, or "" when unset. When set it relocates
 	// Claude Code's entire profile, which is how session mode isolates accounts.
 	ConfigDir string
@@ -94,6 +92,16 @@ type Resolver struct {
 	// would send the lookup to the wrong item.
 	SecureStorageConfigDir    string
 	SecureStorageConfigDirSet bool
+	// HomeOverrides holds the home-relocating environment variable of every
+	// provider this build offers, keyed by variable name and omitting the ones
+	// that were unset.
+	//
+	// Generic because the set is not fixed: a provider is added by declaring
+	// it, and its home variable has to be honoured without editing this struct.
+	// ConfigDir and CodexHomeDir remain as named fields because the layers that
+	// read them predate providers entirely.
+	HomeOverrides map[string]string
+
 	// Platform selects the backup layout. Held as a field rather than detected
 	// on demand so tests can exercise every platform's layout on one host.
 	Platform platform.Platform
@@ -106,19 +114,29 @@ func New(home string, p platform.Platform) *Resolver {
 }
 
 // FromEnv builds a Resolver from the process environment. This is the only
-// place in ccswap that reads these variables.
+// place in aaswap that reads these variables.
 //
 // In a test binary it panics rather than return a Resolver pointing at the
 // developer's real account store — see [guardRealStore].
-func FromEnv() (*Resolver, error) {
+func FromEnv(homeEnvs ...string) (*Resolver, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("locate home directory: %w: %w", apperr.ErrConfig, err)
 	}
 	secure, secureSet := os.LookupEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+	// Every provider's home variable, so one that this build learned about by
+	// declaration alone is still honoured.
+	overrides := map[string]string{}
+	for _, name := range homeEnvs {
+		if value := os.Getenv(name); value != "" {
+			overrides[name] = value
+		}
+	}
 	r := &Resolver{
 		Home:                      home,
-		ConfigDir:                 os.Getenv("CLAUDE_CONFIG_DIR"),
+		ConfigDir:                 os.Getenv(ClaudeConfigDirEnv),
+		CodexHomeDir:              os.Getenv(CodexHomeEnv),
+		HomeOverrides:             overrides,
 		XDGDataHome:               os.Getenv("XDG_DATA_HOME"),
 		SecureStorageConfigDir:    secure,
 		SecureStorageConfigDirSet: secureSet,
@@ -128,6 +146,10 @@ func FromEnv() (*Resolver, error) {
 	return r, nil
 }
 
+// ClaudeConfigDirEnv relocates Claude Code's entire profile, which is how
+// session mode isolates accounts.
+const ClaudeConfigDirEnv = "CLAUDE_CONFIG_DIR"
+
 // ClaudeConfigHome returns Claude Code's config home: CLAUDE_CONFIG_DIR when
 // set, else ~/.claude.
 func (r *Resolver) ClaudeConfigHome() string {
@@ -135,6 +157,27 @@ func (r *Resolver) ClaudeConfigHome() string {
 		return r.ConfigDir
 	}
 	return filepath.Join(r.Home, ".claude")
+}
+
+// ProviderHome is where a provider's tool keeps everything.
+//
+// env is the variable that relocates it and defaultDir is the fallback,
+// relative to the user's home — both taken from the provider's declaration
+// rather than known here, so this resolves a provider whose name this package
+// has never seen.
+//
+// The two named fields win over the generic map because a Resolver built by
+// New — every test — sets those and not the map.
+func (r *Resolver) ProviderHome(env, defaultDir string) string {
+	switch {
+	case env == ClaudeConfigDirEnv && r.ConfigDir != "":
+		return r.ConfigDir
+	case env == CodexHomeEnv && r.CodexHomeDir != "":
+		return r.CodexHomeDir
+	case env != "" && r.HomeOverrides[env] != "":
+		return r.HomeOverrides[env]
+	}
+	return filepath.Join(r.Home, defaultDir)
 }
 
 // DefaultClaudeConfigHome returns the *default* profile's config home, ignoring
@@ -180,12 +223,12 @@ func (r *Resolver) CredentialsPath() string {
 	return filepath.Join(r.ClaudeConfigHome(), ".credentials.json")
 }
 
-// LegacyBackupRoot returns the pre-XDG backup root, ~/.ccswap-backup.
+// LegacyBackupRoot returns the pre-XDG backup root, ~/.aaswap-backup.
 func (r *Resolver) LegacyBackupRoot() string {
 	return filepath.Join(r.Home, LegacyBackupDirName)
 }
 
-// BackupRoot returns ccswap's backup root for this platform.
+// BackupRoot returns aaswap's backup root for this platform.
 //
 // Per the XDG spec, XDG_DATA_HOME is ignored when unset, empty, or not
 // absolute. A leading ~ is expanded so values like "~/data" — set through
@@ -200,7 +243,7 @@ func (r *Resolver) BackupRoot() string {
 	return r.LegacyBackupRoot()
 }
 
-// CacheDir is where ccswap keeps regenerable state: the usage table and the
+// CacheDir is where aaswap keeps regenerable state: the usage table and the
 // update-check stamp.
 //
 // Everything under it is throwaway by construction. Deleting it costs at most
@@ -235,40 +278,89 @@ func exists(path string) bool {
 	return err == nil
 }
 
-// ClaudeSwapRoots returns the places a claude-swap store could be on this
-// platform, most-current layout first.
+// Predecessor is a store written by a project this one succeeded.
 //
-// Only ever read, and only when the user asks to import. The two projects share
-// no on-disk state by design; this is the one seam between them, and it exists
-// so someone arriving from claude-swap does not have to move files by hand.
+// Only ever read, and only when the user asks. Two independently evolving
+// projects cannot share a backup root — they stamp the same schema versions
+// into the same filenames — so a predecessor's store is FOREIGN, and this is
+// the one seam between them. It exists so someone arriving from an earlier name
+// does not have to move credentials by hand.
+type Predecessor struct {
+	// Name is what the project called itself, and what its store directory and
+	// Keychain service are named after.
+	Name string
+	// Roots are the places its store could be on this platform, most-current
+	// layout first.
+	Roots []string
+	// KeychainService is where it filed backup credentials on macOS.
+	KeychainService string
+}
+
+// Found is a predecessor store that actually exists.
+type Found struct {
+	Predecessor
+	Root string
+}
+
+// predecessorNames are the projects this one succeeded, closest ancestor first.
 //
-// Both layouts are returned rather than just the one this platform would write,
-// because a store can arrive from another machine through file sync — the same
-// reason [Resolver.MigrateLegacyBackupDir] has to reason about a legacy
-// directory appearing on a host that would never create one.
-func (r *Resolver) ClaudeSwapRoots() []string {
-	legacy := filepath.Join(r.Home, claudeSwapLegacyDirName)
+// Order is the answer for a machine that ran both: the closer ancestor is far
+// likelier to hold the store someone actually wants.
+var predecessorNames = []string{"ccswap", "claude-swap"}
+
+// Predecessors lists every project whose store this one can adopt.
+//
+// Both layouts are returned for each rather than just the one this platform
+// would write, because a store can arrive from another machine through file
+// sync — the same reason [Resolver.MigrateLegacyBackupDir] has to reason about
+// a legacy directory appearing on a host that would never create one.
+func (r *Resolver) Predecessors() []Predecessor {
+	out := make([]Predecessor, 0, len(predecessorNames))
+	for _, name := range predecessorNames {
+		out = append(out, Predecessor{
+			Name:            name,
+			Roots:           r.predecessorRoots(name),
+			KeychainService: name,
+		})
+	}
+	return out
+}
+
+func (r *Resolver) predecessorRoots(name string) []string {
+	legacy := filepath.Join(r.Home, "."+name+"-backup")
 	if !r.Platform.UsesXDG() {
 		return []string{legacy}
 	}
-	xdg := filepath.Join(r.Home, ".local", "share", claudeSwapDirName)
+	xdg := filepath.Join(r.Home, ".local", "share", name)
 	if custom := r.expandTilde(r.XDGDataHome); filepath.IsAbs(custom) {
-		xdg = filepath.Join(custom, claudeSwapDirName)
+		xdg = filepath.Join(custom, name)
 	}
 	return []string{xdg, legacy}
 }
 
-// FindClaudeSwapStore returns the first claude-swap store that exists and
-// carries a roster, and whether there was one.
+// FindPredecessor returns the first predecessor store that exists and carries
+// an account table, and whether there was one.
 //
-// The roster is the test rather than the directory: an empty directory left by
+// The table is the test rather than the directory: an empty directory left by
 // an uninstall is not a store worth telling anyone about, and offering to
 // import nothing is worse than saying nothing.
-func (r *Resolver) FindClaudeSwapStore() (string, bool) {
-	for _, root := range r.ClaudeSwapRoots() {
-		if exists(filepath.Join(root, RosterFileName)) {
-			return root, true
+//
+// This tool's own roots are skipped, so a store already in use is never offered
+// back to its owner as something to import.
+func (r *Resolver) FindPredecessor() (Found, bool) {
+	ours := map[string]bool{
+		r.BackupRoot():       true,
+		r.LegacyBackupRoot(): true,
+	}
+	for _, predecessor := range r.Predecessors() {
+		for _, root := range predecessor.Roots {
+			if ours[root] {
+				continue
+			}
+			if exists(filepath.Join(root, RosterFileName)) {
+				return Found{Predecessor: predecessor, Root: root}, true
+			}
 		}
 	}
-	return "", false
+	return Found{}, false
 }

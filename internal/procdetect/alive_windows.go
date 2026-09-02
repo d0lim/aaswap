@@ -9,7 +9,7 @@ import (
 // Windows has no signals, and os.Process.Signal rejects everything but
 // os.Kill — it answers "not supported by windows" for signal 0. Probing that
 // way reports EVERY pid as dead, including this process, which would tell
-// ccswap that no Claude Code is ever running and let it swap a credential out
+// aaswap that no Claude Code is ever running and let it swap a credential out
 // from under a live session.
 //
 // OpenProcess plus the exit code is the actual question. ERROR_ACCESS_DENIED
@@ -28,7 +28,7 @@ func pidAlive(pid int) bool {
 	var code uint32
 	if err := windows.GetExitCodeProcess(handle, &code); err != nil {
 		// The handle opened, so the process object exists. Erring toward alive
-		// is the safe direction: it makes ccswap defer, never yank.
+		// is the safe direction: it makes aaswap defer, never yank.
 		return true
 	}
 	// STILL_ACTIVE. A process that genuinely exited with 259 reads as alive,

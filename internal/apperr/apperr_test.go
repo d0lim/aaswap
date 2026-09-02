@@ -30,7 +30,7 @@ func TestHierarchy(t *testing.T) {
 		},
 		{
 			// The one the CLI treats specially: Claude Code holding its own
-			// lock is not a ccswap defect, but it is still a lock error.
+			// lock is not a aaswap defect, but it is still a lock error.
 			name:      "Claude Code lock timeout",
 			err:       ErrClaudeCodeLockTimeout,
 			ancestors: []error{ErrLock, Err},
@@ -93,14 +93,14 @@ func TestWrappingPreservesTheChain(t *testing.T) {
 }
 
 // A node's message is its own label only. Chaining must not accumulate every
-// ancestor's text into "credential: ccswap error" noise.
+// ancestor's text into "credential: aaswap error" noise.
 func TestMessagesDoNotAccumulate(t *testing.T) {
 	if got, want := ErrCredentialRead.Error(), "failed to read credentials"; got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
 	}
 }
 
-// Everything ccswap raises on purpose must reach the root, because the CLI
+// Everything aaswap raises on purpose must reach the root, because the CLI
 // uses that match to decide between a clean message and a stack trace.
 func TestEveryKindReachesTheRoot(t *testing.T) {
 	all := map[string]error{

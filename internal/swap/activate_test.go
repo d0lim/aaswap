@@ -7,19 +7,25 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/claudeapi"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 // twoAccounts registers two switchable slots and leaves slot 1 live.
+// twoAccounts seeds a store with two switchable accounts.
+//
+// They are NAMED "1" and "2". Nothing creates a name shaped like that any more
+// — NormalizeName refuses a bare number — but the store does not validate keys
+// on read, and a hand-edited table can hold anything. Keeping the fixture on
+// them exercises that, and keeps these tests readable as "account 1".
 func (f *fixture) twoAccounts() *Roster {
 	f.t.Helper()
 	roster := f.seedAccounts(map[string]*Account{
 		"1": {Email: "one@example.com", UUID: "acct-1", Added: Timestamp(f.now)},
 		"2": {Email: "two@example.com", UUID: "acct-2", Added: Timestamp(f.now)},
 	})
-	roster.SetActive("1", f.now)
+	roster.SetActive("1")
 	f.seedRoster(roster)
 	f.setLiveIdentity("one@example.com", "", "", "acct-1")
 	if err := f.Creds.WriteActive(`{"claudeAiOauth":{"accessToken":"tok-1"}}`); err != nil {
@@ -55,7 +61,7 @@ func TestSwitchActivatesTheTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.From == nil || got.From.Number != "1" || got.To.Number != "2" {
+	if got.From == nil || got.From.Name != "1" || got.To.Name != "2" {
 		t.Errorf("outcome = %+v", got)
 	}
 
@@ -64,7 +70,7 @@ func TestSwitchActivatesTheTarget(t *testing.T) {
 		t.Errorf("active credential = %q, want the target's", f.activeCreds())
 	}
 	// And the roster records the new active slot.
-	if num, ok := f.roster().Active(); !ok || num != "2" {
+	if num, ok := f.roster().ActiveName(); !ok || num != "2" {
 		t.Errorf("Active = (%q, %v), want slot 2", num, ok)
 	}
 }
@@ -74,7 +80,7 @@ func TestSwitchActivatesTheTarget(t *testing.T) {
 func TestSwitchPreservesTheUsersOwnConfig(t *testing.T) {
 	f := newFixture(t)
 	f.twoAccounts()
-	// A config with plenty that is none of ccswap's business.
+	// A config with plenty that is none of aaswap's business.
 	if err := os.WriteFile(f.Paths.GlobalConfigPath(), []byte(`{
 	  "oauthAccount": {"emailAddress": "one@example.com"},
 	  "projects": {"/home/u/work": {"allowedTools": ["Bash"]}},
@@ -105,7 +111,7 @@ func TestSwitchPreservesTheUsersOwnConfig(t *testing.T) {
 func TestSwitchBacksUpTheDepartingAccount(t *testing.T) {
 	f := newFixture(t)
 	f.twoAccounts()
-	// Claude Code rotated the live credential since ccswap wrote it.
+	// Claude Code rotated the live credential since aaswap wrote it.
 	const rotated = `{"claudeAiOauth":{"accessToken":"tok-1-rotated","refreshToken":"r1"}}`
 	if err := f.Creds.WriteActive(rotated); err != nil {
 		t.Fatal(err)
@@ -319,7 +325,7 @@ func TestAnEmptyLiveCredentialRefusesTheSwitch(t *testing.T) {
 		t.Error("the departing account's backup was disturbed")
 	}
 	// And the switch did not land.
-	if num, _ := f.roster().Active(); num != "1" {
+	if num, _ := f.roster().ActiveName(); num != "1" {
 		t.Errorf("Active = %q, want the switch not to have landed", num)
 	}
 }
@@ -335,7 +341,7 @@ func TestSwitchingToAnUnusableTarget(t *testing.T) {
 		{
 			name:    "no stored credential",
 			break_:  func(f *fixture) { _ = f.Creds.DeleteAccount("2", "two@example.com") },
-			wantErr: []string{"no stored credentials", "ccswap add --slot 2"},
+			wantErr: []string{"no stored credentials", "aaswap login --capture --name 2"},
 		},
 		{
 			name: "no stored config",
@@ -378,7 +384,7 @@ func TestSwitchingToAnUnusableTarget(t *testing.T) {
 			if f.activeCreds() != liveBefore {
 				t.Errorf("the live credential changed on a failed switch: %q", f.activeCreds())
 			}
-			if num, _ := f.roster().Active(); num != "1" {
+			if num, _ := f.roster().ActiveName(); num != "1" {
 				t.Errorf("Active = %q, want slot 1", num)
 			}
 		})
@@ -437,7 +443,7 @@ func TestActivatingOverAnUnmanagedLiveLogin(t *testing.T) {
 	if !got.Activated {
 		t.Error("an unmanaged live login did not take the direct path")
 	}
-	if got.From == nil || got.From.Number != "" || got.From.Email != "stranger@example.com" {
+	if got.From == nil || got.From.Name != "" || got.From.Email != "stranger@example.com" {
 		t.Errorf("From = %+v, want an unnumbered reference to the unmanaged account", got.From)
 	}
 
@@ -599,7 +605,7 @@ func TestATornLiveConfigIsSalvagedNotDestroyed(t *testing.T) {
 		t.Errorf("the torn config's bytes were not preserved; directory holds %v", names)
 	}
 	// And the switch landed.
-	if num, _ := f.roster().Active(); num != "2" {
+	if num, _ := f.roster().ActiveName(); num != "2" {
 		t.Errorf("Active = %q, want the switch to have landed", num)
 	}
 }
@@ -676,7 +682,7 @@ func TestAnOwnRotationBackfillsAMissingSlotUUID(t *testing.T) {
 		"1": {Email: "one@example.com"},
 		"2": {Email: "two@example.com", UUID: "acct-2"},
 	})
-	roster.SetActive("1", f.now)
+	roster.SetActive("1")
 	f.seedRoster(roster)
 	f.setLiveIdentity("one@example.com", "", "", "")
 	if err := f.Creds.WriteActive(`{"claudeAiOauth":{"accessToken":"a9","refreshToken":"r9"}}`); err != nil {

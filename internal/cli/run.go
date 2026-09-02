@@ -7,15 +7,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/jsonout"
-	"github.com/d0lim/ccswap/internal/mappings"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
-	"github.com/d0lim/ccswap/internal/procdetect"
-	"github.com/d0lim/ccswap/internal/render"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/jsonout"
+	"github.com/d0lim/aaswap/internal/mappings"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/procdetect"
+	"github.com/d0lim/aaswap/internal/render"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
@@ -42,8 +42,10 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 	}
 
 	if len(snapshot.Views) == 0 {
-		a.printer.Println(a.printer.Dimmed("No accounts are managed yet. Log in with Claude Code, then run: ccswap add"))
-		a.noteClaudeSwapStore(s.Paths)
+		a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+			"No accounts are managed yet. Log in with %s, then run: aaswap login --capture",
+			s.Spec().DisplayName())))
+		a.notePredecessorStore(s.Paths)
 		return nil
 	}
 
@@ -53,20 +55,17 @@ func (a *App) runList(cmd *cobra.Command, tokenStatus bool) error {
 		if view.IsActive {
 			marker = a.printer.Accent("● ")
 		}
-		label := fmt.Sprintf("Account %s: %s", view.Number, view.Account.Email)
+		label := fmt.Sprintf("%s: %s", view.Name, view.Account.Email)
 		if view.IsActive {
 			label = a.printer.Bold(label)
 		}
 		trailing := a.printer.Muted(" [" + view.Account.DisplayTag() + "]")
-		if view.Account.Alias != "" {
-			trailing = a.printer.Muted(" ("+view.Account.Alias+")") + trailing
-		}
 		if view.Account.Disabled {
 			trailing += a.printer.Dimmed("  (out of rotation)")
 		}
 		a.printer.Println(marker, label, trailing)
 
-		lines := render.EntryLines(snapshot.Entries[view.Number], now, ageNoteThreshold)
+		lines := render.EntryLines(snapshot.Entries[view.Name], now, ageNoteThreshold)
 		for i, line := range lines {
 			branch := "├"
 			if i == len(lines)-1 {
@@ -109,18 +108,20 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 
 	live, ok := s.LiveIdentity()
 	if !ok {
-		a.printer.Println(a.printer.Bold("Status: "), a.printer.Dimmed("no active Claude account"))
+		a.printer.Println(a.printer.Bold("Status: "),
+			a.printer.Dimmed(fmt.Sprintf("no active %s account", s.Spec().DisplayName())))
 		return nil
 	}
-	slot, managed := snapshot.Roster.FindSlot(live.Identity())
+	slot, managed := snapshot.Roster.FindName(live.Identity())
 	if !managed {
 		a.printer.Println(a.printer.Bold("Status: "), live.Email,
 			a.printer.Muted(" ["+live.DisplayTag()+"]"))
-		a.printer.Println(a.printer.Dimmed("  Not managed by ccswap. Run `ccswap add` to store it."))
+		a.printer.Println(a.printer.Dimmed(
+			"  Not managed by aaswap. Run `aaswap login --capture` to store it."))
 		return nil
 	}
 
-	a.printer.Println(a.printer.Bold("Status: "), a.printer.Accent("Account "+slot),
+	a.printer.Println(a.printer.Bold("Status: "), a.printer.Accent(slot),
 		" ", live.Email, a.printer.Muted(" ["+live.DisplayTag()+"]"))
 	for _, line := range render.EntryLines(snapshot.Entries[slot], s.Now(), ageNoteThreshold) {
 		a.printer.Println("  ", a.printer.Muted(line))
@@ -139,7 +140,7 @@ func (a *App) runStatus(cmd *cobra.Command) error {
 // "the switch did nothing" into "the running session is still on the old
 // account until it restarts".
 //
-// Only the default profile: a `ccswap run` session has its own profile and its
+// Only the default profile: a `aaswap run` session has its own profile and its
 // own credential, and a switch does not touch it.
 func (a *App) reportRunningInstances(s *swap.Switcher) {
 	configDir := s.Paths.DefaultClaudeConfigHome()
@@ -198,7 +199,7 @@ func entrypointLabel(entrypoint string) string {
 	return entrypoint
 }
 
-func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool) error {
+func (a *App) runSwitch(cmd *cobra.Command, target string, force bool) error {
 	s, err := a.switcher()
 	if err != nil {
 		return err
@@ -208,16 +209,13 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 		return err
 	}
 	if len(roster.Accounts) == 0 {
-		return fmt.Errorf("no accounts are managed yet. Log in with Claude Code, then run: ccswap add")
+		return fmt.Errorf("no accounts are managed yet. Log in with %s, then run: "+
+			"aaswap login --capture", s.Spec().DisplayName())
 	}
 
 	if target == "" {
-		target, err = a.chooseTarget(cmd, s, roster, strategy)
-		if err != nil {
+		if target, err = a.chooseTarget(s, roster); err != nil {
 			return err
-		}
-		if target == "" {
-			return nil // a strategy that chose to stay put has already said so
 		}
 	} else {
 		if target, err = resolveTarget(s, roster, target); err != nil {
@@ -250,7 +248,7 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 		verb = "Activated"
 	}
 	a.printer.Println(a.printer.Accent(verb), " ",
-		fmt.Sprintf("Account %s (%s)", outcome.To.Number, outcome.To.Email))
+		fmt.Sprintf("%s (%s)", outcome.To.Name, outcome.To.Email))
 	for _, warning := range outcome.Warnings {
 		a.printer.Warning(warning)
 	}
@@ -258,79 +256,20 @@ func (a *App) runSwitch(cmd *cobra.Command, target, strategy string, force bool)
 }
 
 // chooseTarget picks a rotation or strategy target.
-func (a *App) chooseTarget(cmd *cobra.Command, s *swap.Switcher, roster *swap.Roster, strategy string) (string, error) {
+func (a *App) chooseTarget(s *swap.Switcher, roster *swap.Roster) (string, error) {
 	switchable := s.SwitchableNumbers(roster)
 	if len(switchable) == 0 {
-		return "", fmt.Errorf("no account has both a stored credential and a stored config; " +
-			"re-add one with: ccswap add --slot N")
+		return "", fmt.Errorf("no account has both a stored credential and a stored " +
+			"config; store one again with: aaswap login")
 	}
-
+	// Plain rotation: the next switchable account after the current one,
+	// wrapping. With no current account, the first.
+	//
+	// Deliberately not by headroom. Choosing the account with the most quota
+	// left is rate-limit rotation, which is the thing this tool stopped doing —
+	// see docs/PROVIDERS.md.
 	current, _ := s.CurrentNumber(roster)
-
-	switch strategy {
-	case "":
-		// Plain rotation: the next switchable slot after the current one,
-		// wrapping. With no current account, the first.
-		return rotate(switchable, current), nil
-
-	case "best":
-		snapshot, err := s.TakeSnapshot(cmd.Context(), swap.CollectRequest{})
-		if err != nil {
-			return "", err
-		}
-		target, note := s.SelectBestSwitchable(snapshot, current)
-		if target != "" {
-			return target, nil
-		}
-		a.explainStay(note, current)
-		return "", nil
-
-	case "next-available":
-		snapshot, err := s.TakeSnapshot(cmd.Context(), swap.CollectRequest{})
-		if err != nil {
-			return "", err
-		}
-		// Rotate, skipping accounts known to be at their limit. UNKNOWN is not
-		// exhausted: an account whose usage could not be measured stays a
-		// candidate, or a failing endpoint would strand the user.
-		usageByAccount := swap.UsageByAccount(snapshot.Entries)
-		start := rotationIndex(switchable, current)
-		for i := range switchable {
-			candidate := switchable[(start+i)%len(switchable)]
-			if candidate == current {
-				continue
-			}
-			result, measured := usageByAccount[candidate]
-			if measured && result != nil {
-				if headroom, known := result.Headroom(nil); known && headroom <= 0 {
-					continue
-				}
-			}
-			return candidate, nil
-		}
-		a.printer.Println(a.printer.Dimmed(
-			"Every other account is at its rate limit; staying put."))
-		return "", nil
-	}
-	return "", fmt.Errorf("unknown strategy %q: use 'best' or 'next-available'", strategy)
-}
-
-// explainStay says why a strategy declined to move.
-func (a *App) explainStay(note swap.SelectionNote, current string) {
-	messages := map[swap.SelectionNote]string{
-		swap.NoteNone:                 "No other account is switchable.",
-		swap.NoteCurrentUnavailable:   "The current account's usage is unknown, so no target can be shown to be better. Staying put.",
-		swap.NoteNoComparison:         "No other account's usage could be measured, so no target can be shown to be better. Staying put.",
-		swap.NoteIncompleteComparison: "The current account has the most headroom of those that could be measured, but not every account could be. Staying put.",
-		swap.NoteStay:                 "The current account already has the most headroom. Staying put.",
-		swap.NoteExhausted:            "Every account is at its rate limit; switching would not help. Staying put.",
-	}
-	message, known := messages[note]
-	if !known {
-		message = "Staying put."
-	}
-	_ = current
-	a.printer.Println(a.printer.Dimmed(message))
+	return rotate(switchable, current), nil
 }
 
 // rotate returns the slot after current, wrapping.
@@ -354,33 +293,12 @@ func rotationIndex(switchable []string, current string) int {
 }
 
 func accountRef(ref swap.AccountRef) jsonout.AccountRef {
-	out := jsonout.AccountRef{Email: ref.Email}
-	if ref.Number != "" {
-		number := atoi(ref.Number)
-		out.Number = &number
-	}
-	return out
+	return jsonout.AccountRef{Name: ref.Name, Email: ref.Email}
 }
 
-func (a *App) runAdd(cmd *cobra.Command, slot int, alias string, wait bool) error {
-	s, err := a.switcher()
-	if err != nil {
-		return err
-	}
-	// Ahead of Add, never inside it: the capture must run against whatever is
-	// live at the moment it runs, and a wait that resolved into the same call
-	// would hand Add an identity read seconds before its own.
-	if wait || a.shouldWaitForLogin(s) {
-		if err := a.awaitLogin(cmd.Context(), s); err != nil {
-			return err
-		}
-	}
-	outcome, err := s.Add(cmd.Context(), swap.AddRequest{
-		Slot: slot, Alias: alias, AssumeYes: a.assumeYes, Confirm: a.confirm,
-	})
-	if err != nil {
-		return err
-	}
+// reportAdd narrates a finished capture. Shared by every path that stores an
+// account, so they cannot drift in what they say about the same outcome.
+func (a *App) reportAdd(outcome swap.AddOutcome) error {
 	if outcome.Cancelled {
 		a.printer.Println(a.printer.Dimmed("Cancelled"))
 		return nil
@@ -394,16 +312,16 @@ func (a *App) runAdd(cmd *cobra.Command, slot int, alias string, wait bool) erro
 				"Registering anyway; re-run where the check can complete to confirm.",
 				outcome.Email, outcome.Unverified))
 	}
-	if outcome.MovedFrom != "" {
+	if outcome.RenamedFrom != "" {
 		a.printer.Println(a.printer.Dimmed(
-			fmt.Sprintf("Moved from slot %s → %s", outcome.MovedFrom, outcome.Number)))
+			fmt.Sprintf("Renamed %s → %s", outcome.RenamedFrom, outcome.Name)))
 	}
 	verb := "Added"
 	if outcome.Refreshed {
 		verb = "Updated credentials for"
 	}
 	a.printer.Println(a.printer.Accent(verb), " ",
-		fmt.Sprintf("Account %s: %s", outcome.Number, outcome.Email),
+		fmt.Sprintf("%s: %s", outcome.Name, outcome.Email),
 		a.printer.Muted(" ["+outcome.Tag+"]"))
 	return nil
 }
@@ -425,12 +343,12 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 		return nil
 	}
 	if outcome.WasActive {
-		a.printer.Warning(fmt.Sprintf("Account %s (%s) was the active login. "+
-			"You are still logged in; ccswap simply no longer has a copy.",
-			outcome.Number, outcome.Email))
+		a.printer.Warning(fmt.Sprintf("%s (%s) was the active login. "+
+			"You are still logged in; aaswap simply no longer has a copy.",
+			outcome.Name, outcome.Email))
 	}
 	a.printer.Println(a.printer.Accent("Removed"), " ",
-		fmt.Sprintf("Account %s (%s)", outcome.Number, outcome.Email))
+		fmt.Sprintf("%s (%s)", outcome.Name, outcome.Email))
 	a.pruneMappingsFor(s, mappings.Identity{
 		Email:            outcome.Email,
 		OrganizationUUID: outcome.OrganizationUUID,
@@ -443,11 +361,11 @@ func (a *App) runRemove(cmd *cobra.Command, identifier string) error {
 //
 // Best effort, and reported rather than returned: the account is already gone
 // by the time this runs, and failing the command afterwards would say the
-// removal did not happen. A surviving mapping sends `ccswap run` in that
+// removal did not happen. A surviving mapping sends `aaswap run` in that
 // directory looking for a slot that is not there, which is a confusing error
 // but not a dangerous one.
 func (a *App) pruneMappingsFor(s *swap.Switcher, identity mappings.Identity) {
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	store.Now = s.Now
 	removed, err := store.PruneAccount(identity)
 	if err != nil {
@@ -467,7 +385,7 @@ func (a *App) chooseAmbiguous(matches []swap.AmbiguousMatch) (string, bool) {
 	}
 	a.printer.Println("Several accounts share that address:")
 	for _, match := range matches {
-		a.printer.Println("  ", match.Number, ": ", match.Email,
+		a.printer.Println("  ", match.Name, ": ", match.Email,
 			a.printer.Muted(" ["+match.Tag+"]"))
 	}
 	a.printer.Printf("Enter the account number: ")
@@ -478,7 +396,7 @@ func (a *App) chooseAmbiguous(matches []swap.AmbiguousMatch) (string, bool) {
 	}
 	answer = strings.TrimSpace(answer)
 	for _, match := range matches {
-		if match.Number == answer {
+		if match.Name == answer {
 			return answer, true
 		}
 	}
@@ -501,10 +419,10 @@ func (a *App) runSetDisabled(cmd *cobra.Command, identifier string, disabled boo
 	}
 	if !changed {
 		a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
-			"Account %s (%s) is already %s.", num, email, strings.ToLower(verb))))
+			"%s (%s) is already %s.", num, email, strings.ToLower(verb))))
 		return nil
 	}
-	a.printer.Println(a.printer.Accent(verb), " ", fmt.Sprintf("Account %s (%s)", num, email))
+	a.printer.Println(a.printer.Accent(verb), " ", fmt.Sprintf("%s (%s)", num, email))
 
 	if !disabled {
 		a.printer.Println(a.printer.Dimmed("  It is back in the rotation."))
@@ -518,91 +436,29 @@ func (a *App) runSetDisabled(cmd *cobra.Command, identifier string, disabled boo
 	if current, ok := s.CurrentNumber(roster); ok && current == num {
 		a.printer.Println(a.printer.Dimmed(
 			"  It is the active account — it stays live until you switch away; " +
-				"it just will not be an automatic target."))
+				"a bare `aaswap switch` just will not rotate onto it."))
 	}
 	if len(s.SwitchableNumbers(roster)) == 0 {
-		a.printer.Warning("No accounts remain in rotation — auto-switch and a bare " +
-			"switch have nothing to pick. Re-enable one with: ccswap enable <num|email>")
+		a.printer.Warning("No accounts remain in rotation — a bare `aaswap switch` " +
+			"has nothing to pick. Re-enable one with: aaswap account enable <account>")
 	}
 	return nil
 }
 
-func (a *App) runAlias(cmd *cobra.Command, args []string, unset bool) error {
+func (a *App) runRename(cmd *cobra.Command, identifier, to string) error {
 	s, err := a.switcher()
 	if err != nil {
 		return err
 	}
-
-	switch {
-	case len(args) == 0:
-		rows, err := s.Aliases()
-		if err != nil {
-			return err
-		}
-		if len(rows) == 0 {
-			a.printer.Println(a.printer.Dimmed("No accounts have an alias."))
-			return nil
-		}
-		for _, row := range rows {
-			a.printer.Println("  ", a.printer.Accent(row.Alias), " → ",
-				fmt.Sprintf("Account %s (%s)", row.Number, row.Email))
-		}
-		return nil
-
-	case unset:
-		num, had, err := s.UnsetAlias(args[0])
-		if err != nil {
-			return err
-		}
-		if !had {
-			a.printer.Println(a.printer.Dimmed(fmt.Sprintf("Account %s has no alias.", num)))
-			return nil
-		}
-		a.printer.Println(a.printer.Accent("Removed"), " ", fmt.Sprintf("the alias on account %s", num))
-		return nil
-
-	case len(args) == 2:
-		num, alias, err := s.SetAlias(args[0], args[1])
-		if err != nil {
-			return err
-		}
-		a.printer.Println(a.printer.Accent("Aliased"), " ",
-			fmt.Sprintf("Account %s as %q", num, alias))
-		return nil
-	}
-	return fmt.Errorf("give both an account and a name, or --unset with just the account")
-}
-
-func (a *App) runSwapSlots(cmd *cobra.Command, first, second string) error {
-	s, err := a.switcher()
+	from, name, err := s.Rename(identifier, to)
 	if err != nil {
 		return err
 	}
-	numA, numB, err := s.SwapSlots(first, second)
-	if err != nil {
-		return err
-	}
-	a.printer.Println(a.printer.Accent("Swapped"), " ",
-		fmt.Sprintf("accounts %s and %s", numA, numB))
-	return nil
-}
-
-func (a *App) runMove(cmd *cobra.Command, identifier, target string) error {
-	s, err := a.switcher()
-	if err != nil {
-		return err
-	}
-	from, to, swapped, err := s.MoveAccount(identifier, target)
-	if err != nil {
-		return err
-	}
-	if swapped {
-		a.printer.Println(a.printer.Accent("Swapped"), " ",
-			fmt.Sprintf("accounts %s and %s (slot %s was occupied)", from, to, to))
+	if from == name {
+		a.printer.Println(a.printer.Dimmed(fmt.Sprintf("%s is already called that.", name)))
 		return nil
 	}
-	a.printer.Println(a.printer.Accent("Moved"), " ",
-		fmt.Sprintf("account %s to slot %s", from, to))
+	a.printer.Println(a.printer.Accent("Renamed"), " ", fmt.Sprintf("%s → %s", from, name))
 	return nil
 }
 
@@ -655,7 +511,7 @@ func (a *App) runUnclaimed(cmd *cobra.Command, purge string) error {
 			a.printer.Println("  ", a.printer.Muted("reason: "+entry.Reason))
 		}
 		if entry.ConfigSlot != "" {
-			a.printer.Println("  ", a.printer.Muted("the config named slot "+entry.ConfigSlot))
+			a.printer.Println("  ", a.printer.Muted("the config named "+entry.ConfigSlot))
 		}
 		if entry.CreatedAt != "" {
 			a.printer.Println("  ", a.printer.Muted("preserved "+entry.CreatedAt))
@@ -666,7 +522,8 @@ func (a *App) runUnclaimed(cmd *cobra.Command, purge string) error {
 	}
 	a.printer.Blank()
 	a.printer.Println(a.printer.Dimmed(
-		"Drop one with: ccswap unclaimed --purge <id>, or all of them with --purge all"))
+		"Drop one with: aaswap account unclaimed --purge <id>, or all of them " +
+			"with --purge all"))
 	return nil
 }
 
@@ -707,19 +564,20 @@ func sortedIDs(entries map[string]*credstore.StashEntry) []string {
 
 // noteClaudeSwapStore points out a store left by the claude-swap project.
 //
-// Shown only when ccswap has no accounts of its own, which is the only moment
-// the suggestion is actionable — import-store refuses to merge into a populated
+// Shown only when aaswap has no accounts of its own, which is the only moment
+// the suggestion is actionable — adopt refuses to merge into a populated
 // store, so nagging someone who already has accounts would offer a command that
 // cannot run.
 //
 // A note, never an automatic import: this names another tool's live credential
 // store, and moving one out from under its owner on a first run is not a
 // decision a listing gets to make.
-func (a *App) noteClaudeSwapStore(resolver *paths.Resolver) {
-	source, found := resolver.FindClaudeSwapStore()
-	if !found {
+func (a *App) notePredecessorStore(resolver *paths.Resolver) {
+	found, ok := resolver.FindPredecessor()
+	if !ok {
 		return
 	}
-	a.printer.Println(a.printer.Dimmed(
-		"Found a claude-swap store at " + source + " — `ccswap import-store` moves it over."))
+	a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+		"Found a %s store at %s — `aaswap account adopt` moves it over.",
+		found.Name, found.Root)))
 }

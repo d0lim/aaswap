@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // ShareOptions selects what a profile mirrors from the default one.
@@ -27,9 +27,9 @@ type ShareOptions struct {
 	History bool
 }
 
-// manifest records which entries in a profile ccswap created.
+// manifest records which entries in a profile aaswap created.
 //
-// Without it, turning sharing off could not tell ccswap's own links from files
+// Without it, turning sharing off could not tell aaswap's own links from files
 // the user put there — and removing the wrong ones would destroy their work.
 type manifest struct {
 	Managed []string `json:"managed"`
@@ -101,7 +101,7 @@ func (m *Manager) SyncSharing(sessionDir, defaultProfile string, opts ShareOptio
 	return writeManifest(manifestPath, nowManaged)
 }
 
-// shareOne mirrors a single item, reporting whether ccswap now manages it.
+// shareOne mirrors a single item, reporting whether aaswap now manages it.
 func (m *Manager) shareOne(sessionDir, defaultProfile, name string, managed []string) bool {
 	source := filepath.Join(defaultProfile, name)
 	dest := filepath.Join(sessionDir, name)
@@ -112,7 +112,7 @@ func (m *Manager) shareOne(sessionDir, defaultProfile, name string, managed []st
 
 	target, err := resolveShareTarget(source)
 	if err != nil {
-		// The source vanished, or never existed. Prune ccswap's own entry rather
+		// The source vanished, or never existed. Prune aaswap's own entry rather
 		// than leaving a link to nothing.
 		if slices.Contains(managed, name) {
 			removeManaged(dest)
@@ -122,7 +122,7 @@ func (m *Manager) shareOne(sessionDir, defaultProfile, name string, managed []st
 
 	switch {
 	case isSymlink(dest):
-		// Only ccswap puts a symlink here, so an unmanaged one is adopted rather
+		// Only aaswap puts a symlink here, so an unmanaged one is adopted rather
 		// than treated as user data.
 		if existing, err := os.Readlink(dest); err == nil && existing == target {
 			return true
@@ -180,7 +180,7 @@ func prepareHistoryShare(source, dest string) bool {
 	return true
 }
 
-// removeManaged removes an entry ccswap created.
+// removeManaged removes an entry aaswap created.
 func removeManaged(path string) {
 	if err := os.RemoveAll(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		slog.Warn("could not remove a shared entry", "path", path, "error", err)
@@ -321,7 +321,7 @@ func isSymlink(path string) bool {
 }
 
 // isRegularOrDir reports whether a path exists and is NOT a symlink — that is,
-// whether it holds real data rather than a link ccswap made.
+// whether it holds real data rather than a link aaswap made.
 func isRegularOrDir(path string) bool {
 	info, err := os.Lstat(path)
 	return err == nil && info.Mode()&os.ModeSymlink == 0

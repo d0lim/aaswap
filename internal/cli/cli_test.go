@@ -2,25 +2,30 @@ package cli
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	json "encoding/json/v2"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/session"
+
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 func TestMain(m *testing.M) {
@@ -57,9 +62,12 @@ type harness struct {
 	t        *testing.T
 	app      *App
 	switcher *swap.Switcher
-	out, err bytes.Buffer
-	in       bytes.Buffer
-	now      time.Time
+	// byProvider holds one Switcher per provider, so a test addressing a
+	// second one gets a store scoped to it rather than the default's.
+	byProvider map[string]*swap.Switcher
+	out, err   bytes.Buffer
+	in         bytes.Buffer
+	now        time.Time
 }
 
 func newHarness(t *testing.T) *harness {
@@ -74,21 +82,44 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 
-	h := &harness{t: t, now: testNow}
-	h.switcher = &swap.Switcher{
-		FetchStagger: time.Millisecond,
-		Paths:        resolver,
-		Creds:        credstore.New(resolver, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
-		Usage:        usagestore.New(resolver.CacheDir()),
-		Settings:     settings.Defaults(),
+	h := &harness{t: t, now: testNow, byProvider: map[string]*swap.Switcher{}}
+
+	// One Switcher per provider, BUILT for it rather than relabelled. The
+	// credential store and the profile store are scoped by provider, so a
+	// harness that reused one Switcher across providers would let every test
+	// pass while the real wiring read the wrong tool's files.
+	build := func(name string) *swap.Switcher {
+		if existing, ok := h.byProvider[name]; ok {
+			return existing
+		}
+		spec := provider.MustLookup(cmp.Or(name, provider.Claude))
+		s := &swap.Switcher{
+			Provider:     name,
+			FetchStagger: time.Millisecond,
+			Paths:        resolver,
+			Creds: credstore.NewForProvider(resolver, root,
+				keychain.NewWithRunner(refusingKeychain{}, 0), name,
+				swap.LiveLayout(resolver, name)),
+			// Built the way production builds it. A fixture that leaves this
+			// nil disables every profile-credential check, and the session
+			// tests then pass without exercising the thing they name.
+			Profiles: provider.NewProfiles(spec, resolver.Platform, nil),
+			Usage:    usagestore.NewForProvider(resolver.CacheDir(), name),
+			Settings: settings.Defaults(),
+		}
+		s.SetClock(func() time.Time { return h.now })
+		h.byProvider[name] = s
+		return s
 	}
-	h.switcher.SetClock(func() time.Time { return h.now })
+	h.switcher = build(swap.ProviderClaude)
 
 	h.app = &App{
-		Out:         &h.out,
-		Err:         &h.err,
-		In:          &h.in,
-		NewSwitcher: func() (*swap.Switcher, error) { return h.switcher, nil },
+		Out: &h.out,
+		Err: &h.err,
+		In:  &h.in,
+		NewSwitcher: func(provider string) (*swap.Switcher, error) {
+			return build(provider), nil
+		},
 	}
 	return h
 }
@@ -104,6 +135,11 @@ func (h *harness) run(args ...string) int {
 		Out: &h.out, Err: &h.err, In: h.app.In,
 		NewSwitcher: h.app.NewSwitcher,
 		Confirm:     h.app.Confirm,
+		Choose:      h.app.Choose,
+		// Without this a `run` test exec()s the real binary and REPLACES the
+		// test process, which reads as a pass because the replacement exits 0.
+		HandOver:    h.app.HandOver,
+		provider:    h.app.provider,
 		awaitTuning: h.app.awaitTuning,
 	}
 	return app.Execute(h.t.Context(), args)
@@ -130,7 +166,7 @@ func (h *harness) seed(accounts map[string]string) {
 		h.t.Fatal(err)
 	}
 	for num, email := range accounts {
-		roster.Insert(num, &swap.Account{Email: email, UUID: "acct-" + num}, h.now)
+		roster.Insert(num, &swap.Account{Email: email, UUID: "acct-" + num})
 		if err := h.switcher.Creds.WriteAccount(num, email,
 			`{"claudeAiOauth":{"accessToken":"tok-`+num+`","refreshToken":"r-`+num+`"}}`); err != nil {
 			h.t.Fatal(err)
@@ -160,7 +196,7 @@ func (h *harness) login(num, email string) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	roster.SetActive(num, h.now)
+	roster.SetActive(num)
 	if err := h.switcher.WriteRoster(roster); err != nil {
 		h.t.Fatal(err)
 	}
@@ -183,5 +219,77 @@ func wantContains(t *testing.T, text string, fragments ...string) {
 		if !strings.Contains(text, fragment) {
 			t.Errorf("output does not contain %q:\n%s", fragment, text)
 		}
+	}
+}
+
+// launched records a handover instead of performing it, so a test can assert
+// which binary `run` chose and what environment it built.
+type launched struct {
+	binary string
+	args   []string
+	env    []string
+	called bool
+}
+
+// capturing makes `run` record its handover rather than exec into it.
+func (h *harness) capturing() *launched {
+	record := &launched{}
+	h.app.HandOver = func(binary string, args, env []string) error {
+		record.binary, record.args, record.env, record.called = binary, args, env, true
+		return nil
+	}
+	return record
+}
+
+// env reads one variable out of a recorded launch.
+func (l *launched) env_(name string) (string, bool) {
+	for _, entry := range l.env {
+		if key, value, found := strings.Cut(entry, "="); found && key == name {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+// onPath puts a stub executable named binary on PATH for this test, so
+// exec.LookPath resolves it without the real tool being installed.
+//
+// On Windows LookPath resolves a bare name only through PATHEXT, so the stub
+// needs one of those extensions — and a shell script would not run there
+// anyway. The auth probe does run the stub (`claude auth status`), and an empty
+// exit-0 answer reads as Unknown on every platform, which is what these tests
+// rely on.
+func (h *harness) onPath(t *testing.T, binary string) {
+	t.Helper()
+	dir := t.TempDir()
+	stub := filepath.Join(dir, binary)
+	body := "#!/bin/sh\nexit 0\n"
+	if runtime.GOOS == "windows" {
+		stub += ".cmd"
+		body = "@exit /b 0\r\n"
+	}
+	if err := os.WriteFile(stub, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// sessionDir is where a provider's account keeps its isolated profile.
+func (h *harness) sessionDir(t *testing.T, provider, name, email string) string {
+	t.Helper()
+	s, err := h.app.NewSwitcher(provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return session.DirFor(s.BackupRoot(), s.Spec().Name, name, email)
+}
+
+// stashUnclaimed preserves a credential that belongs to no managed account,
+// which is the state `account unclaimed` reports on.
+func (h *harness) stashUnclaimed(t *testing.T, credentials string) {
+	t.Helper()
+	if _, err := h.switcher.Creds.WriteUnclaimed(credentials,
+		credstore.StashEntry{Reason: "test"}, h.now); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -35,7 +35,7 @@ type LiveState struct {
 	// LoggedIn is false when there is no active login to read.
 	LoggedIn bool
 	// Slot names the roster slot already holding this identity, and is empty
-	// when the account is not one ccswap manages.
+	// when the account is not one aaswap manages.
 	Slot string
 }
 
@@ -56,7 +56,7 @@ func (s *Switcher) LiveState() (LiveState, error) {
 func liveState(roster *Roster, identity LiveIdentity, loggedIn bool) LiveState {
 	state := LiveState{Identity: identity, LoggedIn: loggedIn}
 	if loggedIn {
-		state.Slot, _ = roster.FindSlot(identity.Identity())
+		state.Slot, _ = roster.FindName(identity.Identity())
 	}
 	return state
 }
@@ -78,14 +78,14 @@ type AwaitOptions struct {
 // AwaitNewLogin blocks until Claude Code's live login names a DIFFERENT account
 // than it did when the wait began.
 //
-// This exists because ccswap cannot log anyone in. Claude Code owns the OAuth
-// flow, so registering a second account means a person leaving ccswap, running
-// /login, and coming back — and `ccswap add` refusing outright in the meantime
+// This exists because aaswap cannot log anyone in. Claude Code owns the OAuth
+// flow, so registering a second account means a person leaving aaswap, running
+// /login, and coming back — and `aaswap add` refusing outright in the meantime
 // is a dead end rather than an instruction. Waiting turns the two halves into
 // one command.
 //
 // "Different" is measured against the login present at the start, not against
-// the roster, so re-logging in as an account ccswap already stores also
+// the roster, so re-logging in as an account aaswap already stores also
 // satisfies the wait: that is a credential refresh, and [Switcher.Add] handles
 // it in place. What it will never do is return the account that was already
 // live, because capturing that is what the caller could have done without

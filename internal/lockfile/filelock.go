@@ -1,6 +1,6 @@
-// Package lockfile provides the two kinds of exclusion ccswap needs.
+// Package lockfile provides the two kinds of exclusion aaswap needs.
 //
-// [FileLock] is ccswap's own cross-process lock over its account store: a
+// [FileLock] is aaswap's own cross-process lock over its account store: a
 // conventional advisory lock on a file, held while the roster and credentials
 // are mutated.
 //
@@ -15,10 +15,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
-// DefaultTimeout bounds how long a caller waits for ccswap's own lock.
+// DefaultTimeout bounds how long a caller waits for aaswap's own lock.
 const DefaultTimeout = 10 * time.Second
 
 // pollInterval is how often a waiter re-tries the lock. Advisory locks give no
@@ -29,7 +29,7 @@ const pollInterval = 100 * time.Millisecond
 // FileLock is an exclusive, cross-process lock over a single file.
 //
 // The lock is advisory and tied to the open file description, so the operating
-// system drops it if the process dies — a crashed ccswap cannot leave the
+// system drops it if the process dies — a crashed aaswap cannot leave the
 // account store permanently locked.
 type FileLock struct {
 	path    string
@@ -114,7 +114,7 @@ func (l *FileLock) Release() error {
 // afterwards even if fn panics.
 //
 // A timeout is an error here rather than a silent skip: every caller in
-// ccswap mutates the account store, and doing that unlocked is what the
+// aaswap mutates the account store, and doing that unlocked is what the
 // lock exists to prevent.
 func With(path string, timeout time.Duration, fn func() error) (err error) {
 	l := New(path, timeout)
@@ -124,7 +124,7 @@ func With(path string, timeout time.Duration, fn func() error) (err error) {
 	}
 	if !acquired {
 		return fmt.Errorf(
-			"could not acquire %s within %s — another ccswap may be running: %w",
+			"could not acquire %s within %s — another aaswap may be running: %w",
 			filepath.Base(path), l.timeout, apperr.ErrLock)
 	}
 	defer func() {
