@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -79,6 +80,23 @@ type Login struct {
 	Argv []string
 }
 
+// Steps is how a person performs the login, for the screen that waits for one:
+// what to launch, and — for a tool whose login is a command typed inside its
+// own REPL — what to type once it is up. A tool whose login is a subcommand
+// has one step and an empty second half.
+//
+// Derived from Argv rather than declared twice, so the instruction cannot
+// disagree with the command.
+func (l *Login) Steps() (launch, then string) {
+	if l == nil || len(l.Argv) == 0 {
+		return "", ""
+	}
+	if len(l.Argv) >= 2 && strings.HasPrefix(l.Argv[1], "/") {
+		return l.Argv[0], strings.Join(l.Argv[1:], " ")
+	}
+	return strings.Join(l.Argv, " "), ""
+}
+
 // ShareSet is what an isolated profile mirrors from the default one.
 type ShareSet struct {
 	// Customizations are settings, skills, commands and agents.
@@ -113,6 +131,12 @@ type Session struct {
 	// aaswap cannot tell, and MayReseed turns that into the conservative
 	// answer. See MayReseed.
 	Liveness Liveness
+	// AuthOverrides are the environment variables that would override the
+	// account inside the tool. A session drops them, or `run work` silently
+	// runs as something else. Each tool's are its own: the list used to be
+	// Claude's three for every provider, and a Codex session with
+	// OPENAI_API_KEY exported ran as the key and said nothing.
+	AuthOverrides []string
 }
 
 // MayReseed reports whether aaswap may refresh a stale profile's credential on
@@ -425,6 +449,9 @@ func (s Spec) allFiles() []File {
 	return slices.Concat(s.Files, s.Home.Outside)
 }
 
+// providerName is the shape a provider's name must take. See Validate.
+var providerName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
 // Validate reports a declaration that no command could act on.
 //
 // Run against every shipped declaration by the tests, and worth running against
@@ -433,6 +460,14 @@ func (s Spec) allFiles() []File {
 func (s Spec) Validate() error {
 	if s.Name == "" {
 		return fmt.Errorf("a provider declaration needs a name")
+	}
+	// The name is a directory segment in the vault, the sessions tree and the
+	// configs tree, and a filename suffix for the mappings and usage tables. It
+	// is also what a person types after --provider. A plain identifier is the
+	// only shape that is safe as all of those at once.
+	if !providerName.MatchString(s.Name) {
+		return fmt.Errorf("%q is not a usable provider name: lowercase letters, "+
+			"digits and hyphens, starting with a letter", s.Name)
 	}
 	if s.Home.Default == "" {
 		return fmt.Errorf("%s: a provider declaration needs a home directory", s.Name)

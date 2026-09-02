@@ -56,6 +56,10 @@ func claudeSpec() Spec {
 			// lockfile per editor connection under ide/, for its own use.
 			// Reading those is what makes a Claude profile safe to reseed.
 			Liveness: procdetectLiveness{},
+			// Any of these makes Claude Code ignore the profile's login.
+			AuthOverrides: []string{
+				"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+			},
 		},
 		Hazards: []Hazard{{
 			// The Agent View daemon outlives a session and keeps using the
@@ -108,6 +112,8 @@ func codexSpec() Spec {
 			// a Codex profile is never refreshed out from under a session
 			// aaswap cannot see — see Session.MayReseed.
 			Liveness: nil,
+			// Codex prefers the key over the ChatGPT login when both are set.
+			AuthOverrides: []string{"OPENAI_API_KEY"},
 		},
 		// The app-server and its SQLite state survive a swap the way Claude's
 		// Agent View does, but nobody has confirmed it uses the stale

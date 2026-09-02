@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/d0lim/aaswap/internal/apperr"
 	"github.com/d0lim/aaswap/internal/credstore"
@@ -67,8 +68,7 @@ func (s *Switcher) Add(ctx context.Context, req AddRequest) (AddOutcome, error) 
 
 	identity, ok := s.LiveIdentity()
 	if !ok {
-		return AddOutcome{}, fmt.Errorf("%w: no active %s account found. Log in first",
-			apperr.ErrConfig, s.spec().DisplayName())
+		return AddOutcome{}, s.noLiveAccount()
 	}
 
 	var outcome AddOutcome
@@ -251,6 +251,34 @@ func (s *Switcher) captureVerified(ctx context.Context, identity LiveIdentity) (
 		return CaptureResult{}, err
 	}
 	return captured, nil
+}
+
+// noLiveAccount explains a live login that resolved to no account.
+//
+// Two states look the same to the resolver and need opposite advice. Nothing
+// is logged in: log in. Something is, but it carries no account — a Codex
+// install signed in with an API key has an auth.json and no id_token in it —
+// and telling that person to "log in first" tells someone who is logged in to
+// log in. The credential file's presence is what tells the two apart.
+func (s *Switcher) noLiveAccount() error {
+	spec := s.spec()
+	// Only where the credential IS the identity document. Where the identity
+	// lives in a config beside the credential — Claude — a credential with no
+	// identity is a config that has not been written yet, and "log in first"
+	// is exactly right.
+	if _, separateConfig := spec.ConfigFile(); !separateConfig {
+		live := s.readLiveFiles(spec)
+		for _, secret := range spec.SecretFiles() {
+			if strings.TrimSpace(live[secret.Path]) != "" {
+				return fmt.Errorf("%w: %s is logged in, but the login carries no account "+
+					"identity — an API key rather than an account, most likely. aaswap "+
+					"manages accounts, so there is nothing here to store",
+					apperr.ErrConfig, spec.DisplayName())
+			}
+		}
+	}
+	return fmt.Errorf("%w: no active %s account found. Log in first",
+		apperr.ErrConfig, spec.DisplayName())
 }
 
 // ReadLiveConfig reads Claude Code's config verbatim, for storage alongside the
