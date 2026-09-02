@@ -44,10 +44,6 @@ func (a *App) tuiCommand() *cobra.Command {
 }
 
 func (a *App) runTUI(cmd *cobra.Command) error {
-	s, err := a.switcher()
-	if err != nil {
-		return err
-	}
 	// The dashboard owns the terminal, so --json has nothing to write to and
 	// would be silently ignored. Saying so beats printing an empty object.
 	if a.json {
@@ -56,10 +52,27 @@ func (a *App) runTUI(cmd *cobra.Command) error {
 	if !isTerminal(a.Out) || !isTerminal(a.In) {
 		return errNotATerminal
 	}
-	return tui.Run(cmd.Context(), tui.Options{
-		Switcher: s,
-		Theme:    a.printer.Theme,
-	})
+	// Where nothing says which tool, the dashboard asks on its own screen
+	// rather than at a prompt before it opens — and `p` re-asks later, so the
+	// whole census travels with it either way.
+	name, _, err := a.resolveProvider()
+	if err != nil {
+		return err
+	}
+	census, err := a.providerCensus()
+	if err != nil {
+		return err
+	}
+	opts := tui.Options{Theme: a.printer.Theme, Open: a.switcherFor}
+	for _, choice := range census {
+		opts.Providers = append(opts.Providers, tui.ProviderChoice(choice))
+	}
+	if name != "" {
+		if opts.Switcher, err = a.switcherFor(name); err != nil {
+			return err
+		}
+	}
+	return tui.Run(cmd.Context(), opts)
 }
 
 // isTerminal reports whether a stream is the process's own terminal.

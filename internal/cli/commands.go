@@ -19,8 +19,9 @@ func (a *App) rootCommand() *cobra.Command {
 		Long: "aaswap manages several agent CLI logins on one machine: it stores each\n" +
 			"account's credential, swaps the live login between them, and reports how\n" +
 			"much rate-limit headroom each one has left.\n\n" +
-			"Claude Code is the default. Address another with --provider, and run\n" +
-			"`aaswap doctor` to see what is supported for each.",
+			"No tool is the default. Where only one has accounts stored, that is\n" +
+			"the one addressed; otherwise you are asked, unless --provider says.\n" +
+			"Run `aaswap doctor` to see what is supported for each.",
 		Example: strings.Join([]string{
 			"  aaswap login                     # store the account you are logged in as",
 			"  aaswap list                      # show every account and its usage",
@@ -49,8 +50,8 @@ func (a *App) rootCommand() *cobra.Command {
 	// declaring it, and a hardcoded list would leave the new one working but
 	// undiscoverable.
 	root.PersistentFlags().StringVar(&a.provider, "provider", "",
-		fmt.Sprintf("the auth domain to address: %s (default %s)",
-			strings.Join(provider.Names(), ", "), swap.ProviderClaude))
+		fmt.Sprintf("the auth domain to address: %s (asked when unclear)",
+			strings.Join(provider.Names(), ", ")))
 
 	// What stays at the top level is what gets typed daily. What moves into a
 	// group is what gets typed once a month — and grouping is what keeps a
