@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/d0lim/aaswap/internal/paths"
 )
 
 // unpinned returns the harness to production's rule: no provider is the
@@ -119,4 +123,42 @@ func TestANamedProviderIsNeverQuestioned(t *testing.T) {
 	if len(*asked) != 0 {
 		t.Errorf("asked %q, want no question", *asked)
 	}
+}
+
+// `login` is about a NEW account, and the store cannot say which tool it is
+// for: having only Claude Code accounts stored is exactly the state of someone
+// adding their first Codex account. So a terminal is asked every time.
+func TestLoginAsksWhichToolEvenWhenOnlyOneIsStored(t *testing.T) {
+	h := newHarness(t)
+	h.seed(map[string]string{"1": "one@example.com"})
+	h.unpinned(t)
+	asked := h.choosing("2") // registry order: claude, codex
+	run := h.loggingIn(t, paths.CodexHomeEnv, func(home string) error {
+		return os.WriteFile(filepath.Join(home, "auth.json"), codexAuthJSON(t, "work@example.com", "acct-9", "plus"), 0o600)
+	})
+
+	if code := h.run("login"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	if len(*asked) != 1 || !strings.Contains((*asked)[0], "Which tool is this login for") {
+		t.Fatalf("asked %q, want the tool question", *asked)
+	}
+	if got := strings.Join(run.argv, " "); got != "codex login" {
+		t.Errorf("ran %q, want Codex's login: the answer was Codex", got)
+	}
+	wantContains(t, h.stdout(), "Added work: work@example.com")
+}
+
+// The same command in a script keeps the store's answer: a script cannot be
+// asked, and the one tool with accounts is the only sensible reading.
+func TestLoginWithoutATerminalStillTakesTheOnlyStoredTool(t *testing.T) {
+	h := newHarness(t)
+	h.twoCodexAccounts(t)
+	h.unpinned(t)
+	h.codexLogin("third@example.com", "acct-3", "plus")
+
+	if code := h.run("login", "--capture"); code != ExitOK {
+		t.Fatalf("exit = %d: %s", code, h.stderr())
+	}
+	wantContains(t, h.stdout(), "Added third: third@example.com")
 }
