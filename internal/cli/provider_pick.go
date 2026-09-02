@@ -57,6 +57,28 @@ func (a *App) resolveProvider() (string, []ProviderChoice, error) {
 	return "", choices, nil
 }
 
+// switcherForLogin is switcher() for the one command whose subject is a NEW
+// account: which tool it belongs to is the first thing to settle, and the
+// store cannot settle it. That only Claude Code accounts are stored says
+// nothing about which tool the next login is for — and silently picking it
+// opened Claude Code's login on someone adding their first Codex account. So a
+// terminal is asked whenever the flag and the variable are silent, whatever
+// the store holds. Without a terminal the ordinary rule stands.
+func (a *App) switcherForLogin() (*swap.Switcher, error) {
+	if name := cmp.Or(a.provider, providerFromEnv()); name != "" || !a.interactive() {
+		return a.switcher()
+	}
+	choices, err := a.providerCensus()
+	if err != nil {
+		return nil, err
+	}
+	name, err := a.pickProvider(choices)
+	if err != nil {
+		return nil, err
+	}
+	return a.switcherFor(name)
+}
+
 // providerCensus counts the stored accounts of every provider this build
 // manages, in registry order.
 func (a *App) providerCensus() ([]ProviderChoice, error) {
@@ -92,7 +114,7 @@ func (a *App) pickProvider(choices []ProviderChoice) (string, error) {
 		})
 	}
 	options = append(options, Choice{Key: "q", Label: "cancel"})
-	answer := a.choose("Which tool is this for?", options)
+	answer := a.choose("Which tool is this login for?", options)
 	index, err := strconv.Atoi(answer)
 	if err != nil || index < 1 || index > len(choices) {
 		return "", fmt.Errorf("%w: cancelled, no provider chosen", apperr.ErrValidation)

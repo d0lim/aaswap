@@ -85,7 +85,7 @@ func (a *App) runLogin(cmd *cobra.Command, req loginRequest) error {
 		return a.runAddToken(req.token, req.email, req.name)
 	}
 
-	s, err := a.switcher()
+	s, err := a.switcherForLogin()
 	if err != nil {
 		return err
 	}
