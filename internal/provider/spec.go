@@ -71,11 +71,13 @@ type Home struct {
 	Outside []File
 }
 
-// Login is how a person authenticates this provider's tool.
+// Login is how this provider's tool authenticates.
 //
-// aaswap does not run it. `login` watches for a credential to land and captures
-// what appears (see swap.AwaitNewLogin), so this exists to TELL the user what
-// to type — which is why an unknown provider's login flow is not a blocker.
+// aaswap runs it — pointed at a sandbox by the home variable, so the login the
+// person already has is never touched — and files what lands (see
+// swap.LoginSandbox). It must therefore be a command that exits when the login
+// is done: a subcommand, not something typed into the tool's REPL. `--wait`
+// and the waiting screens use the same argv to TELL the person what to run.
 type Login struct {
 	Argv []string
 }

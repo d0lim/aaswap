@@ -76,6 +76,15 @@ type App struct {
 	// looking like it worked.
 	HandOver func(binary string, args, env []string) error
 
+	// RunTool replaces running the provider's login command to completion.
+	// Nil runs it on the terminal.
+	//
+	// `login` runs the tool's own login pointed at a sandbox and waits for it,
+	// which a test cannot do — there is no browser. Injecting it lets the
+	// login tests assert which command ran, where it was pointed, and what
+	// aaswap did with what landed there.
+	RunTool func(ctx context.Context, argv, env []string) error
+
 	printer *render.Printer
 	errs    *render.Printer
 

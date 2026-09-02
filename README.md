@@ -72,51 +72,50 @@ instead of guessing.
 
 ### Add your first account
 
-Log into your agent CLI, then:
-
 ```bash
 aaswap login
 ```
 
-`login` looks at what is live and says what it will do. With an account logged
-in that aaswap does not yet store, that is simply to store it.
+If you are already logged into the agent CLI, that account is stored as it is.
+Otherwise `login` logs you in: it runs the tool's own login (`claude auth
+login`, `codex login`) pointed at a sandbox, stores what lands there, and on a
+machine with no login makes the new account the live one.
 
 ### Add more accounts
 
-aaswap cannot log you in — the agent CLI owns that flow — so adding another
-account means logging in with it. `login` closes the gap from its side: it
-prints what to do and captures the account the moment the login lands.
+Run the same command again. The tool's login opens, you finish it with the
+account you want to add, and it is stored.
 
 ```bash
 aaswap login
 ```
 
 ```
-  Logged in as work@example.com [Acme] — already stored as work.
+  Logging in with Claude Code. Finish the login it opens with the account you want to add.
+    The account you are logged in as now is left as it is.
 
-    [r] refresh that account's stored credential
-    [w] wait for a different login, then add it
-    [q] cancel
+  ...the tool's own login...
 
-  [r/w/q]
+  Added personal: me@example.com [personal]
+    Use it with:  aaswap switch personal
 ```
 
-Answer `w`, run `claude` in another terminal, `/login` with the other account,
-and come back to find it added.
+The login you already have is never read, replaced or logged out of: the tool
+logs in somewhere aaswap owns, and the credential is filed from there. That is
+what made the old way risky — current Claude Code revokes the refresh token on
+`/logout`, so "log out, log in as the other one" destroyed the stored account.
+Logging in again as an account that is already stored refreshes it in place.
 
-Do not run `/logout` first: current Claude Code may revoke the refresh token
-stored for the account you are leaving.
-
-Three flags skip the question, for scripts and for people who already know:
+Three flags are the other ways an account gets in:
 
 ```bash
-aaswap login --capture    # store the account logged in now
-aaswap login --wait       # wait for a /login, then store that account
+aaswap login --capture    # store the account logged in now, and run nothing
+aaswap login --wait       # wait for a login in the tool's own profile, then store it
 aaswap login --token -    # read a setup token or API key from stdin
 ```
 
-Without a terminal nothing is asked and nothing waits: an unstored live login
-is captured, a stored one is refreshed, and no login at all is an error.
+Without a terminal nothing is run and nothing waits: an unstored live login is
+captured, a stored one is refreshed, and no login at all is an error.
 
 ### Accounts are named, not numbered
 
@@ -198,7 +197,7 @@ aaswap tui
      5h  ██▋░░░░░░░░░░░░░░░░░░░░░  11%   resets 18:02
      7d  ████▌░░░░░░░░░░░░░░░░░░░  19%   resets Jul 7 12:12
 
-   ↑↓ move  ·  enter switch  ·  a add  ·  t token  ·  q quit  ·  ? help
+   ↑↓ move  ·  enter switch  ·  n log in  ·  a add  ·  t token  ·  q quit  ·  ? help
 ```
 
 Accounts can be added without leaving the dashboard:
@@ -206,16 +205,16 @@ Accounts can be added without leaving the dashboard:
 | Key | |
 |---|---|
 | `a` | add the account you are logged in as (or refresh it, if already stored) |
-| `n` | wait for a `/login` elsewhere, then add that account |
+| `n` | log in to add another account |
 | `t` | paste a setup token or managed API key |
 | `enter` | switch to the selected account |
 | `d` | hold an account out of rotation, or return it |
 | `r` / `w` | collect now / re-collect every 30 seconds |
 | `?` | every key, including the ones the footer drops on a narrow terminal |
 
-`n` is the dashboard's form of `aaswap login --wait`: it keeps watching while you
-run `/login` in another terminal and captures the account when it appears.
-Switching asks before it replaces a live credential. The dashboard needs a
+`n` is the dashboard's form of `aaswap login`: it hands the terminal to the
+tool's own login, pointed at a sandbox, and stores the account when the tool
+exits. Switching asks before it replaces a live credential. The dashboard needs a
 terminal — in a script, use `aaswap list --json`.
 
 **Note:** You usually don't need to restart — on Linux/Windows the new account is picked up automatically, and on macOS after the Keychain cache expires. To apply it instantly, restart Claude Code or reopen the VS Code extension tab. See [Tips](#tips) for the per-platform details.
@@ -279,16 +278,9 @@ Subfolders inherit the nearest mapped ancestor. In an unmapped directory, `aaswa
 
 ### Refresh expired tokens
 
-If an account's token expires, log back into the agent CLI with that account
-and run:
-
-```bash
-aaswap login
-```
-
-aaswap notices the stored credential was already refused and refreshes it in
-place without asking — that is the one thing being logged in as it again could
-mean.
+If an account's token expires, run `aaswap login` and log in as that account
+again. Logging in as a stored account refreshes it in place: one entry, holding the
+new credential.
 
 ### Other commands
 

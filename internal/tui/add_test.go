@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -93,90 +92,21 @@ func TestTheAddPromptNamesWhatWillHappen(t *testing.T) {
 	}
 }
 
-// With nothing logged in there is nothing to confirm and nothing to capture.
-// Asking "add the account you are logged in as?" would be asking about nothing.
-func TestAddWithNoLoginGoesStraightToWaiting(t *testing.T) {
+// With nothing logged in there is nothing to confirm and nothing to capture:
+// logging in IS the answer, and it starts without a question.
+func TestAddWithNoLoginGoesStraightToLoggingIn(t *testing.T) {
 	m := twoAccounts(t)
 	next, cmd := m.handleLiveProbed(liveProbedMsg{state: swap.LiveState{}})
 	model := next.(Model)
-	if model.modal == nil || model.modal.kind != modalWaiting {
-		t.Fatalf("modal = %+v, want the waiting modal", model.modal)
-	}
-	if model.awaitCancel == nil {
-		t.Error("nothing is waiting, so nothing will ever capture the login")
-	}
-	if cmd == nil {
-		t.Error("the wait started no command")
-	}
-	model.stopAwait()
-}
-
-// The instructions are the whole content of the wait: the person has to leave
-// to do the thing, and the one way to do it wrong destroys a stored token.
-func TestTheWaitingModalSaysWhatToDoAndWhatNotTo(t *testing.T) {
-	m := twoAccounts(t)
-	frame := m.renderModal(m.waitingModal())
-	for _, want := range []string{"claude", "/login", "Do not log out first"} {
-		if !strings.Contains(frame, want) {
-			t.Errorf("the waiting modal does not say %q:\n%s", want, frame)
-		}
-	}
-}
-
-// A wait outlives the keypress that began it, so both exits have to end it:
-// esc, and quitting the dashboard outright.
-func TestAWaitEndsOnEscapeAndOnQuit(t *testing.T) {
-	tests := []struct{ name, key string }{
-		{"esc stops waiting", "esc"},
-		{"ctrl+c stops waiting", "ctrl+c"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := twoAccounts(t)
-			started, _ := m.startAwait()
-			model := started.(Model)
-
-			next, _ := model.handleKey(press(tt.key))
-			if next.(Model).awaitCancel != nil {
-				t.Error("the wait survived, and its goroutine keeps polling the config")
-			}
-		})
-	}
-}
-
-// Only esc. Cancelling a wait someone means to keep, because they pressed a key
-// while reading it, loses the login they were about to make.
-func TestAnUnrelatedKeyDoesNotCancelTheWait(t *testing.T) {
-	m := twoAccounts(t)
-	started, _ := m.startAwait()
-	model := started.(Model)
-
-	next, _ := model.handleKey(press("j"))
-	if next.(Model).awaitCancel == nil {
-		t.Error("j cancelled the wait")
-	}
-	surviving := next.(Model)
-	surviving.stopAwait()
-}
-
-// A cancelled wait is what esc does. Reporting it as a failure would make the
-// escape hatch look like a fault.
-func TestACancelledWaitIsNotAnError(t *testing.T) {
-	m := twoAccounts(t)
-	next, _ := m.handleAdded(addedMsg{awaited: true, err: context.Canceled})
-	model := next.(Model)
-	if model.modal != nil {
-		t.Errorf("modal = %+v, want no error modal", model.modal)
-	}
-	if model.statusErr {
-		t.Errorf("status %q was marked an error", model.status)
+	if model.busy != "opening a login" || cmd == nil {
+		t.Errorf("busy = %q with cmd %v, want a login being opened", model.busy, cmd)
 	}
 }
 
 // A real failure must not be swallowed by the same path.
 func TestAFailedAddIsReported(t *testing.T) {
 	m := twoAccounts(t)
-	next, _ := m.handleAdded(addedMsg{awaited: true, err: errBoom})
+	next, _ := m.handleAdded(addedMsg{err: errBoom})
 	model := next.(Model)
 	if model.modal == nil || model.modal.kind != modalNotice || !model.modal.danger {
 		t.Fatalf("modal = %+v, want a failure notice", model.modal)
@@ -288,25 +218,21 @@ func TestAddIsRefusedWhileSomethingElseRuns(t *testing.T) {
 	}
 }
 
-// A wait blocks the same way: two waits would both capture, and the second
-// would act on a roster the first had already changed.
-func TestAddIsRefusedWhileAWaitRuns(t *testing.T) {
+// A login in flight blocks the same way: the tool holds the terminal, and a
+// second operation would act on a roster the first is about to change.
+func TestAddIsRefusedWhileALoginRuns(t *testing.T) {
 	m := twoAccounts(t)
-	started, _ := m.startAwait()
-	model := started.(Model)
-	defer model.stopAwait()
-
-	next, cmd := model.askAdd()
-	if cmd != nil || next.(Model).busy != "" {
-		t.Error("a capture started while a wait was already running")
+	m.busy = "logging in"
+	next, cmd := m.askAdd()
+	if cmd != nil || next.(Model).busy != "logging in" {
+		t.Error("a capture started while a login was already running")
 	}
 }
 
 func mustModel(model tea.Model, cmd tea.Cmd) (Model, tea.Cmd) { return model.(Model), cmd }
 
-// ctrl+c is the one key that must work from anywhere. The waiting modal takes
-// only esc by design, and an overlay that can swallow the interrupt is a
-// dashboard someone cannot get out of.
+// ctrl+c is the one key that must work from anywhere: an overlay that can
+// swallow the interrupt is a dashboard someone cannot get out of.
 func TestCtrlCQuitsFromEveryOverlay(t *testing.T) {
 	tests := []struct {
 		name string
@@ -322,10 +248,6 @@ func TestCtrlCQuitsFromEveryOverlay(t *testing.T) {
 			next, _ := m.askAddToken()
 			return next.(Model)
 		}},
-		{"from a wait", func(m Model) Model {
-			next, _ := m.startAwait()
-			return next.(Model)
-		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -335,8 +257,6 @@ func TestCtrlCQuitsFromEveryOverlay(t *testing.T) {
 			if cmd == nil || !next.(Model).quitting {
 				t.Error("ctrl+c did not quit")
 			}
-			model := next.(Model)
-			model.stopAwait()
 		})
 	}
 }
