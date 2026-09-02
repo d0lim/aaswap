@@ -3,6 +3,7 @@ package swap
 import (
 	"context"
 	json "encoding/json/v2"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/paths"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 var testNow = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -59,8 +60,8 @@ func newFixture(t *testing.T) *fixture {
 		// test, not the wall clock it costs.
 		FetchStagger: time.Millisecond,
 		Paths:        r,
-		Creds:        credstore.New(r, root, keychain.NewWithRunner(refusingKeychain{}, 0)),
-		Usage:        usagestore.New(r.CacheDir()),
+		Creds:        credstore.NewForProvider(r, root, keychain.NewWithRunner(refusingKeychain{}, 0), ProviderClaude, LiveLayout(r, ProviderClaude)),
+		Usage:        usagestore.NewForProvider(r.CacheDir(), ProviderClaude),
 		Settings:     settings.Defaults(),
 	}
 	// One clock for the Switcher and its usage store: the store decides
@@ -84,9 +85,13 @@ func (f *fixture) seedRoster(roster *Roster) {
 // config backup so it is switchable.
 func (f *fixture) seedAccounts(accounts map[string]*Account) *Roster {
 	f.t.Helper()
-	roster := newRoster(f.now)
-	for num, account := range accounts {
-		roster.Insert(num, account, f.now)
+	roster := newRoster()
+	// Sorted, because Insert appends and map iteration is random: seeding from
+	// a map would otherwise give the roster a different display order on every
+	// run, and the tests that assert on the first row would flake.
+	for _, num := range slices.Sorted(maps.Keys(accounts)) {
+		account := accounts[num]
+		roster.Insert(num, account)
 		if err := f.Creds.WriteAccount(num, account.Email, `{"claudeAiOauth":{"accessToken":"tok-`+num+`"}}`); err != nil {
 			f.t.Fatal(err)
 		}
@@ -108,7 +113,7 @@ func (f *fixture) setLiveIdentity(email, orgUUID, orgName, accountUUID string) {
 			"organizationName": orgName,
 			"accountUuid":      accountUUID,
 		},
-		// A key ccswap does not own, present in every real config.
+		// A key aaswap does not own, present in every real config.
 		"projects": map[string]any{"/home/u/work": map[string]any{"allowedTools": []string{}}},
 	}
 	data, err := json.Marshal(config)
@@ -176,7 +181,7 @@ func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
 		want string
 	}{
 		{
-			name: "add-token registers a new slot",
+			name: "add-token registers a new account",
 			act: func(f *fixture) {
 				if _, err := f.AddToken(AddTokenRequest{
 					Token: "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -185,11 +190,11 @@ func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
 					f.t.Fatal(err)
 				}
 			},
-			want: "1",
+			want: "token",
 		},
 		{
 			// Only when the credential actually CHANGED. A switch that finds
-			// the live bytes untouched since ccswap wrote them backs up the
+			// the live bytes untouched since aaswap wrote them backs up the
 			// config alone, and a profile seeded from those same bytes is not
 			// stale — announcing there would invalidate profiles on every
 			// ordinary switch.
@@ -217,7 +222,7 @@ func TestEveryCredentialWriteAnnouncesItself(t *testing.T) {
 			tt.act(f)
 
 			if !slices.Contains(announced, tt.want) {
-				t.Errorf("announced %v, want it to include account %s", announced, tt.want)
+				t.Errorf("announced %v, want it to include %q", announced, tt.want)
 			}
 		})
 	}

@@ -9,8 +9,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // awaitFrameInterval is how fast the waiting modal's marker advances.
@@ -93,7 +94,7 @@ func awaitTickCmd() tea.Cmd {
 
 // askAdd starts the capture of whatever is logged in now.
 //
-// It probes first and asks second. ccswap's `add` decides between registering a
+// It probes first and asks second. aaswap's `add` decides between registering a
 // new slot and refreshing an existing one from the live identity alone, and a
 // prompt that cannot say which of those it is about is not a prompt worth
 // showing.
@@ -129,10 +130,10 @@ func (m Model) handleLiveProbed(msg liveProbedMsg) (tea.Model, tea.Cmd) {
 	if slot := msg.state.Slot; slot != "" {
 		title = fmt.Sprintf("Refresh Account %s from the live login?", slot)
 		body = append(body, st.muted.Render(
-			"  Replaces the stored credential for Account "+slot+". Nothing else changes."))
+			"  Replaces the stored credential for "+slot+". Nothing else changes."))
 	} else {
 		body = append(body, st.muted.Render(
-			"  Stores its credential and config in a new slot."))
+			"  Stores its credential as a new account."))
 	}
 	body = append(body, "",
 		st.muted.Render("  To add a DIFFERENT account, press esc and then ")+
@@ -147,7 +148,7 @@ func (m Model) handleLiveProbed(msg liveProbedMsg) (tea.Model, tea.Cmd) {
 
 // startAwait waits for a login to land, then captures it.
 //
-// This is the closest ccswap gets to logging anyone in. Claude Code owns the
+// This is the closest aaswap gets to logging anyone in. Claude Code owns the
 // OAuth flow, so the person has to go and run /login somewhere else — but they
 // do not have to come back, quit, and re-run anything: the dashboard is
 // watching and captures the account the moment it appears.
@@ -168,17 +169,29 @@ func (m Model) startAwait() (tea.Model, tea.Cmd) {
 // waitingModal is the instruction sheet shown while waiting.
 func (m Model) waitingModal() *modal {
 	st := m.styles
+	// The instruction is the declaration's, not Claude's: "claude and then
+	// /login" told a Codex user to run a command Codex does not have.
+	launch, then := m.spec.Login.Steps()
+	var instruction string
+	switch {
+	case launch == "":
+		instruction = st.muted.Render("  In another terminal, log in with " + m.spec.DisplayName() + ",")
+	case then == "":
+		instruction = st.muted.Render("  In another terminal, run ") + st.accent.Render(launch) +
+			st.muted.Render(",")
+	default:
+		instruction = st.muted.Render("  In another terminal, run ") + st.accent.Render(launch) +
+			st.muted.Render(" and then ") + st.accent.Render(then) + st.muted.Render(",")
+	}
 	return &modal{
 		kind:  modalWaiting,
 		title: awaitFrames[m.awaitFrame%len(awaitFrames)] + " Waiting for a login",
 		body: []string{
 			"",
-			st.muted.Render("  In another terminal, run ") + st.accent.Render("claude") +
-				st.muted.Render(" and then ") + st.accent.Render("/login") +
-				st.muted.Render(","),
+			instruction,
 			st.muted.Render("  with the account you want to add."),
 			"",
-			st.yellow.Render("  Do not run /logout first — it can revoke the token"),
+			st.yellow.Render("  Do not log out first — the tool may revoke the token"),
 			st.yellow.Render("  stored for the account you are leaving."),
 			"",
 			st.muted.Render("  The account is captured as soon as the login finishes."),
@@ -186,20 +199,31 @@ func (m Model) waitingModal() *modal {
 	}
 }
 
-// askAddToken opens the field for a setup token or managed API key.
+// askAddToken opens the field for a pasted token.
+//
+// Refused where the provider declares no token format: aaswap would have to
+// invent both the recognition and the stored shape, and the shape it would
+// invent is Claude's — which, written into another tool's credential file,
+// replaces a working login with one that tool cannot read.
 func (m Model) askAddToken() (tea.Model, tea.Cmd) {
 	if m.busy != "" || m.awaitCancel != nil {
+		return m, nil
+	}
+	if !m.spec.Can(provider.CapToken) {
+		// Said rather than ignored: the key was pressed because the help
+		// screen offered it, and a key that does nothing reads as a freeze.
+		m.status, m.statusErr = m.spec.Why(provider.CapToken), true
 		return m, nil
 	}
 	st := m.styles
 	m.modal = &modal{
 		kind:        modalInput,
 		title:       "Add a token",
-		placeholder: "sk-ant-oat01-… or sk-ant-api03-…",
+		placeholder: m.spec.Token.Hint(),
 		body: []string{
 			"",
-			st.muted.Render("  An OAuth setup token or a managed API key. Nothing is sent"),
-			st.muted.Render("  anywhere: the kind is read off the value itself."),
+			st.muted.Render("  A token this tool accepts. Nothing is sent anywhere: the"),
+			st.muted.Render("  kind is read off the value itself."),
 		},
 		hint:      tokenKindNote,
 		busyLabel: "adding",
@@ -273,7 +297,7 @@ func (m Model) handleAdded(msg addedMsg) (tea.Model, tea.Cmd) {
 	if msg.outcome.Refreshed {
 		verb = "Refreshed"
 	}
-	m.status = fmt.Sprintf("%s Account %s (%s)", verb, msg.outcome.Number, msg.outcome.Email)
+	m.status = fmt.Sprintf("%s Account %s (%s)", verb, msg.outcome.Name, msg.outcome.Email)
 	m.statusErr = false
 	if msg.outcome.Unverified != "" {
 		// Never silently. Registering with the ownership question unanswered is

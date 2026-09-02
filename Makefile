@@ -1,13 +1,13 @@
-# ccswap Go build.
+# aaswap Go build.
 #
 # Toolchain versions are pinned in mise.toml; `mise install` provisions them.
 # Every target here assumes go/golangci-lint resolve on PATH (mise shims or
 # `mise exec --`).
 
-BINARY := ccswap
-PKG    := ./cmd/ccswap
+BINARY := aaswap
+PKG    := ./cmd/aaswap
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -X github.com/d0lim/ccswap/internal/buildinfo.version=$(VERSION)
+LDFLAGS := -X github.com/d0lim/aaswap/internal/buildinfo.version=$(VERSION)
 
 .PHONY: all
 all: check build

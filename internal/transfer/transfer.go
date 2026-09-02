@@ -8,8 +8,8 @@
 // have to invent key management, and users already have tools that do it
 // properly —
 //
-//	ccswap export - | gpg -c > accounts.gpg
-//	gpg -d accounts.gpg | ccswap import -
+//	aaswap export - | gpg -c > accounts.gpg
+//	gpg -d accounts.gpg | aaswap import -
 //
 // The envelope records that it is unencrypted, and import refuses one that
 // claims otherwise rather than handing ciphertext to a JSON parser.
@@ -27,12 +27,11 @@ import (
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"fmt"
-	"strconv"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // FormatVersion is the envelope's version. Import refuses anything else rather
@@ -41,7 +40,19 @@ const FormatVersion = 1
 
 // Envelope is the whole export.
 type Envelope struct {
-	Version    int    `json:"version"`
+	Version int `json:"version"`
+	// Provider names the tool whose logins this holds.
+	//
+	// An archive exists to be moved — to another machine, to a backup, to a
+	// colleague — and without this nothing distinguished two of them: same
+	// extension, same shape inside. Importing one into the wrong store filed a
+	// Claude Code credential as a Codex account and reported success, and the
+	// next switch wrote it over the login that worked.
+	//
+	// Empty means an archive written before providers existed, which is
+	// Claude's: it is the only provider that existed when such a file could
+	// have been written. Refusing it would strand every backup anyone has.
+	Provider   string `json:"provider,omitzero"`
 	ExportedAt string `json:"exportedAt"`
 	// ExportedFrom names the source platform, for diagnosing a transfer that
 	// behaves differently at the far end.
@@ -51,21 +62,27 @@ type Envelope struct {
 	// envelope in their own encryption can mark it, and so import refuses
 	// ciphertext with an explanation rather than a parse error.
 	Encrypted bool `json:"encrypted"`
-	// ActiveAccountNumber is carried only when that slot is actually in the
+	// ActiveAccount is carried only when that account is actually in the
 	// payload, so an import never points at an account that is not there.
-	ActiveAccountNumber *int              `json:"activeAccountNumber"`
-	Accounts            []ExportedAccount `json:"accounts"`
+	ActiveAccount string            `json:"activeAccount,omitzero"`
+	Accounts      []ExportedAccount `json:"accounts"`
 }
 
 // ExportedAccount is one account in an envelope.
 type ExportedAccount struct {
-	Number           int    `json:"number"`
+	Name             string `json:"name"`
 	Email            string `json:"email"`
 	UUID             string `json:"uuid"`
 	OrganizationUUID string `json:"organizationUuid"`
 	OrganizationName string `json:"organizationName"`
 	Added            string `json:"added"`
-	Alias            string `json:"alias,omitzero"`
+	// Fingerprint digests the credential this account was stored with.
+	//
+	// Load-bearing for a provider whose token format nobody has parsed: it has
+	// no address, and this is then the only thing identifying the account. For
+	// the rest it is a note about which generation was exported. Additive, so
+	// an older archive without it still imports.
+	Fingerprint string `json:"fingerprint,omitzero"`
 	// Kind marks an API-key account, whose credential is a raw string rather
 	// than an object.
 	Kind string `json:"kind,omitzero"`
@@ -81,13 +98,21 @@ type ExportedAccount struct {
 // Only the identity block is read back at activation, and stripping the rest
 // keeps a transfer small while keeping the source machine's identifiers — its
 // user id, its absolute paths, its cached flags — out of the destination.
-func slimConfig(config jsontext.Value, label string) (jsontext.Value, error) {
+//
+// hasIdentity is false for a provider with no account-scoped config, where
+// there is no identity block to keep and its absence is not a defect: the
+// credential carries whatever identity the account has. Demanding one refused
+// every export such a provider could otherwise produce.
+func slimConfig(config jsontext.Value, label string, hasIdentity bool) (jsontext.Value, error) {
 	var parsed map[string]jsontext.Value
 	if err := json.Unmarshal(config, &parsed); err != nil || parsed == nil {
 		return nil, fmt.Errorf("%w: the %s is not a JSON object", apperr.ErrTransfer, label)
 	}
 	account, present := parsed["oauthAccount"]
 	if !present || string(account) == "null" {
+		if !hasIdentity {
+			return marshalObject(map[string]jsontext.Value{})
+		}
 		return nil, fmt.Errorf("%w: the %s carries no account identity — it cannot be "+
 			"exported", apperr.ErrTransfer, label)
 	}
@@ -159,7 +184,7 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 	}
 	if len(roster.Accounts) == 0 {
 		return ExportResult{}, fmt.Errorf("%w: there are no accounts to export — run "+
-			"`ccswap add` first", apperr.ErrTransfer)
+			"`aaswap login` first", apperr.ErrTransfer)
 	}
 
 	explicit := req.Account != ""
@@ -179,20 +204,21 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 		}
 		numbers = []string{num}
 	} else {
-		numbers = roster.Numbers()
+		numbers = roster.Names()
 	}
 
 	// The live store holds fresher tokens than a backup for whichever account
 	// is active, so that one is exported from the live store.
 	liveSlot := ""
 	if live, ok := s.LiveIdentity(); ok {
-		if num, managed := roster.FindSlot(live.Identity()); managed {
+		if num, managed := roster.FindName(live.Identity()); managed {
 			liveSlot = num
 		}
 	}
 
 	result := ExportResult{Envelope: Envelope{
 		Version:      FormatVersion,
+		Provider:     s.Spec().Name,
 		ExportedAt:   swap.Timestamp(s.Now()),
 		ExportedFrom: s.Paths.Platform.String(),
 		SwapVersion:  swapVersion,
@@ -213,17 +239,16 @@ func Export(s *swap.Switcher, req ExportRequest, swapVersion string) (ExportResu
 
 	if len(result.Envelope.Accounts) == 0 {
 		return ExportResult{}, fmt.Errorf("%w: no account could be exported — every "+
-			"managed slot is missing its stored credential or config. Re-add one with: "+
-			"ccswap add --slot <number>", apperr.ErrTransfer)
+			"managed account is missing its stored credential or config. Log in as one, "+
+			"then run: aaswap login --capture", apperr.ErrTransfer)
 	}
 
 	// Carried only when that slot is actually in the payload: pointing at an
 	// account the import cannot find would be worse than saying nothing.
-	if activeNum, ok := roster.Active(); ok {
+	if activeName, ok := roster.ActiveName(); ok {
 		for _, entry := range result.Envelope.Accounts {
-			if strconv.Itoa(entry.Number) == activeNum {
-				number := entry.Number
-				result.Envelope.ActiveAccountNumber = &number
+			if entry.Name == activeName {
+				result.Envelope.ActiveAccount = activeName
 				break
 			}
 		}
@@ -250,7 +275,11 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 	} else {
 		credentials, _ = s.Creds.ReadAccount(num, account.Email)
 		config = s.ReadAccountConfig(num, account.Email)
-		if credentials == "" || config == "" {
+		// A stored config is half of a complete Claude account and no part of a
+		// provider whose credential IS the login. Requiring one everywhere made
+		// export skip every Codex account that was not the live one.
+		_, needsConfig := s.Spec().ConfigFile()
+		if credentials == "" || (needsConfig && config == "") {
 			if explicit {
 				// The user named this account, so a missing backup is a
 				// failure, not something to work around.
@@ -264,30 +293,37 @@ func exportOne(s *swap.Switcher, num string, account *swap.Account, isLive, full
 			// Exporting everything: one damaged slot must not poison the whole
 			// backup.
 			return ExportedAccount{}, fmt.Sprintf(
-				"account %s (%s): no stored credential or config — re-add with: "+
-					"ccswap add --slot %s", num, account.Email, num), nil
+				"account %s (%s): no stored credential or config — log in as it, then "+
+					"run: aaswap login --capture --name %s", num, account.Email, num), nil
 		}
 	}
 
-	number, _ := strconv.Atoi(num)
 	entry := ExportedAccount{
-		Number:           number,
+		Name:             num,
 		Email:            account.Email,
 		UUID:             account.UUID,
 		OrganizationUUID: account.OrganizationUUID,
 		OrganizationName: account.OrganizationName,
 		Added:            account.Added,
-		Alias:            account.Alias,
+		Fingerprint:      account.Fingerprint,
 	}
 
+	// A provider with no account-scoped config carries none: there is nothing
+	// to slim and nothing to validate, and an empty object in its place would be
+	// a document the far end has to decide the meaning of.
+	_, hasConfig := s.Spec().ConfigFile()
 	configValue := jsontext.Value(config)
-	if !full {
-		slim, err := slimConfig(configValue, fmt.Sprintf("config for %s", account.Email))
+	switch {
+	case !hasConfig:
+		configValue = nil
+	case !full:
+		slim, err := slimConfig(configValue,
+			fmt.Sprintf("config for %s", account.Email), true)
 		if err != nil {
 			return ExportedAccount{}, "", err
 		}
 		configValue = slim
-	} else if !configValue.IsValid() {
+	case !configValue.IsValid():
 		return ExportedAccount{}, "", fmt.Errorf("%w: the config for %s is not valid JSON",
 			apperr.ErrTransfer, account.Email)
 	}

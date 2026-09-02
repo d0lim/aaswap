@@ -2,29 +2,31 @@ package cli
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/buildinfo"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/buildinfo"
+	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
 // rootCommand assembles the whole command surface.
 func (a *App) rootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "ccswap",
-		Short: "Switch between multiple Claude Code accounts",
-		Long: "ccswap manages several Claude Code logins on one machine: it stores each\n" +
+		Use:   "aaswap",
+		Short: "Switch between multiple agent CLI accounts",
+		Long: "aaswap manages several agent CLI logins on one machine: it stores each\n" +
 			"account's credential, swaps the live login between them, and reports how\n" +
-			"much rate-limit headroom each one has left.",
+			"much rate-limit headroom each one has left.\n\n" +
+			"Claude Code is the default. Address another with --provider, and run\n" +
+			"`aaswap doctor` to see what is supported for each.",
 		Example: strings.Join([]string{
-			"  ccswap add                       # capture the account you are logged in as",
-			"  ccswap list                      # show every account and its usage",
-			"  ccswap switch 2                  # activate account 2",
-			"  ccswap switch --strategy best    # activate whichever has the most headroom",
-			"  ccswap list --json               # the same listing, for a script",
+			"  aaswap login                     # store the account you are logged in as",
+			"  aaswap list                      # show every account and its usage",
+			"  aaswap switch work               # activate the account called work",
+			"  aaswap --provider codex list     # the same, for Codex",
+			"  aaswap doctor                    # what works for which provider",
 		}, "\n"),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -40,34 +42,81 @@ func (a *App) rootCommand() *cobra.Command {
 	root.PersistentFlags().BoolVarP(&a.assumeYes, "yes", "y", false,
 		"answer every confirmation with yes")
 	root.PersistentFlags().Bool("debug", false, "enable debug logging")
+	// The dimension, as a flag with a default — the shape gh uses for hosts.
+	// A namespace would double the help tree and make every shared command
+	// exist twice.
+	// The list comes from the registry, not from here: a provider is added by
+	// declaring it, and a hardcoded list would leave the new one working but
+	// undiscoverable.
+	root.PersistentFlags().StringVar(&a.provider, "provider", "",
+		fmt.Sprintf("the auth domain to address: %s (default %s)",
+			strings.Join(provider.Names(), ", "), swap.ProviderClaude))
 
+	// What stays at the top level is what gets typed daily. What moves into a
+	// group is what gets typed once a month — and grouping is what keeps a
+	// second provider from doubling this list.
 	root.AddCommand(
 		a.listCommand(),
 		a.statusCommand(),
 		a.switchCommand(),
-		a.addCommand(),
-		a.removeCommand(),
+		a.loginCommand(),
+		a.runCommand(),
+		a.tuiCommand(),
+		a.configCommand(),
+		a.doctorCommand(),
+		a.upgradeCommand(),
+
+		a.accountCommand(),
+		a.dirCommand(),
+	)
+	return root
+}
+
+// accountCommand groups what is done TO an account rather than with it.
+func (a *App) accountCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "account",
+		Short:   "Manage the accounts themselves",
+		Long:    "Renaming, removing, holding out of rotation, and moving accounts\nbetween machines.",
+		Aliases: []string{"acct"},
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(
+		a.renameCommand(),
 		a.disableCommand(),
 		a.enableCommand(),
-		a.aliasCommand(),
-		a.swapCommand(),
-		a.moveCommand(),
-		a.purgeCommand(),
-		a.configCommand(),
+		a.removeCommand(),
+		a.exportCommand(),
+		a.importCommand(),
 		a.unclaimedCommand(),
-		a.runCommand(),
+		a.adoptCommand(),
+	)
+	silenceUsage(cmd)
+	return cmd
+}
+
+// dirCommand groups the directory-to-account routing `aaswap run` reads.
+func (a *App) dirCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dir",
+		Short: "Route a directory to an account",
+		Long: "`aaswap run` in a mapped directory launches that account. Subfolders\n" +
+			"inherit the nearest mapped ancestor.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(
 		a.mapCommand(),
 		a.unmapCommand(),
 		a.mappingsCommand(),
-		a.exportCommand(),
-		a.importCommand(),
-		a.autoCommand(),
-		a.addTokenCommand(),
-		a.tuiCommand(),
-		a.importStoreCommand(),
-		a.upgradeCommand(),
 	)
-	return root
+	silenceUsage(cmd)
+	return cmd
 }
 
 func (a *App) listCommand() *cobra.Command {
@@ -101,76 +150,58 @@ func (a *App) statusCommand() *cobra.Command {
 }
 
 func (a *App) switchCommand() *cobra.Command {
-	var strategy, model string
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "switch [NUM|EMAIL|ALIAS]",
+		Use:   "switch [ACCOUNT]",
 		Short: "Activate another account",
 		Long: "With no argument, rotates to the next account in sequence.\n" +
-			"With --strategy, picks the target by remaining rate-limit headroom.",
+			"Name an account to activate that one.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := ""
 			if len(args) == 1 {
 				target = args[0]
 			}
-			if model != "" {
-				a.overrides.Model = &model
-			}
-			return a.runSwitch(cmd, target, strategy, force)
+			return a.runSwitch(cmd, target, force)
 		},
 	}
-	cmd.Flags().StringVar(&strategy, "strategy", "",
-		"pick the target by headroom: 'best' or 'next-available'")
-	cmd.Flags().StringVar(&model, "model", "",
-		"also count these models' per-model weekly limits (comma-separated, or 'all')")
 	cmd.Flags().BoolVar(&force, "force", false,
 		"activate the stored credential without backing up the current login first")
 	silenceUsage(cmd)
 	return cmd
 }
 
-func (a *App) addCommand() *cobra.Command {
-	var slot int
-	var alias string
-	var wait bool
-	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "Capture the account you are currently logged in as",
-		Long: "Stores the live login's credential and config against a slot, so ccswap\n" +
-			"can switch back to it later.\n\n" +
-			"ccswap cannot log you in — Claude Code owns that flow — so adding another\n" +
-			"account means logging in with it first. With --wait, ccswap prints how to\n" +
-			"do that and captures the account the moment the login finishes, instead of\n" +
-			"making you come back and re-run this. In a terminal with no account logged\n" +
-			"in at all, it waits without being asked: the alternative is an error whose\n" +
-			"only advice is to go and log in.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.runAdd(cmd, slot, alias, wait)
-		},
-	}
-	cmd.Flags().IntVar(&slot, "slot", 0, "store the account in a specific slot")
-	cmd.Flags().StringVar(&alias, "alias", "", "give the account a short name")
-	cmd.Flags().BoolVar(&wait, "wait", false,
-		"wait for a /login in Claude Code, then capture that account")
-	silenceUsage(cmd)
-	return cmd
-}
-
 func (a *App) removeCommand() *cobra.Command {
+	var all bool
 	cmd := &cobra.Command{
-		Use:     "remove NUM|EMAIL|ALIAS",
+		Use:     "remove [ACCOUNT]",
 		Aliases: []string{"rm"},
 		Short:   "Forget a managed account",
-		Long: "Removes ccswap's copy of the account: its stored credential, its stored\n" +
-			"config, and its roster entry. It does NOT log you out — the live login is\n" +
-			"Claude Code's, not ccswap's.",
-		Args: cobra.ExactArgs(1),
+		Long: "Removes aaswap's copy of the account: its stored credential, its stored\n" +
+			"config, and its roster entry. It does NOT log you out — the live login\n" +
+			"belongs to the provider's own tool, not to aaswap.\n\n" +
+			"--all forgets every account for this provider.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Erasing the whole store is what `purge` used to be. It is the
+			// same operation as removing one account, so it is the same verb
+			// with a flag rather than a second top-level command whose name
+			// does not say what it removes.
+			if all {
+				if len(args) > 0 {
+					return fmt.Errorf("%w: --all removes every account, so it cannot "+
+						"also be given one to remove", apperr.ErrValidation)
+				}
+				return a.runPurge(cmd)
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("%w: name an account to remove, or pass --all to "+
+					"remove every one", apperr.ErrValidation)
+			}
 			return a.runRemove(cmd, args[0])
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "forget every account for this provider")
 	silenceUsage(cmd)
 	return cmd
 }
@@ -178,7 +209,7 @@ func (a *App) removeCommand() *cobra.Command {
 func (a *App) disableCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "disable NUM|EMAIL|ALIAS",
-		Short: "Hold an account out of automatic selection",
+		Short: "Hold an account out of rotation",
 		Long: "The account stays managed and remains a valid explicit switch target; it\n" +
 			"is only skipped by rotation, the headroom strategies, and auto-switch.",
 		Args: cobra.ExactArgs(1),
@@ -193,7 +224,7 @@ func (a *App) disableCommand() *cobra.Command {
 func (a *App) enableCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "enable NUM|EMAIL|ALIAS",
-		Short: "Return an account to automatic selection",
+		Short: "Return an account to rotation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.runSetDisabled(cmd, args[0], false)
@@ -203,56 +234,15 @@ func (a *App) enableCommand() *cobra.Command {
 	return cmd
 }
 
-func (a *App) aliasCommand() *cobra.Command {
-	var unset bool
+func (a *App) renameCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "alias [NUM|EMAIL] [NAME]",
-		Short: "Name an account, or list the names",
-		Args:  cobra.MaximumNArgs(2),
+		Use:   "rename ACCOUNT NAME",
+		Short: "Give an account a different name",
+		Long: "The name is where the account's credential and config are filed, not a\n" +
+			"label on top of them, so this moves stored material. Nothing else changes.",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runAlias(cmd, args, unset)
-		},
-	}
-	cmd.Flags().BoolVar(&unset, "unset", false, "remove the account's alias")
-	silenceUsage(cmd)
-	return cmd
-}
-
-func (a *App) swapCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "swap NUM|EMAIL|ALIAS NUM|EMAIL|ALIAS",
-		Short: "Exchange two accounts' slot numbers",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runSwapSlots(cmd, args[0], args[1])
-		},
-	}
-	silenceUsage(cmd)
-	return cmd
-}
-
-func (a *App) moveCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "move NUM|EMAIL|ALIAS SLOT",
-		Short: "Move an account to another slot number",
-		Long:  "When the destination is occupied, the two accounts exchange places.",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runMove(cmd, args[0], args[1])
-		},
-	}
-	silenceUsage(cmd)
-	return cmd
-}
-
-func (a *App) purgeCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "purge",
-		Short: "Forget every managed account",
-		Long:  "Removes ccswap's whole store. Your live login survives.",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.runPurge(cmd)
+			return a.runRename(cmd, args[0], args[1])
 		},
 	}
 	silenceUsage(cmd)
@@ -263,8 +253,8 @@ func (a *App) unclaimedCommand() *cobra.Command {
 	var purge string
 	cmd := &cobra.Command{
 		Use:   "unclaimed",
-		Short: "Inspect credentials ccswap preserved but could not file",
-		Long: "A switch that finds a live credential belonging to no managed slot keeps\n" +
+		Short: "Inspect credentials aaswap preserved but could not file",
+		Long: "A switch that finds a live credential belonging to no managed account keeps\n" +
 			"it here rather than destroying it. These are the copies it kept.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -289,12 +279,7 @@ func resolveTarget(s *swap.Switcher, roster *swap.Roster, identifier string) (st
 			apperr.ErrAccountNotFound, identifier)
 	}
 	if _, exists := roster.Accounts[num]; !exists {
-		return "", fmt.Errorf("%w: account %s does not exist", apperr.ErrAccountNotFound, num)
+		return "", fmt.Errorf("%w: %s does not exist", apperr.ErrAccountNotFound, num)
 	}
 	return num, nil
-}
-
-func atoi(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
 }

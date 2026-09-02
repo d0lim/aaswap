@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/swap"
 )
 
 // fastWait collapses the login wait's polling. The behavior under test is what
@@ -44,7 +44,7 @@ func TestAddWaitCapturesTheLoginThatLands(t *testing.T) {
 		h.landLogin("two@example.com", "acct-2")
 	}()
 
-	if code := h.run("add", "--wait"); code != ExitOK {
+	if code := h.run("login", "--wait"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	<-landed
@@ -52,16 +52,16 @@ func TestAddWaitCapturesTheLoginThatLands(t *testing.T) {
 	// The instructions have to name the thing to go and do, and the hazard of
 	// doing it the obvious wrong way.
 	wantContains(t, h.stdout(),
-		"one@example.com", "already stored as account 1",
-		"/login", "Do not run /logout first", "Waiting",
-		"two@example.com", "Added", "Account 2")
+		"one@example.com", "already stored as 1",
+		"/login", "Do not log out first", "Waiting",
+		"two@example.com", "Added")
 
 	roster, err := h.switcher.RosterOrEmpty()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if account := roster.Accounts["2"]; account == nil || account.Email != "two@example.com" {
-		t.Errorf("slot 2 holds %+v, want two@example.com", account)
+	if account := roster.Accounts["two"]; account == nil || account.Email != "two@example.com" {
+		t.Errorf("accounts = %v, want one called \"two\"", roster.Names())
 	}
 }
 
@@ -80,12 +80,12 @@ func TestAddWaitEndsOnAReLoginAndRefreshesInPlace(t *testing.T) {
 		h.landLogin("two@example.com", "acct-2")
 	}()
 
-	if code := h.run("add", "--wait"); code != ExitOK {
+	if code := h.run("login", "--wait"); code != ExitOK {
 		t.Fatalf("exit = %d: %s", code, h.stderr())
 	}
 	<-landed
 
-	wantContains(t, h.stdout(), "Updated credentials for", "Account 2", "two@example.com")
+	wantContains(t, h.stdout(), "Updated credentials for", "two@example.com")
 
 	roster, err := h.switcher.RosterOrEmpty()
 	if err != nil {
@@ -103,17 +103,17 @@ func TestAddWaitEndsOnAReLoginAndRefreshesInPlace(t *testing.T) {
 // same error it has always been rather than a hang.
 func TestAddWithoutAWaitStillFailsFastWhenNoOneIsLoggedIn(t *testing.T) {
 	h := newHarness(t)
-	if code := h.run("add"); code != ExitError {
+	if code := h.run("login"); code != ExitError {
 		t.Fatalf("exit = %d, want a failure: %s", code, h.stdout())
 	}
-	wantContains(t, h.stderr(), "no active Claude account")
+	wantContains(t, h.stderr(), "no active Claude Code account")
 }
 
 // --json is a machine asking a question, and a machine cannot go and log in.
 func TestAddUnderJSONNeverWaits(t *testing.T) {
 	h := newHarness(t)
 	h.fastWait()
-	if code := h.run("add", "--json"); code != ExitError {
+	if code := h.run("login", "--json"); code != ExitError {
 		t.Fatalf("exit = %d, want a failure: %s", code, h.stdout())
 	}
 	payload := h.decodeJSON()

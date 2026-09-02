@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // migrateFixture builds a Linux resolver over a temp home and returns it
@@ -97,7 +97,7 @@ func TestMigrateCollisionRefuses(t *testing.T) {
 			name: "real data alongside throwaway artifacts",
 			targetFiles: map[string]string{
 				"sequence.json": `{"src": "target"}`,
-				"ccswap.log":    "noise",
+				"aaswap.log":    "noise",
 				"cache/probe":   "{}",
 			},
 		},
@@ -127,15 +127,15 @@ func TestMigrateCollisionRefuses(t *testing.T) {
 	}
 }
 
-// Regression: any prior ccswap run lays down cache/ and a log in the XDG path
+// Regression: any prior aaswap run lays down cache/ and a log in the XDG path
 // even with no real data, so a legacy directory arriving later (file sync from
 // another machine) used to be reported as a collision.
 func TestMigrateWipesThrowawayOnlyTarget(t *testing.T) {
 	r, legacy, target := migrateFixture(t)
 	writeFile(t, filepath.Join(legacy, "sequence.json"), `{"src": "legacy"}`)
 	writeFile(t, filepath.Join(target, "cache", "update_check.json"), "{}")
-	writeFile(t, filepath.Join(target, "ccswap.log"), "noise")
-	writeFile(t, filepath.Join(target, "ccswap.log.1"), "rotated")
+	writeFile(t, filepath.Join(target, "aaswap.log"), "noise")
+	writeFile(t, filepath.Join(target, "aaswap.log.1"), "rotated")
 
 	moved, err := r.MigrateLegacyBackupDir(target)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestMigrateWipesThrowawayOnlyTarget(t *testing.T) {
 	if got := readFile(t, filepath.Join(target, "sequence.json")); got != `{"src": "legacy"}` {
 		t.Errorf("sequence.json = %q, want the legacy contents", got)
 	}
-	for _, gone := range []string{"cache", "ccswap.log", "ccswap.log.1"} {
+	for _, gone := range []string{"cache", "aaswap.log", "aaswap.log.1"} {
 		if exists_(filepath.Join(target, gone)) {
 			t.Errorf("throwaway artifact %q survived", gone)
 		}
@@ -290,8 +290,8 @@ func TestIsThrowaway(t *testing.T) {
 		want bool
 	}{
 		{"cache", true},
-		{"ccswap.log", true},
-		{"ccswap.log.1", true},
+		{"aaswap.log", true},
+		{"aaswap.log.1", true},
 		{"sequence.json", false},
 		{"settings.json", false},
 		{"credentials", false},

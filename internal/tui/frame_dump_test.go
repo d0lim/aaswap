@@ -5,25 +5,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usage"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // TestDumpFrame prints a representative frame. Not an assertion — a way to
 // look at the layout. Run with -run TestDumpFrame -v.
 func TestDumpFrame(t *testing.T) {
-	if os.Getenv("CCSWAP_DUMP_FRAME") == "" {
-		t.Skip("set CCSWAP_DUMP_FRAME=1 to print a frame")
+	if os.Getenv("AASWAP_DUMP_FRAME") == "" {
+		t.Skip("set AASWAP_DUMP_FRAME=1 to print a frame")
 	}
 	m := fixture(t,
 		[]swap.AccountView{
-			{Number: "1", IsActive: true, Account: &swap.Account{
-				Email: "work@example.com", Alias: "work", OrganizationName: "Acme"}},
-			{Number: "2", Account: &swap.Account{Email: "spare@example.com"}},
-			{Number: "3", Account: &swap.Account{Email: "burned@example.com", Disabled: true}},
-			{Number: "4", Account: &swap.Account{Email: "dead@example.com"}},
-			{Number: "5", Account: &swap.Account{Email: "key@example.com"}},
+			{Name: "1", IsActive: true, Account: &swap.Account{
+				Email: "work@example.com", OrganizationName: "Acme"}},
+			{Name: "2", Account: &swap.Account{Email: "spare@example.com"}},
+			{Name: "3", Account: &swap.Account{Email: "burned@example.com", Disabled: true}},
+			{Name: "4", Account: &swap.Account{Email: "dead@example.com"}},
+			{Name: "5", Account: &swap.Account{Email: "key@example.com"}},
 		},
 		map[string]usagestore.Entry{
 			"1": {FetchedAt: testNow, LastGood: &usage.Result{

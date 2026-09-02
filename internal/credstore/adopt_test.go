@@ -4,13 +4,13 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // seedClaudeSwapItem plants a backup under the claude-swap project's service,
 // which is what an install being imported from looks like.
-func seedClaudeSwapItem(fake *fakeKeychain, num, email, value string) {
-	fake.items[ClaudeSwapBackupService+"\x00"+backupUsername(num, email)] = value
+func seedClaudeSwapItem(s *Store, fake *fakeKeychain, num, email, value string) {
+	fake.items[ClaudeSwapBackupService+"\x00"+s.backupUsername(num, email)] = value
 }
 
 // The whole point of a separate service: neither project's `remove` may delete
@@ -24,10 +24,10 @@ func TestTheTwoProjectsUseDifferentKeychainServices(t *testing.T) {
 
 func TestAdoptingBackupsFromClaudeSwap(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
-	seedClaudeSwapItem(fake, "1", "a@example.com", "creds-1")
-	seedClaudeSwapItem(fake, "2", "b@example.com", "creds-2")
+	seedClaudeSwapItem(s, fake, "1", "a@example.com", "creds-1")
+	seedClaudeSwapItem(s, fake, "2", "b@example.com", "creds-2")
 
-	report, err := s.AdoptClaudeSwapKeychain(map[string]string{
+	report, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{
 		"1": "a@example.com",
 		"2": "b@example.com",
 		// A slot with nothing in the claude-swap Keychain — off macOS there
@@ -50,7 +50,7 @@ func TestAdoptingBackupsFromClaudeSwap(t *testing.T) {
 	} {
 		got, err := s.readBackupKeychain(tc.num, tc.email)
 		if err != nil || got != tc.want {
-			t.Errorf("account %s reads %q (err %v) under ccswap's service, want %q",
+			t.Errorf("account %s reads %q (err %v) under aaswap's service, want %q",
 				tc.num, got, err, tc.want)
 		}
 	}
@@ -60,10 +60,10 @@ func TestAdoptingBackupsFromClaudeSwap(t *testing.T) {
 // claude-swap install, or the import is a one-way door.
 func TestAdoptionLeavesTheClaudeSwapItemsInPlace(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
-	username := backupUsername("1", "a@example.com")
-	seedClaudeSwapItem(fake, "1", "a@example.com", "creds-1")
+	username := s.backupUsername("1", "a@example.com")
+	seedClaudeSwapItem(s, fake, "1", "a@example.com", "creds-1")
 
-	if _, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"}); err != nil {
+	if _, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{"1": "a@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,9 +79,9 @@ func TestAdoptionLeavesTheClaudeSwapItemsInPlace(t *testing.T) {
 func TestAdoptionClearsAnEncThatWouldShadowTheAdoptedItem(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
 	writeEnc(t, s, "1", "a@example.com", "stale-from-the-moved-directory")
-	seedClaudeSwapItem(fake, "1", "a@example.com", "fresh")
+	seedClaudeSwapItem(s, fake, "1", "a@example.com", "fresh")
 
-	if _, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"}); err != nil {
+	if _, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{"1": "a@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -98,7 +98,7 @@ func TestAdoptionClearsAnEncThatWouldShadowTheAdoptedItem(t *testing.T) {
 // nothing to report as missing.
 func TestAdoptionIsANoOpOffMacOS(t *testing.T) {
 	s, _ := newTestStore(t, platform.Linux)
-	report, err := s.AdoptClaudeSwapKeychain(map[string]string{"1": "a@example.com"})
+	report, err := s.AdoptKeychain(ClaudeSwapBackupService, map[string]string{"1": "a@example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}

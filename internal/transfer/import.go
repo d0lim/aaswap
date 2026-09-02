@@ -5,14 +5,13 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/swap"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // emailPattern is what an imported address must look like.
@@ -41,7 +40,7 @@ const (
 
 // ImportedAccount reports one account's fate.
 type ImportedAccount struct {
-	Number  string
+	Name    string
 	Email   string
 	Outcome ImportOutcome
 	// Notes carry anything the user needs to know about this account —
@@ -69,12 +68,20 @@ func Import(s *swap.Switcher, data []byte, force bool) (ImportResult, error) {
 	if err != nil {
 		return ImportResult{}, err
 	}
+	if err := envelope.belongsTo(s.Spec().Name); err != nil {
+		return ImportResult{}, err
+	}
 
 	roster, err := s.RosterOrEmpty()
 	if err != nil {
 		return ImportResult{}, err
 	}
-	entries, err := validateAll(envelope, roster)
+	// Whether an account HAS a stored config, and so whether that config must
+	// carry an identity block, is a property of the provider rather than of the
+	// archive: for a provider whose credential IS the identity document there is
+	// nothing to carry and nothing to require.
+	_, hasConfig := s.Spec().ConfigFile()
+	entries, err := validateAll(envelope, roster, hasConfig)
 	if err != nil {
 		return ImportResult{}, err
 	}
@@ -92,8 +99,8 @@ func Import(s *swap.Switcher, data []byte, force bool) (ImportResult, error) {
 			return result, err
 		}
 		result.Accounts = append(result.Accounts, account)
-		if envelope.ActiveAccountNumber != nil && entry.Number == *envelope.ActiveAccountNumber {
-			result.ActiveSlot = account.Number
+		if envelope.ActiveAccount != "" && entry.Name == envelope.ActiveAccount {
+			result.ActiveSlot = account.Name
 		}
 	}
 	return result, nil
@@ -112,7 +119,8 @@ func parseEnvelope(data []byte) (Envelope, error) {
 	}
 	if envelope.Encrypted {
 		return Envelope{}, fmt.Errorf("%w: this export is marked encrypted. Decrypt it "+
-			"before importing — for example: gpg -d accounts.gpg | ccswap import -",
+			"before importing — for example: gpg -d accounts.gpg | "+
+			"aaswap account import -",
 			apperr.ErrTransfer)
 	}
 	if len(envelope.Accounts) == 0 {
@@ -122,59 +130,93 @@ func parseEnvelope(data []byte) (Envelope, error) {
 	return envelope, nil
 }
 
+// belongsTo refuses an archive from a different tool.
+//
+// Refused rather than converted: a credential is the tool's own format, and
+// nothing here could rewrite one into another tool's. Silently accepting it
+// filed the bytes as an account of the wrong provider, which reads as success
+// until the next switch writes them over a working login.
+func (e Envelope) belongsTo(provider string) error {
+	// An archive with no provider predates them, and is Claude's — see
+	// Envelope.Provider.
+	from := e.Provider
+	if from == "" {
+		from = legacyProvider
+	}
+	if from == provider {
+		return nil
+	}
+	return fmt.Errorf("%w: this archive holds %s accounts and you are importing "+
+		"into %s. Import it with `aaswap --provider %s account import`",
+		apperr.ErrTransfer, from, provider, from)
+}
+
+// legacyProvider owns an archive with no provider recorded in it.
+const legacyProvider = "claude"
+
 // validated is one account, checked and normalized.
 type validated struct {
-	Number           int
+	Name             string
 	Email            string
+	Fingerprint      string
 	UUID             string
 	OrganizationUUID string
 	OrganizationName string
 	Added            string
-	Alias            string
 	Kind             swap.Kind
 	Credentials      string
 	Config           string
 }
 
+// identity is the composite that names this account, matching what
+// swap.Account.Identity produces for a stored one.
+//
+// The fallback to the fingerprint is what keeps two identityless accounts —
+// a provider whose token format nobody has parsed has no address — from
+// comparing equal and collapsing into one on import.
+func (v validated) identity() swap.Identity {
+	if v.Email == "" {
+		return swap.Identity{Fingerprint: v.Fingerprint}
+	}
+	return swap.Identity{Email: v.Email, OrganizationUUID: v.OrganizationUUID}
+}
+
 // validateAll checks every account before any is written.
-func validateAll(envelope Envelope, roster *swap.Roster) ([]validated, error) {
-	// An alias already used here belongs to the local account that has it.
-	localAliases := map[string]swap.Identity{}
-	for _, num := range roster.Numbers() {
-		account := roster.Accounts[num]
-		if account.Alias != "" {
-			localAliases[strings.ToLower(account.Alias)] = account.Identity()
-		}
+func validateAll(envelope Envelope, roster *swap.Roster, hasConfig bool) ([]validated, error) {
+	// A name already used here belongs to the local account that has it.
+	localNames := map[string]swap.Identity{}
+	for _, name := range roster.Names() {
+		localNames[name] = roster.Accounts[name].Identity()
 	}
 
 	seenIdentities := map[swap.Identity]bool{}
-	seenAliases := map[string]bool{}
+	seenNames := map[string]bool{}
 	out := make([]validated, 0, len(envelope.Accounts))
 
 	for _, raw := range envelope.Accounts {
-		entry, err := validateOne(raw)
+		entry, err := validateOne(raw, hasConfig)
 		if err != nil {
 			return nil, err
 		}
 
-		identity := swap.Identity{Email: entry.Email, OrganizationUUID: entry.OrganizationUUID}
+		identity := entry.identity()
 		if seenIdentities[identity] {
 			return nil, fmt.Errorf("%w: the export names %s twice (organization %s)",
 				apperr.ErrTransfer, entry.Email, orgLabel(entry.OrganizationUUID))
 		}
 		seenIdentities[identity] = true
 
-		if entry.Alias != "" {
-			if seenAliases[entry.Alias] {
+		if entry.Name != "" {
+			if seenNames[entry.Name] {
 				return nil, fmt.Errorf("%w: the export uses the alias %q twice",
-					apperr.ErrTransfer, entry.Alias)
+					apperr.ErrTransfer, entry.Name)
 			}
-			seenAliases[entry.Alias] = true
+			seenNames[entry.Name] = true
 			// An alias already held by a DIFFERENT local account is dropped
 			// rather than refused: the accounts are what the user asked to
 			// import, and a name collision is not worth failing the transfer.
-			if owner, taken := localAliases[entry.Alias]; taken && owner != identity {
-				entry.Alias = ""
+			if owner, taken := localNames[entry.Name]; taken && owner != identity {
+				entry.Name = ""
 			}
 		}
 		out = append(out, entry)
@@ -184,19 +226,27 @@ func validateAll(envelope Envelope, roster *swap.Roster) ([]validated, error) {
 
 // validateOne checks one account's fields BEFORE any filename is built from
 // them.
-func validateOne(raw ExportedAccount) (validated, error) {
-	if !emailPattern.MatchString(raw.Email) {
-		return validated{}, fmt.Errorf("%w: an imported account has an invalid or missing "+
-			"email address: %q", apperr.ErrTransfer, raw.Email)
-	}
-	if raw.Number < 1 {
-		return validated{}, fmt.Errorf("%w: the imported account %s has an invalid slot "+
-			"number: %d", apperr.ErrTransfer, raw.Email, raw.Number)
+func validateOne(raw ExportedAccount, hasConfig bool) (validated, error) {
+	switch {
+	case raw.Email != "" || hasConfig:
+		// An address is present, or this provider produces them and its
+		// absence means the archive is malformed. Either way it has to be one.
+		if !emailPattern.MatchString(raw.Email) {
+			return validated{}, fmt.Errorf("%w: an imported account has an invalid or "+
+				"missing email address: %q", apperr.ErrTransfer, raw.Email)
+		}
+	case raw.Fingerprint == "":
+		// No address and no fingerprint is nothing to identify the account by,
+		// so importing it would produce a row that compares equal to every
+		// other identityless row.
+		return validated{}, fmt.Errorf("%w: an imported account has neither an email "+
+			"address nor a fingerprint, so there is nothing to identify it by",
+			apperr.ErrTransfer)
 	}
 
 	entry := validated{
-		Number:           raw.Number,
 		Email:            raw.Email,
+		Fingerprint:      raw.Fingerprint,
 		UUID:             raw.UUID,
 		OrganizationUUID: raw.OrganizationUUID,
 		OrganizationName: raw.OrganizationName,
@@ -204,32 +254,41 @@ func validateOne(raw ExportedAccount) (validated, error) {
 		Kind:             swap.KindOAuth,
 	}
 
-	if raw.Alias != "" {
-		alias, err := swap.NormalizeAlias(raw.Alias)
-		if err != nil {
-			return validated{}, fmt.Errorf("%w: the alias for %s is invalid: %w",
-				apperr.ErrTransfer, raw.Email, err)
+	// A name the local rules refuse is dropped rather than refused: an import
+	// that fails over a label would strand the credential it carried.
+	if raw.Name != "" {
+		if name, err := swap.NormalizeName(raw.Name); err == nil {
+			entry.Name = name
 		}
-		entry.Alias = alias
+	}
+	if entry.Name == "" {
+		entry.Name = swap.NameForEmail(raw.Email)
 	}
 
-	// The config must be an object carrying an identity, or a switch to this
-	// account could never complete.
-	var config map[string]jsontext.Value
-	if err := json.Unmarshal(raw.Config, &config); err != nil || config == nil {
-		return validated{}, fmt.Errorf("%w: the config for %s must be a JSON object",
-			apperr.ErrTransfer, raw.Email)
+	// A provider with an account-scoped config must have one here, and it must
+	// carry an identity, or a switch to this account could never complete.
+	//
+	// A provider with none stores nothing, whatever the archive carries. An
+	// older archive from such a provider holds the empty object that used to
+	// stand in for "switchable"; it is dropped rather than restored, so a
+	// re-import does not put the placeholder back.
+	if hasConfig {
+		var config map[string]jsontext.Value
+		if err := json.Unmarshal(raw.Config, &config); err != nil || config == nil {
+			return validated{}, fmt.Errorf("%w: the config for %s must be a JSON object",
+				apperr.ErrTransfer, raw.Email)
+		}
+		if account, present := config["oauthAccount"]; !present || string(account) == "null" {
+			return validated{}, fmt.Errorf("%w: the config for %s carries no account identity",
+				apperr.ErrTransfer, raw.Email)
+		}
+		formatted, err := json.Marshal(config, jsontext.WithIndent("  "), json.Deterministic(true))
+		if err != nil {
+			return validated{}, fmt.Errorf("%w: encoding the config for %s: %w",
+				apperr.ErrTransfer, raw.Email, err)
+		}
+		entry.Config = string(formatted)
 	}
-	if account, present := config["oauthAccount"]; !present || string(account) == "null" {
-		return validated{}, fmt.Errorf("%w: the config for %s carries no account identity",
-			apperr.ErrTransfer, raw.Email)
-	}
-	formatted, err := json.Marshal(config, jsontext.WithIndent("  "), json.Deterministic(true))
-	if err != nil {
-		return validated{}, fmt.Errorf("%w: encoding the config for %s: %w",
-			apperr.ErrTransfer, raw.Email, err)
-	}
-	entry.Config = string(formatted)
 
 	// An API-key account carries a raw string; an OAuth one carries an object.
 	var asString string
@@ -263,14 +322,14 @@ func validateOne(raw ExportedAccount) (validated, error) {
 
 // importOne writes a single validated account.
 func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force bool) (ImportedAccount, error) {
-	identity := swap.Identity{Email: entry.Email, OrganizationUUID: entry.OrganizationUUID}
+	identity := entry.identity()
 	usageIdentity := usagestore.Identity{Email: entry.Email, OrganizationUUID: entry.OrganizationUUID}
 
 	target := ""
 	outcome := Imported
 	var notes []string
 
-	if existing, found := roster.FindSlot(identity); found {
+	if existing, found := roster.FindName(identity); found {
 		stored := s.Usage.Entries(map[string]usagestore.Identity{existing: usageIdentity}, nil)[existing]
 		switch {
 		case force:
@@ -297,17 +356,17 @@ func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force boo
 				"the import replaced it")
 		default:
 			return ImportedAccount{
-				Number: existing, Email: entry.Email, Outcome: Skipped,
+				Name: existing, Email: entry.Email, Outcome: Skipped,
 				Notes: []string{"it already exists here — use --force to overwrite it"},
 			}, nil
 		}
 		target = existing
 	} else {
-		// Prefer the slot number the export used, so a machine-to-machine
-		// transfer keeps the numbers people have in their shell history.
-		target = strconv.Itoa(entry.Number)
+		// Prefer the name the export used, so a machine-to-machine transfer
+		// keeps the handles people have in their shell history.
+		target = entry.Name
 		if _, taken := roster.Accounts[target]; taken {
-			target = strconv.Itoa(roster.NextNumber())
+			target = roster.NameFor(entry.Email)
 		}
 	}
 
@@ -337,18 +396,18 @@ func importOne(s *swap.Switcher, roster *swap.Roster, entry validated, force boo
 		OrganizationUUID: entry.OrganizationUUID,
 		OrganizationName: entry.OrganizationName,
 		Added:            added,
-		Alias:            entry.Alias,
+		Fingerprint:      entry.Fingerprint,
 	}
 	if entry.Kind == swap.KindAPIKey {
 		record.Kind = swap.KindAPIKey
 	}
-	roster.Insert(target, record, s.Now())
+	roster.Insert(target, record)
 	if err := s.WriteRoster(roster); err != nil {
 		return ImportedAccount{}, err
 	}
 
 	return ImportedAccount{
-		Number: target, Email: entry.Email, Outcome: outcome, Notes: notes,
+		Name: target, Email: entry.Email, Outcome: outcome, Notes: notes,
 	}, nil
 }
 

@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 // Trust is what a switch decision runs on. Plain staleness ends it; deliberate

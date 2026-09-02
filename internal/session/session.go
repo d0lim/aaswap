@@ -5,16 +5,16 @@
 // CLAUDE_CONFIG_DIR. Everything Claude Code keeps — its credential, its
 // identity, its history — lives inside that directory, so several accounts can
 // run side by side in different terminals and none of them disturbs the login
-// `ccswap switch` manages.
+// `aaswap switch` manages.
 //
-// # ccswap never writes Claude Code's hashed Keychain item
+// # aaswap never writes Claude Code's hashed Keychain item
 //
 // On macOS, Claude Code derives a per-profile Keychain service name by hashing
 // the CLAUDE_CONFIG_DIR value it was given, and once it has written there, that
-// item shadows the plaintext seed. ccswap SEEDS a profile by writing the
+// item shadows the plaintext seed. aaswap SEEDS a profile by writing the
 // plaintext file and DELETES a stale item before seeding, but it never writes
-// the hashed item: writing it would make ccswap the item's creator, and macOS
-// then prompts the user for permission every time the ccswap binary changes.
+// the hashed item: writing it would make aaswap the item's creator, and macOS
+// then prompts the user for permission every time the aaswap binary changes.
 //
 // # A profile holds the newest generation
 //
@@ -37,13 +37,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
-	"github.com/d0lim/ccswap/internal/procdetect"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/provider"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -55,22 +54,22 @@ const (
 	// two writers is the fallback for an invalidation that just failed, and the
 	// faults it exists for — an unwritable profile, a read-only mount — are
 	// faults on that very directory.
-	StaleMarkerSuffix = ".ccswap-stale-credentials"
+	StaleMarkerSuffix = ".aaswap-stale-credentials"
 
-	// ShareManifest records which entries in a profile ccswap created, so
-	// turning sharing off only ever removes ccswap's own links and never the
+	// ShareManifest records which entries in a profile aaswap created, so
+	// turning sharing off only ever removes aaswap's own links and never the
 	// user's files.
-	ShareManifest = ".ccswap-shared.json"
+	ShareManifest = ".aaswap-shared.json"
 
-	// MCPMirrorMarker records that this profile's MCP servers are ccswap-
+	// MCPMirrorMarker records that this profile's MCP servers are aaswap-
 	// mirrored. It gates both the one-time migration stash and the removal on
 	// --no-share, so a profile's own pre-existing definitions are never
 	// silently destroyed.
-	MCPMirrorMarker = ".ccswap-mcp-mirror-v1"
+	MCPMirrorMarker = ".aaswap-mcp-mirror-v1"
 
 	// MCPDisplacedStash holds session-local MCP definitions displaced by the
 	// first mirror. Write-once: they land here instead of vanishing.
-	MCPDisplacedStash = ".ccswap-mcp-displaced.json"
+	MCPDisplacedStash = ".aaswap-mcp-displaced.json"
 )
 
 // SharedItems are mirrored from the default profile when sharing is on.
@@ -91,15 +90,6 @@ var SharedItems = []string{
 var HistoryItems = []string{
 	"projects",
 	"history.jsonl",
-}
-
-// AuthOverrideEnvVars would override the account inside Claude Code, so they
-// are dropped from a session's environment. Passing one through would make
-// `ccswap run 2` silently run as something else.
-var AuthOverrideEnvVars = []string{
-	"ANTHROPIC_API_KEY",
-	"ANTHROPIC_AUTH_TOKEN",
-	"CLAUDE_CODE_OAUTH_TOKEN",
 }
 
 // SlugifyEmail makes an address safe as a directory name.
@@ -125,14 +115,34 @@ func isAlphanumeric(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
-// DirFor is a slot's profile directory.
+// DirFor is an account's profile directory, for one provider.
 //
-// The profile contains Claude Code's own per-process records, so a full path
-// looks like <backup>/sessions/2-user_example.com/sessions/1234.json. That
-// nesting is intentional: the inner one is Claude Code's.
-func DirFor(backupRoot, accountNum, email string) string {
-	return filepath.Join(backupRoot, "sessions", accountNum+"-"+SlugifyEmail(email))
+// The profile contains the tool's own per-process records, so a full path looks
+// like <backup>/sessions/2-user_example.com/sessions/1234.json. That nesting is
+// intentional: the inner one is the tool's.
+//
+// Scoped by provider because a profile is a whole synthetic HOME. One address at
+// two tools is the ordinary case for one person, and an unscoped path gave both
+// the same directory — two live credentials and two sets of shared links under
+// one manifest. The declarations overlap where it matters: Claude and Codex both
+// call `skills` and `history.jsonl` shareable, and `sessions` is Claude Code's
+// per-process record directory while Codex declares it as history pointing at
+// the rollout files aaswap reads its quota from.
+//
+// Claude keeps the unsuffixed path. Profiles outlive a change here — they hold a
+// copy of a credential and a manifest of links aaswap created — and moving them
+// would orphan both with nothing left to clean them up.
+func DirFor(backupRoot, provider, accountNum, email string) string {
+	parts := []string{backupRoot, "sessions"}
+	if provider != "" && provider != claudeProvider {
+		parts = append(parts, provider)
+	}
+	return filepath.Join(append(parts, accountNum+"-"+SlugifyEmail(email))...)
 }
+
+// claudeProvider owns the unsuffixed path. A profile directory always carries an
+// address, so <account>-<email> can never collide with a bare provider name.
+const claudeProvider = "claude"
 
 // StaleMarkerFor is where a profile's stale marker is written.
 func StaleMarkerFor(sessionDir string) string {
@@ -142,28 +152,32 @@ func StaleMarkerFor(sessionDir string) string {
 // AdoptLegacyMarker renames a marker written under the old command name to its
 // current spelling.
 //
-// The command was renamed from cswap to ccswap, and every marker in this file
+// The command was renamed from ccswap to aaswap, and every marker in this file
 // is named after it. Profiles outlive the rename, so ignoring the old spelling
 // would not merely lose a file — it would change behavior: a stale profile
 // would stop announcing itself and keep serving a superseded credential, an
-// orphaned share manifest would leave ccswap's own links behind on --no-share,
+// orphaned share manifest would leave aaswap's own links behind on --no-share,
 // and an unseen mirror marker would re-run the one-time MCP migration against
 // servers that were already mirrored.
+//
+// One predecessor, not a chain. ccswap is the only spelling that ever shipped a
+// profile; the cswap era was the Python implementation, which wrote none of
+// these markers on a machine this binary will ever meet.
 //
 // Renaming rather than reading both names on: the profile converges on one
 // spelling, so the compatibility shim stays here instead of spreading into
 // every reader. Best effort — a failure leaves the profile exactly as it was,
-// which is the same state a pre-rename ccswap would find.
+// which is the same state a pre-rename aaswap would find.
 func AdoptLegacyMarker(path string) {
 	if _, err := os.Lstat(path); err == nil {
 		return // already current; nothing to adopt
 	}
 	dir, base := filepath.Split(path)
-	suffix, ok := strings.CutPrefix(base, ".ccswap-")
+	suffix, ok := strings.CutPrefix(base, ".aaswap-")
 	if !ok {
 		return
 	}
-	legacy := filepath.Join(dir, ".cswap-"+suffix)
+	legacy := filepath.Join(dir, ".ccswap-"+suffix)
 	if _, err := os.Lstat(legacy); err != nil {
 		return
 	}
@@ -176,7 +190,7 @@ func AdoptLegacyMarker(path string) {
 // IsStale reports whether a profile was marked for re-seeding.
 //
 // The marker is set when a slot's stored credential changes while a session is
-// live: ccswap never pulls credentials out from under a running Claude Code, so
+// live: aaswap never pulls credentials out from under a running Claude Code, so
 // the invalidation is deferred to the next launch that finds the profile quiet.
 func IsStale(sessionDir string) bool {
 	AdoptLegacyMarker(StaleMarkerFor(sessionDir))
@@ -206,18 +220,6 @@ func ClearStale(sessionDir string) bool {
 	return err == nil
 }
 
-// KeychainServiceName is the Keychain service Claude Code derives for a config
-// directory.
-//
-// Claude Code hashes the RAW CLAUDE_CONFIG_DIR value — NFC-normalized and
-// unresolved. So the string hashed here must be exactly the string exported: a
-// resolved or cleaned variant would look up a service name Claude Code never
-// wrote, and the lookup would silently fall through to a possibly-stale
-// plaintext seed.
-func KeychainServiceName(configDir string) string {
-	return credstore.KeychainServiceName(configDir)
-}
-
 // Manager runs sessions for one backup root.
 //
 // Its collaborators are fields, so a test drives the whole surface without a
@@ -229,12 +231,31 @@ type Manager struct {
 
 	// Keychain deletes a profile's hashed item before seeding. Nil skips it,
 	// which is right off macOS and in a test.
-	Keychain *keychain.Keychain
+	// Profiles is how the provider's tool keeps a credential inside a profile
+	// directory. Nil disables every profile-credential operation, which is a
+	// supported state: a caller that never seeds needs none of them.
+	Profiles provider.ProfileStore
 
 	// Probe answers whether a profile can authenticate. Nil makes every probe
 	// report Unknown, which callers resolve from local artifacts rather than by
 	// destroying anything.
 	Probe Prober
+
+	// Spec is the provider whose profiles this manager keeps: which file holds
+	// the credential, whether there is a config beside it, what a profile
+	// mirrors, and whether running sessions can be detected at all.
+	//
+	// The zero value resolves to Claude's declaration, which is what every
+	// caller predating providers meant.
+	Spec provider.Spec
+
+	// ConfigsDir is where captured account configs live.
+	//
+	// Supplied rather than derived from BackupRoot: the switcher scopes it by
+	// provider, and a second derivation here silently read the pre-provider
+	// location — so every Claude session refused to seed with "no stored
+	// config backup" while the config sat one directory away.
+	ConfigsDir string
 
 	// Now is the clock.
 	Now func() time.Time
@@ -242,18 +263,90 @@ type Manager struct {
 
 // Dir is a slot's profile directory.
 func (m *Manager) Dir(accountNum, email string) string {
-	return DirFor(m.BackupRoot, accountNum, email)
+	return DirFor(m.BackupRoot, m.spec().Name, accountNum, email)
 }
 
-// LivePIDs lists the Claude Code processes running against a slot's profile.
-func (m *Manager) LivePIDs(accountNum, email string) []int {
-	return procdetect.PIDs(m.Dir(accountNum, email))
+// spec is this manager's provider declaration, defaulting to Claude's.
+func (m *Manager) spec() provider.Spec {
+	if m.Spec.Name == "" {
+		return provider.MustLookup(provider.Claude)
+	}
+	return m.Spec
 }
+
+// secretName is the file a profile keeps its credential in, relative to the
+// profile directory.
+func (m *Manager) secretName() string {
+	if secrets := m.spec().SecretFiles(); len(secrets) > 0 {
+		return secrets[0].Path
+	}
+	return claudeProfileSecret
+}
+
+// configName is the account-scoped config beside the credential, empty for a
+// provider whose credential is the whole story.
+func (m *Manager) configName() string {
+	if file, ok := m.spec().ConfigFile(); ok {
+		return file.Path
+	}
+	return ""
+}
+
+// LivePIDs lists the processes running against a slot's profile.
+//
+// Empty for a provider that declares no way to detect them — which is NOT the
+// same as "nothing is running", and callers must not read it as such. Ask
+// CanDetectSessions before drawing a conclusion from an empty list.
+func (m *Manager) LivePIDs(accountNum, email string) []int {
+	liveness := m.liveness()
+	if liveness == nil {
+		return nil
+	}
+	pids, _ := liveness.PIDs(m.Dir(accountNum, email))
+	return pids
+}
+
+// liveness is this provider's process detector, nil when it declares none.
+func (m *Manager) liveness() provider.Liveness {
+	if session := m.spec().Session; session != nil {
+		return session.Liveness
+	}
+	return nil
+}
+
+// CanProbe reports whether the provider's own tool can be asked who a profile
+// is logged in as.
+//
+// Only Claude Code publishes such a command, so for every other provider a
+// verdict of Unknown means "nothing could be asked" rather than "the question
+// went unanswered" — two different things to tell a user, and the second one
+// names a binary they do not have.
+func (m *Manager) CanProbe() bool { return m.Probe != nil }
+
+// CanDetectSessions reports whether this provider can be asked what is running.
+//
+// The distinction the whole reseeding rule turns on: a provider that cannot be
+// asked never gets an affirmative "nothing is running", so aaswap never
+// refreshes a profile's credential out from under a session it cannot see.
+func (m *Manager) CanDetectSessions() bool { return m.liveness() != nil }
+
+// claudeProfileSecret is the fallback profile credential name.
+const claudeProfileSecret = ".credentials.json"
 
 // Quiescent reports that nothing is running against a slot's profile AND every
 // record was readable.
+//
+// False for a provider with no way to detect processes. That is the safe
+// direction and it is deliberate: proving a profile idle takes evidence, and
+// having none is not evidence of absence. It costs a reseed that could have
+// been done; the alternative costs a running agent its credential.
 func (m *Manager) Quiescent(accountNum, email string) bool {
-	return procdetect.Quiescent(m.Dir(accountNum, email))
+	liveness := m.liveness()
+	if liveness == nil {
+		return false
+	}
+	pids, complete := liveness.PIDs(m.Dir(accountNum, email))
+	return complete && len(pids) == 0
 }
 
 // ReadCredentials reads a profile's CURRENT credential, or empty when there is
@@ -263,20 +356,10 @@ func (m *Manager) Quiescent(accountNum, email string) bool {
 // the account's token family. Strictly read-only: rotating what is here would
 // log the next launch out the same way.
 func (m *Manager) ReadCredentials(sessionDir string) string {
-	if m.Platform == platform.MacOS && m.Keychain != nil {
-		value, found, err := m.Keychain.Get(KeychainServiceName(sessionDir), keychain.AccountName())
-		if err == nil && found && value != "" {
-			return value
-		}
-		// An absent item is Claude Code's own signal to read the file. An
-		// unreadable one falls through too: the seed is the next-best truth for
-		// a best-effort read.
-	}
-	data, err := os.ReadFile(filepath.Join(sessionDir, ".credentials.json"))
-	if err != nil {
+	if m.Profiles == nil {
 		return ""
 	}
-	return string(data)
+	return m.Profiles.Read(sessionDir)
 }
 
 // MayHaveCredentialMaterial reports whether a profile's credential is anything
@@ -287,18 +370,10 @@ func (m *Manager) ReadCredentials(sessionDir string) string {
 // may hold the freshest generation of the account's token family, and
 // re-seeding over it would begin by deleting that item.
 func (m *Manager) MayHaveCredentialMaterial(sessionDir string) bool {
-	if data, err := os.ReadFile(filepath.Join(sessionDir, ".credentials.json")); err == nil && len(data) > 0 {
-		return true
-	}
-	if m.Platform != platform.MacOS || m.Keychain == nil {
+	if m.Profiles == nil {
 		return false
 	}
-	value, found, err := m.Keychain.Get(KeychainServiceName(sessionDir), keychain.AccountName())
-	if err != nil {
-		// Unreadable is not absent: preserve the profile.
-		return true
-	}
-	return found && value != ""
+	return m.Profiles.MayHold(sessionDir)
 }
 
 // Identity is the account a profile is logged in as.
@@ -314,7 +389,25 @@ type Identity struct {
 // /login can re-point at a different account than the slot the profile was made
 // for.
 func (m *Manager) ReadIdentity(sessionDir string) (Identity, bool) {
-	data, err := os.ReadFile(filepath.Join(sessionDir, ".claude.json"))
+	if name := m.configName(); name != "" {
+		return m.readIdentityFromConfig(filepath.Join(sessionDir, name))
+	}
+	// No config beside the credential: the credential is the identity
+	// document, so the provider's own resolver reads it.
+	spec := m.spec()
+	data, err := os.ReadFile(filepath.Join(sessionDir, m.secretName()))
+	if err != nil {
+		return Identity{}, false
+	}
+	identity, ok := spec.Resolve(map[string]string{m.secretName(): string(data)})
+	if !ok {
+		return Identity{}, false
+	}
+	return Identity{Email: identity.Email, OrganizationUUID: identity.OrganizationUUID}, true
+}
+
+func (m *Manager) readIdentityFromConfig(path string) (Identity, bool) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return Identity{}, false
 	}
@@ -360,19 +453,17 @@ func (m *Manager) IdentityDrifted(sessionDir string, want Identity) bool {
 		got.OrganizationUUID != want.OrganizationUUID
 }
 
-// DeleteKeychainEntry removes a profile's hashed Keychain item, best effort.
+// ClearProfileCredential removes whatever would shadow a freshly seeded
+// credential, best effort.
 //
-// Needed before seeding — Claude Code reads the Keychain before the plaintext
-// file, so a stale item would shadow a fresh seed — and on removal, because
-// once the directory is gone the hashed name cannot be recomputed.
-func (m *Manager) DeleteKeychainEntry(sessionDir string) {
-	if m.Platform != platform.MacOS || m.Keychain == nil {
+// Needed before seeding and on removal. What it clears is the provider's
+// business — for Claude Code on macOS it is a Keychain item named after the
+// directory, which cannot be recomputed once the directory is gone.
+func (m *Manager) ClearProfileCredential(sessionDir string) {
+	if m.Profiles == nil {
 		return
 	}
-	if err := m.Keychain.Delete(KeychainServiceName(sessionDir), keychain.AccountName()); err != nil {
-		slog.Debug("could not delete a session profile's Keychain item",
-			"profile", sessionDir, "error", err)
-	}
+	m.Profiles.Clear(sessionDir)
 }
 
 // Bootstrap seeds a profile from a slot's stored credential and config.
@@ -382,7 +473,7 @@ func (m *Manager) DeleteKeychainEntry(sessionDir string) {
 func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 	// Claude Code reads the Keychain before the file, so a stale item from an
 	// earlier profile at this path would shadow the seed.
-	m.DeleteKeychainEntry(sessionDir)
+	m.ClearProfileCredential(sessionDir)
 
 	credentials, unreadable := m.Creds.ReadAccount(accountNum, email)
 	if credentials == "" {
@@ -391,13 +482,22 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 				"unreadable right now (locked, or no GUI session). Retry from a GUI "+
 				"terminal; do not re-add", apperr.ErrSession, accountNum)
 		}
-		return fmt.Errorf("%w: account %s has no stored credentials. Re-add with: "+
-			"ccswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
+		return fmt.Errorf("%w: account %s has no stored credentials. Log in as it, then "+
+			"run: aaswap login --capture --name %s",
+			apperr.ErrSession, accountNum, accountNum)
 	}
 
-	identity, theme, err := m.storedIdentity(accountNum, email)
-	if err != nil {
-		return err
+	// Read AFTER the credential and BEFORE any write, but only for a provider
+	// that has a config to seed. Demanding a stored config from a provider
+	// whose credential is the whole login would refuse every session it could
+	// otherwise run.
+	configName := m.configName()
+	var identity, theme jsontext.Value
+	if configName != "" {
+		var err error
+		if identity, theme, err = m.storedIdentity(accountNum, email); err != nil {
+			return err
+		}
 	}
 
 	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
@@ -408,14 +508,23 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 			"profile", sessionDir, "error", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(sessionDir, ".credentials.json"),
+	if err := os.WriteFile(filepath.Join(sessionDir, m.secretName()),
 		[]byte(credentials), 0o600); err != nil {
 		return fmt.Errorf("%w: seeding the session credential: %w", apperr.ErrSession, err)
 	}
 
+	if configName == "" {
+		// No account-scoped config to write. The credential carries the
+		// identity, and everything else in the home belongs to the machine —
+		// writing an identity block into it would be writing into the user's
+		// own settings.
+		slog.Info("bootstrapped a session profile", "account", accountNum, "profile", sessionDir)
+		return nil
+	}
+
 	// Merged into any existing config, so re-seeding preserves the profile's
 	// own projects and history.
-	configPath := filepath.Join(sessionDir, ".claude.json")
+	configPath := filepath.Join(sessionDir, configName)
 	config := map[string]jsontext.Value{}
 	if data, err := os.ReadFile(configPath); err == nil {
 		if err := json.Unmarshal(data, &config); err != nil || config == nil {
@@ -442,14 +551,24 @@ func (m *Manager) Bootstrap(sessionDir, accountNum, email string) error {
 	return nil
 }
 
+// configsDir is where captured configs live, falling back to the pre-provider
+// location for a caller that did not say.
+func (m *Manager) configsDir() string {
+	if m.ConfigsDir != "" {
+		return m.ConfigsDir
+	}
+	return filepath.Join(m.BackupRoot, "configs")
+}
+
 // storedIdentity reads a slot's captured identity block and theme.
 func (m *Manager) storedIdentity(accountNum, email string) (identity, theme jsontext.Value, err error) {
-	path := filepath.Join(m.BackupRoot, "configs",
+	path := filepath.Join(m.configsDir(),
 		fmt.Sprintf(".claude-config-%s-%s.json", accountNum, email))
 	data, readErr := os.ReadFile(path)
 	if readErr != nil {
-		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Re-add "+
-			"with: ccswap add --slot %s", apperr.ErrSession, accountNum, accountNum)
+		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Log in "+
+			"as it, then run: aaswap login --capture --name %s",
+			apperr.ErrSession, accountNum, accountNum)
 	}
 	var stored map[string]jsontext.Value
 	if err := json.Unmarshal(data, &stored); err != nil || stored == nil {
@@ -459,7 +578,7 @@ func (m *Manager) storedIdentity(accountNum, email string) (identity, theme json
 	account, present := stored["oauthAccount"]
 	if !present || string(account) == "null" {
 		return nil, nil, fmt.Errorf("%w: account %s's stored config carries no account "+
-			"identity. Re-add with: ccswap add --slot %s",
+			"identity. Log in as it, then run: aaswap login --capture --name %s",
 			apperr.ErrSession, accountNum, accountNum)
 	}
 	theme = stored["theme"]
@@ -500,7 +619,7 @@ func (m *Manager) ProfileSuperseded(sessionDir, accountNum, email string) bool {
 // The Keychain item goes first: once the directory is gone its hashed service
 // name cannot be recomputed, and the item would linger forever.
 func (m *Manager) Remove(sessionDir string) error {
-	m.DeleteKeychainEntry(sessionDir)
+	m.ClearProfileCredential(sessionDir)
 	if err := os.RemoveAll(sessionDir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("%w: removing the session profile: %w", apperr.ErrSession, err)
 	}
@@ -511,26 +630,39 @@ func (m *Manager) Remove(sessionDir string) error {
 
 // Environment builds the environment a session runs in.
 //
-// The auth overrides are DROPPED rather than passed through: any of them would
-// override the account inside Claude Code, making `ccswap run 2` silently run as
-// something else.
-func Environment(base []string, sessionDir string) (env []string, scrubbed []string) {
+// The provider's auth overrides are DROPPED rather than passed through: any of
+// them would override the account inside the tool, making `aaswap run work`
+// silently run as something else. The list is the declaration's, not a fixed
+// one: Claude's three variables mean nothing to Codex, and OPENAI_API_KEY —
+// which Codex prefers over its ChatGPT login — was passing straight through.
+func Environment(base []string, sessionDir string, spec provider.Spec) (env []string, scrubbed []string) {
+	homeEnv := "CLAUDE_CONFIG_DIR"
+	var overrides []string
+	if s := spec.Session; s != nil {
+		if s.HomeEnv != "" {
+			homeEnv = s.HomeEnv
+		}
+		overrides = s.AuthOverrides
+	}
 	for _, entry := range base {
 		name, _, _ := strings.Cut(entry, "=")
-		if name == "CLAUDE_CONFIG_DIR" {
+		if name == homeEnv {
 			continue
 		}
-		if isAuthOverride(name) {
+		if slices.Contains(overrides, name) {
 			scrubbed = append(scrubbed, name)
 			continue
 		}
 		env = append(env, entry)
 	}
-	return append(env, "CLAUDE_CONFIG_DIR="+sessionDir), scrubbed
-}
-
-func isAuthOverride(name string) bool {
-	return slices.Contains(AuthOverrideEnvVars, name)
+	env = append(env, homeEnv+"="+sessionDir)
+	// Whatever this provider declares survives a swap and has to be disabled:
+	// Claude Code's Agent View daemon outlives a session and keeps using the
+	// account it started with.
+	for _, hazard := range spec.Hazards {
+		env = append(env, hazard.Env...)
+	}
+	return env, scrubbed
 }
 
 // writeJSONPrivate writes an owner-only JSON file.

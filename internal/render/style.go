@@ -1,4 +1,4 @@
-// Package render turns ccswap's data into what a person reads in a terminal.
+// Package render turns aaswap's data into what a person reads in a terminal.
 //
 // Deliberately small and dependency-free. The styling is one warm accent, dim
 // secondary text, and bold for structure — restrained, so the numbers stand

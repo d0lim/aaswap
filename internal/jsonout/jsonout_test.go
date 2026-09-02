@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 var now = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -175,14 +175,18 @@ func TestFreshnessFieldsAreMutuallyExclusive(t *testing.T) {
 
 // Null and absent mean different things, and both occur.
 func TestNullIsDistinctFromAbsent(t *testing.T) {
+	// The active account is a name now, so "none" is the empty string rather
+	// than null — but the key is still always present, because a reader that
+	// has to distinguish "no active account" from "this build does not report
+	// one" needs the key either way.
 	t.Run("a listing with no active account", func(t *testing.T) {
 		got := decode(t, ListPayload{SchemaVersion: SchemaVersion})
-		value, present := got["activeAccountNumber"]
+		value, present := got["activeAccount"]
 		if !present {
-			t.Error("activeAccountNumber was omitted; null is the answer, not absence")
+			t.Error("activeAccount was omitted; empty is the answer, not absence")
 		}
-		if value != nil {
-			t.Errorf("activeAccountNumber = %v, want null", value)
+		if value != "" {
+			t.Errorf("activeAccount = %v, want empty", value)
 		}
 	})
 
@@ -214,11 +218,11 @@ func TestNullIsDistinctFromAbsent(t *testing.T) {
 }
 
 // A switch's departing side is null on a machine that had no live login, and
-// numberless for one ccswap did not manage.
+// numberless for one aaswap did not manage.
 func TestSwitchPayloadSides(t *testing.T) {
 	got := decode(t, SwitchPayload{
 		SchemaVersion: SchemaVersion, Switched: true,
-		To: AccountRef{Number: new(2), Email: "b@example.com"},
+		To: AccountRef{Name: "b", Email: "b@example.com"},
 	})
 	if value, present := got["from"]; !present || value != nil {
 		t.Errorf("from = (%v, present=%v), want an explicit null", value, present)
@@ -227,7 +231,7 @@ func TestSwitchPayloadSides(t *testing.T) {
 	got = decode(t, SwitchPayload{
 		SchemaVersion: SchemaVersion, Switched: true,
 		From: &AccountRef{Email: "unmanaged@example.com"},
-		To:   AccountRef{Number: new(2), Email: "b@example.com"},
+		To:   AccountRef{Name: "b", Email: "b@example.com"},
 	})
 	from := got["from"].(map[string]any)
 	if from["number"] != nil {

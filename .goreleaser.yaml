@@ -1,21 +1,21 @@
-# Release configuration for ccswap.
+# Release configuration for aaswap.
 #
 # Builds a static binary per platform, publishes them to a GitHub release, and
 # updates the Homebrew tap. The version comes from the git tag and is stamped
-# into the binary, so `ccswap --version` and `ccswap upgrade` agree with what was
+# into the binary, so `aaswap --version` and `aaswap upgrade` agree with what was
 # actually released.
 version: 2
 
-project_name: ccswap
+project_name: aaswap
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: ccswap
-    main: ./cmd/ccswap
-    binary: ccswap
+  - id: aaswap
+    main: ./cmd/aaswap
+    binary: aaswap
     env:
       # No cgo: the whole point of the Go port is one file a user can copy onto
       # a machine that has no toolchain. Every dependency here is pure Go —
@@ -27,11 +27,11 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/d0lim/ccswap/internal/buildinfo.version={{ .Version }}
+      - -X github.com/d0lim/aaswap/internal/buildinfo.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: ccswap
+  - id: aaswap
     # Reproducible names a script can construct without consulting the release
     # page.
     name_template: >-
@@ -72,9 +72,9 @@ changelog:
 # The forcing function: `brews` is removed in v2.16, and the release workflow
 # pins `~> v2`, which floats to the latest.
 homebrew_casks:
-  - name: ccswap
+  - name: aaswap
     binaries:
-      - ccswap
+      - aaswap
     repository:
       owner: d0lim
       name: homebrew-tap
@@ -82,13 +82,13 @@ homebrew_casks:
       # GITHUB_TOKEN cannot write to. Without this the publish step fails at
       # tag time, after the binaries have already been uploaded.
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: https://github.com/d0lim/ccswap
-    description: Switch between multiple Claude Code accounts
+    homepage: https://github.com/d0lim/aaswap
+    description: Manage several agent CLI logins (Claude Code, Codex) on one machine
     license: MIT
     # The download host and the homepage are the same here; saying so keeps
     # `brew audit` quiet.
     url:
-      verified: github.com/d0lim/ccswap/
+      verified: github.com/d0lim/aaswap/
     hooks:
       post:
         install: |
@@ -98,5 +98,5 @@ homebrew_casks:
             # Homebrew downloaded this itself; clearing the flag it set is the
             # documented way for an unsigned cask to be runnable at all.
             system_command "/usr/bin/xattr",
-                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/ccswap"]
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/aaswap"]
           end

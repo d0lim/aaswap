@@ -5,15 +5,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 // RemoveOutcome reports what a removal did.
 type RemoveOutcome struct {
-	Number string
-	Email  string
+	Name  string
+	Email string
 	// WasActive marks removing the account currently logged in. The live login
-	// is left alone — removing a slot forgets ccswap's copy, it does not log the
+	// is left alone — removing a slot forgets aaswap's copy, it does not log the
 	// user out — but they should know.
 	WasActive bool
 	// Cancelled marks a confirmation the user declined.
@@ -38,16 +38,16 @@ type RemoveRequest struct {
 
 // AmbiguousMatch is one candidate when an address names several slots.
 type AmbiguousMatch struct {
-	Number string
-	Email  string
-	Tag    string
+	Name  string
+	Email string
+	Tag   string
 }
 
 // Remove permanently forgets a managed account: its stored credential, its
 // stored config, and its roster record.
 //
 // It does NOT log the user out. The live credential is Claude Code's, and a
-// user removing a slot is discarding ccswap's copy, not ending their session.
+// user removing a slot is discarding aaswap's copy, not ending their session.
 func (s *Switcher) Remove(req RemoveRequest) (RemoveOutcome, error) {
 	var outcome RemoveOutcome
 	err := s.withLock(func() error {
@@ -72,9 +72,9 @@ func (s *Switcher) Remove(req RemoveRequest) (RemoveOutcome, error) {
 			return fmt.Errorf("%w: account %s does not exist", apperr.ErrAccountNotFound, num)
 		}
 
-		activeNum, _ := roster.Active()
+		activeNum, _ := roster.ActiveName()
 		outcome = RemoveOutcome{
-			Number: num, Email: account.Email, WasActive: activeNum == num,
+			Name: num, Email: account.Email, WasActive: activeNum == num,
 			OrganizationUUID: account.OrganizationUUID,
 		}
 
@@ -89,7 +89,7 @@ func (s *Switcher) Remove(req RemoveRequest) (RemoveOutcome, error) {
 		if err := s.deleteAccountFiles(num, account.Email); err != nil {
 			return err
 		}
-		roster.Remove(num, s.now())
+		roster.Remove(num)
 		return s.WriteRoster(roster)
 	})
 	if err != nil {
@@ -116,11 +116,11 @@ func (s *Switcher) resolveForRemoval(roster *Roster, req RemoveRequest) (string,
 	}
 
 	var matches []AmbiguousMatch
-	for _, candidate := range roster.Numbers() {
+	for _, candidate := range roster.Names() {
 		account := roster.Accounts[candidate]
 		if account.Email == req.Identifier {
 			matches = append(matches, AmbiguousMatch{
-				Number: candidate, Email: account.Email, Tag: account.DisplayTag(),
+				Name: candidate, Email: account.Email, Tag: account.DisplayTag(),
 			})
 		}
 	}
@@ -140,10 +140,10 @@ type PurgeOutcome struct {
 	Cancelled bool
 }
 
-// Purge forgets every managed account and removes ccswap's whole store.
+// Purge forgets every managed account and removes aaswap's whole store.
 //
 // The live login survives, for the same reason a single removal leaves it: it
-// is Claude Code's, not ccswap's.
+// is Claude Code's, not aaswap's.
 func (s *Switcher) Purge(confirm func(prompt string) bool, assumeYes bool) (PurgeOutcome, error) {
 	var outcome PurgeOutcome
 	err := s.withLock(func() error {
@@ -151,7 +151,7 @@ func (s *Switcher) Purge(confirm func(prompt string) bool, assumeYes bool) (Purg
 		if err != nil {
 			return err
 		}
-		numbers := roster.Numbers()
+		numbers := roster.Names()
 		if len(numbers) == 0 {
 			return nil
 		}
@@ -175,7 +175,7 @@ func (s *Switcher) Purge(confirm func(prompt string) bool, assumeYes bool) (Purg
 			outcome.Removed = append(outcome.Removed, num)
 		}
 
-		empty := newRoster(s.now())
+		empty := newRoster()
 		if err := s.WriteRoster(empty); err != nil {
 			return err
 		}

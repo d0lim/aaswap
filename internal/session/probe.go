@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/d0lim/aaswap/internal/provider"
 )
 
 // AuthStatusTimeout bounds the probe.
@@ -27,6 +29,10 @@ type ExecProber struct {
 	Timeout time.Duration
 	// Env is the base environment, defaulting to this process's.
 	Env []string
+	// Spec is the provider being probed, for the environment the probe runs
+	// in. The zero value is Claude's, which is the only provider that has an
+	// `auth status --json` to ask.
+	Spec provider.Spec
 }
 
 // AuthStatus asks Claude Code whether a profile is logged in.
@@ -55,7 +61,7 @@ func (p ExecProber) AuthStatus(sessionDir string) (AuthStatus, Verdict) {
 	// The probe runs in the session's own environment, with the auth overrides
 	// dropped — the same environment the session will run in, or the answer
 	// would be about a different login than the one about to launch.
-	cmd.Env, _ = Environment(base, sessionDir)
+	cmd.Env, _ = Environment(base, sessionDir, p.Spec)
 
 	stdout, err := cmd.Output()
 	switch {

@@ -1,6 +1,6 @@
 // Package mappings remembers which account a directory belongs to.
 //
-// `ccswap run` with no account resolves the working directory to its nearest
+// `aaswap run` with no account resolves the working directory to its nearest
 // mapped ancestor and launches that account, so a project directory always gets
 // the same login without anyone naming it.
 //
@@ -25,8 +25,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // SchemaVersion is the file's format.
@@ -34,6 +34,29 @@ const SchemaVersion = 1
 
 // FileName is the mappings table inside the backup root.
 const FileName = "mappings.json"
+
+// FileNameFor is the mappings table for one provider.
+//
+// A directory belongs to one account PER TOOL. The same project is very often
+// worked on with two of them, and the same person's logins are very often the
+// same address — so one table keyed by directory alone gave every provider the
+// same answer, let a second `dir map` overwrite the first provider's mapping,
+// and let removing an account prune another provider's.
+//
+// Claude keeps the unsuffixed name. It is the only provider that could have
+// written the file that is already on disk, so this needs no migration: the
+// same reasoning, and the same shape, as the unscoped credential store.
+func FileNameFor(provider string) string {
+	if provider == "" || provider == claudeProvider {
+		return FileName
+	}
+	return fmt.Sprintf("mappings-%s.json", provider)
+}
+
+// claudeProvider owns the unsuffixed table. Named here rather than imported:
+// this package holds a JSON file and must not depend on the provider registry
+// to know one filename.
+const claudeProvider = "claude"
 
 // Entry is one directory's account.
 type Entry struct {
@@ -72,9 +95,12 @@ type Store struct {
 	Now func() time.Time
 }
 
-// New returns a store over a backup root.
-func New(backupRoot string) *Store {
-	return &Store{path: filepath.Join(backupRoot, FileName), Now: time.Now}
+// NewForProvider returns a store over a backup root, scoped to one provider.
+func NewForProvider(backupRoot, provider string) *Store {
+	return &Store{
+		path: filepath.Join(backupRoot, FileNameFor(provider)),
+		Now:  time.Now,
+	}
 }
 
 // Path is the table's location. See [Store.Get] on why the tests need reach
@@ -214,7 +240,7 @@ func (s *Store) Remove(path string) (bool, error) {
 // went.
 //
 // Called when an account is removed: a mapping to an account that no longer
-// exists would silently send `ccswap run` looking for it.
+// exists would silently send `aaswap run` looking for it.
 func (s *Store) PruneAccount(identity Identity) (int, error) {
 	table := s.Load()
 	removed := 0

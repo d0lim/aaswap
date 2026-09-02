@@ -8,7 +8,7 @@
 // shelf life, so one failed round trip blanked every account at once. Here a
 // failure updates only the error and backoff fields and never touches the
 // last-good measurement — stale-on-error. Every surface shares the table, so a
-// fetch made for the list command also serves the auto-switch engine, and each
+// fetch made for the list command also serves the dashboard, and each
 // learns from the other's requests.
 //
 // # What is persisted, and what is not
@@ -45,10 +45,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/lockfile"
-	"github.com/d0lim/ccswap/internal/usage"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/lockfile"
+	"github.com/d0lim/aaswap/internal/usage"
 )
 
 // SchemaVersion is the on-disk format. A file at any other version — a
@@ -242,19 +242,45 @@ type Store struct {
 	LockTimeout time.Duration
 }
 
-// New returns a store over the given cache directory.
-func New(cacheDir string) *Store {
+// NewForProvider returns a store over the given cache directory, scoped to one
+// provider.
+//
+// Scoped because the table is keyed by ACCOUNT NAME, and two providers each
+// holding an account called "work" shared its row. The identity guard keeps the
+// data straight — a row whose stored address differs is invisible to reads —
+// but each collect pass still replaced the other provider's row, and what goes
+// with it is what the row exists to remember: the poll plan, the failure count,
+// and the 429 backoff. Alternating between two providers therefore discarded
+// the backoff and let the next pass fetch straight after a rate-limit response.
+//
+// Claude keeps the existing names. The table is regenerable by construction, so
+// the cost of a rename is only a round of re-fetching — but it is a cost for
+// nothing.
+func NewForProvider(cacheDir, provider string) *Store {
+	suffix := ""
+	if provider != "" && provider != claudeProvider {
+		suffix = "-" + provider
+	}
 	return &Store{
-		path:        filepath.Join(cacheDir, "usage.json"),
-		lockPath:    filepath.Join(cacheDir, ".usage.lock"),
+		path:        filepath.Join(cacheDir, "usage"+suffix+".json"),
+		lockPath:    filepath.Join(cacheDir, ".usage"+suffix+".lock"),
 		Now:         time.Now,
 		NewClaimID:  newClaimID,
 		LockTimeout: lockfile.DefaultTimeout,
 	}
 }
 
+// claudeProvider owns the unsuffixed table. Named here rather than imported:
+// this package holds a JSON file and must not depend on the provider registry
+// to know one filename.
+const claudeProvider = "claude"
+
 // Path is the table's location, for diagnostics.
 func (s *Store) Path() string { return s.path }
+
+// LockPath is the lock guarding the table, for diagnostics and for the test
+// that keeps two providers from contending on one lock for two files.
+func (s *Store) LockPath() string { return s.lockPath }
 
 // newClaimID mints a fencing token. Uniqueness is all that is required: a lease
 // is only ever compared for equality against the one the claimer holds.

@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/fsutil"
 )
 
 // object is a decoded JSON object with every member preserved.
@@ -102,7 +102,7 @@ func writeJSON(path string, value any) error {
 //
 //   - The copy is made WITHOUT the source's mode and then chmod'ed to 0600. A
 //     world-readable ~/.claude.json holding an API key would otherwise be
-//     salvaged into a world-readable copy ccswap itself created.
+//     salvaged into a world-readable copy aaswap itself created.
 //   - The name is disambiguated with a counter. The stamp is second-resolution,
 //     and two failed switches inside one second would otherwise leave one file —
 //     losing the first user's data exactly when the retry, which is what a user

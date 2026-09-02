@@ -8,23 +8,23 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/fsutil"
-	"github.com/d0lim/ccswap/internal/lockfile"
-	"github.com/d0lim/ccswap/internal/pollpolicy"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/fsutil"
+	"github.com/d0lim/aaswap/internal/lockfile"
+	"github.com/d0lim/aaswap/internal/pollpolicy"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // AccountRef names one side of a switch.
 //
-// Number is empty for a live login ccswap does not manage, which is a real state
+// Number is empty for a live login aaswap does not manage, which is a real state
 // and not an error: the machine can be logged into an account that was never
 // added.
 type AccountRef struct {
-	Number string
-	Email  string
+	Name  string
+	Email string
 }
 
 // SwitchOutcome is what a switch did, captured under the lock so a caller never
@@ -57,7 +57,7 @@ type SwitchRequest struct {
 // Switch activates a managed account.
 //
 // The shape of this operation is dictated by one rule: no network I/O while a
-// lock is held. So ownership is resolved first, without any lock; then ccswap's
+// lock is held. So ownership is resolved first, without any lock; then aaswap's
 // store lock AND Claude Code's own advisory locks are taken for the whole
 // mutation, rollback included.
 //
@@ -85,7 +85,7 @@ func (s *Switcher) Switch(ctx context.Context, req SwitchRequest) (SwitchOutcome
 
 	var outcome SwitchOutcome
 	err = s.withLock(func() error {
-		return s.withClaudeLocks(func() error {
+		return s.withToolLocks(func() error {
 			roster, err := s.RosterOrEmpty()
 			if err != nil {
 				return err
@@ -100,12 +100,22 @@ func (s *Switcher) Switch(ctx context.Context, req SwitchRequest) (SwitchOutcome
 
 	// The locks are released: safe to touch the usage store, whose own lock a
 	// caller may re-enter.
-	s.replanNewActive(outcome.To.Number, roster)
+	s.replanNewActive(outcome.To.Name, roster)
 	return outcome, nil
 }
 
-// withClaudeLocks holds Claude Code's advisory locks for the duration.
-func (s *Switcher) withClaudeLocks(fn func() error) error {
+// withToolLocks holds the provider's tool's own advisory locks for the
+// duration, where it declares any.
+//
+// Declared, not assumed. These are Claude Code's locks, at paths inside
+// ~/.claude: taking them for another provider made a Codex switch create
+// directories in an install it was not asked about, and fail outright with
+// "timed out waiting for Claude Code's lock" while a real Claude Code was
+// refreshing — held up by, and holding up, work with nothing to do with it.
+func (s *Switcher) withToolLocks(fn func() error) error {
+	if !s.spec().AdvisoryLocks {
+		return fn()
+	}
 	opts := lockfile.ProperOptions{}
 	return lockfile.WithClaudeCredentials(s.Paths, opts, func() error {
 		return lockfile.WithClaudeConfig(s.Paths, opts, fn)
@@ -114,18 +124,18 @@ func (s *Switcher) withClaudeLocks(fn func() error) error {
 
 func (s *Switcher) performSwitch(roster *Roster, req SwitchRequest, provenance Provenance) (SwitchOutcome, error) {
 	target := roster.Accounts[req.Target]
-	outcome := SwitchOutcome{To: AccountRef{Number: req.Target, Email: target.Email}}
+	outcome := SwitchOutcome{To: AccountRef{Name: req.Target, Email: target.Email}}
 
 	live, hasLive := s.LiveIdentity()
 	currentSlot := ""
 	if hasLive {
-		if num, managed := roster.FindSlot(live.Identity()); managed {
+		if num, managed := roster.FindName(live.Identity()); managed {
 			currentSlot = num
 		}
 	}
 
 	// The direct path: nothing to back up. Either the machine has no live login
-	// at all, or it has one ccswap does not manage, or --force asked for the
+	// at all, or it has one aaswap does not manage, or --force asked for the
 	// overwrite. Backing up here would write a backup for a slot that does not
 	// exist, or — under force — poison a slot with the very credential the user
 	// called stale.
@@ -146,7 +156,7 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 		// An unmanaged live account: a real departure, with no slot to name.
 		outcome.From = &AccountRef{Email: live.Email}
 	default:
-		outcome.From = &AccountRef{Number: currentSlot, Email: live.Email}
+		outcome.From = &AccountRef{Name: currentSlot, Email: live.Email}
 	}
 
 	target := roster.Accounts[req.Target]
@@ -171,6 +181,10 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 	}
 	rollbackCreds := active.Value
 	rollbackConfig, hadConfig := readFileIfExists(s.Paths.GlobalConfigPath())
+	if _, hasConfig := s.spec().ConfigFile(); !hasConfig {
+		// Nothing to roll back: the switch below writes no config at all.
+		rollbackConfig, hadConfig = "", false
+	}
 
 	// This path skips the backup step, so the live credential it replaces would
 	// otherwise have no surviving copy anywhere. Stash it. For an unmanaged or
@@ -210,7 +224,7 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 	}
 	rollback.configWritten = true
 
-	roster.SetActive(req.Target, s.now())
+	roster.SetActive(req.Target)
 	if err := s.WriteRoster(roster); err != nil {
 		rollback.run()
 		return SwitchOutcome{}, err
@@ -221,7 +235,7 @@ func (s *Switcher) activateDirect(roster *Roster, req SwitchRequest, live LiveId
 // switchFrom is the ordinary switch: back up the departing account, then
 // activate the target.
 func (s *Switcher) switchFrom(roster *Roster, req SwitchRequest, live LiveIdentity, currentSlot string, provenance Provenance, outcome SwitchOutcome) (SwitchOutcome, error) {
-	outcome.From = &AccountRef{Number: currentSlot, Email: live.Email}
+	outcome.From = &AccountRef{Name: currentSlot, Email: live.Email}
 
 	active := s.Creds.ReadActive()
 	if active.FileReadFailed || active.Degraded {
@@ -238,16 +252,24 @@ func (s *Switcher) switchFrom(roster *Roster, req SwitchRequest, live LiveIdenti
 			"as empty (an unreadable Keychain?); refusing to overwrite its backup",
 			apperr.ErrCredentialRead)
 	}
+	spec := s.spec()
+	_, hasAccountConfig := spec.ConfigFile()
 	originalConfig, hadConfig := readFileIfExists(s.Paths.GlobalConfigPath())
-	if !hadConfig {
-		return SwitchOutcome{}, fmt.Errorf("%w: Claude's config file was not found",
-			apperr.ErrConfig)
+	switch {
+	case !hasAccountConfig:
+		// This provider keeps no account-scoped config, so there is none to
+		// read, back up, splice or roll back. The credential is the whole
+		// login.
+		originalConfig, hadConfig = "", false
+	case !hadConfig:
+		return SwitchOutcome{}, fmt.Errorf("%w: %s's config file was not found",
+			apperr.ErrConfig, spec.Name)
 	}
 
 	rollback := &switchRollback{
 		configPath:     s.Paths.GlobalConfigPath(),
 		originalConfig: originalConfig,
-		hadConfig:      true,
+		hadConfig:      hadConfig,
 		originalCreds:  originalCreds,
 		store:          s,
 	}
@@ -287,7 +309,7 @@ func (s *Switcher) switchFrom(roster *Roster, req SwitchRequest, live LiveIdenti
 	rollback.configWritten = true
 
 	// Step 4 — record which slot is active.
-	roster.SetActive(req.Target, s.now())
+	roster.SetActive(req.Target)
 	if err := s.WriteRoster(roster); err != nil {
 		rollback.run()
 		return SwitchOutcome{}, wrapRolledBack(err)
@@ -334,13 +356,13 @@ func (s *Switcher) backUpOutgoing(roster *Roster, slot, email, credentials, conf
 			return warnings, err
 		}
 		warnings = append(warnings, fmt.Sprintf(
-			"The live credential's tokens were wiped (Claude Code clears them when a "+
+			"The live credential's tokens were wiped (the tool clears them when a "+
 				"refresh is rejected). Account %s's stored backup was kept. If the account "+
-				"cannot authenticate after switching back, log in with Claude Code and run: "+
-				"ccswap add", slot))
+				"cannot authenticate after switching back, log in as it again, then run: "+
+				"aaswap login --capture --name %s", slot, slot))
 
 	case KindOwnBytes:
-		// Untouched since ccswap wrote it. Refresh the config backup only.
+		// Untouched since aaswap wrote it. Refresh the config backup only.
 		if err := s.WriteAccountConfig(slot, email, config); err != nil {
 			return warnings, err
 		}
@@ -377,15 +399,17 @@ func foreignWarning(kind OutgoingKind, slot, foreignSlot string) string {
 	case KindForeign:
 		return fmt.Sprintf("Credential ownership mismatch detected. The live credential "+
 			"was preserved and was not written into account %s. If account %s later cannot "+
-			"authenticate, log in as it and run: ccswap add --slot %s", slot, foreignSlot, foreignSlot)
+			"authenticate, log in as it and run: aaswap login --capture --name %s",
+			slot, foreignSlot, foreignSlot)
 	case KindKnownForeign:
 		return fmt.Sprintf("The live credential was previously identified as another "+
 			"account's. It was preserved and not written into account %s. If the owning "+
-			"account later cannot authenticate, log in as it and run: ccswap add", slot)
+			"account later cannot authenticate, log in as it and run: "+
+			"aaswap login --capture", slot)
 	default:
 		return fmt.Sprintf("The live login does not match a managed account. It was "+
 			"preserved and not written into account %s. If you need that account, log in "+
-			"as it and run: ccswap add", slot)
+			"as it and run: aaswap login --capture", slot)
 	}
 }
 
@@ -406,17 +430,26 @@ func (s *Switcher) readTargetCredentials(accountNum, email string) (string, erro
 			"unreadable right now (locked, or no GUI session). Retry from a GUI terminal; "+
 			"do not re-add", apperr.ErrSwitch, accountNum)
 	}
-	return "", fmt.Errorf("%w: account %s has no stored credentials. Re-add with: "+
-		"ccswap add --slot %s", apperr.ErrSwitch, accountNum, accountNum)
+	return "", fmt.Errorf("%w: account %s has no stored credentials. Log in as it, "+
+		"then run: aaswap login --capture --name %s", apperr.ErrSwitch, accountNum, accountNum)
 }
 
 // readTargetConfig reads the target slot's stored config and its identity
 // block.
+//
+// Both are nil for a provider with no account-scoped config. That is not a
+// missing backup: the credential is the whole login, and there is nothing to
+// splice into anything. Demanding an identity block there refused every switch
+// the provider could otherwise perform.
 func (s *Switcher) readTargetConfig(accountNum, email string) (jsontext.Value, object, error) {
+	if _, ok := s.spec().ConfigFile(); !ok {
+		return nil, nil, nil
+	}
 	stored := s.ReadAccountConfig(accountNum, email)
 	if stored == "" {
-		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Re-add "+
-			"with: ccswap add --slot %s", apperr.ErrSwitch, accountNum, accountNum)
+		return nil, nil, fmt.Errorf("%w: account %s has no stored config backup. Log in "+
+			"as it, then run: aaswap login --capture --name %s",
+			apperr.ErrSwitch, accountNum, accountNum)
 	}
 	var config object
 	if err := json.Unmarshal([]byte(stored), &config); err != nil {
@@ -439,6 +472,8 @@ func (s *Switcher) readTargetConfig(accountNum, email string) (jsontext.Value, o
 // spliceLiveConfig puts the target's identity into the live config, preserving
 // everything else in it.
 //
+// A no-op when the provider has no account-scoped config: see readTargetConfig.
+//
 // The live config holds the user's projects, MCP servers and settings. Only the
 // identity block belongs to the account, so only that is replaced. When the
 // live config cannot be read at all, its bytes are copied aside under a name
@@ -447,6 +482,12 @@ func (s *Switcher) readTargetConfig(accountNum, email string) (jsontext.Value, o
 // nothing local distinguishes that from a working install whose config just
 // tore.
 func (s *Switcher) spliceLiveConfig(targetOAuth jsontext.Value, targetConfig object) ([]string, error) {
+	if targetOAuth == nil && targetConfig == nil {
+		// No account-scoped config for this provider. Writing one would create
+		// a file the tool never reads, in a home where a same-named file may
+		// belong to something else entirely.
+		return nil, nil
+	}
 	path := s.Paths.GlobalConfigPath()
 
 	existing, present, err := readObject(path)
@@ -479,7 +520,7 @@ func (s *Switcher) spliceLiveConfig(targetOAuth jsontext.Value, targetConfig obj
 func (s *Switcher) writeLiveConfig(config object) error {
 	data, err := json.Marshal(config, jsontext.WithIndent("  "))
 	if err != nil {
-		return fmt.Errorf("%w: encoding Claude's config: %w", apperr.ErrConfig, err)
+		return fmt.Errorf("%w: encoding the live config: %w", apperr.ErrConfig, err)
 	}
 	return fsutil.WriteForeignFileAtomic(s.Paths.GlobalConfigPath(), append(data, '\n'))
 }
@@ -490,7 +531,7 @@ func (s *Switcher) writeLiveConfig(config object) error {
 // and may hold rotated-out tokens, while the live credential's copies are by
 // definition the current generation — so for those keys the live credential
 // wins, absence included. Every other field the destination slot stored travels
-// with the slot: account-bound state, and anything ccswap does not recognize,
+// with the slot: account-bound state, and anything aaswap does not recognize,
 // must not leak across a switch.
 func prepareForActivation(targetCredentials, liveCredentials string) string {
 	shared, ok := credstore.SharedCredentialFields(liveCredentials)
@@ -522,7 +563,7 @@ type switchRollback struct {
 func (r *switchRollback) run() {
 	if r.configWritten && r.hadConfig {
 		if err := fsutil.WriteForeignFileAtomic(r.configPath, []byte(r.originalConfig)); err != nil {
-			slog.Error("failed to roll back Claude's config after a failed switch", "error", err)
+			slog.Error("failed to roll back the live config after a failed switch", "error", err)
 		}
 	}
 	if r.credsWritten && r.originalCreds != "" {
@@ -565,7 +606,7 @@ func (s *Switcher) stashLive(credentials, reason, configSlot string, resolved *c
 		return "", err
 	}
 	slog.Warn("the live credential does not belong to the slot the config names; it was "+
-		"stashed. Something outside ccswap rewrote the live login after the last switch",
+		"stashed. Something outside aaswap rewrote the live login after the last switch",
 		"slot", configSlot, "reason", reason, "entry", entryID,
 		"credentials_mtime", entry.CredentialsMtime)
 	return entryID, nil

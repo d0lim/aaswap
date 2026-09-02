@@ -10,7 +10,7 @@ import (
 // AllowRealNetworkEnv opts a test into reaching Anthropic's real endpoints. It
 // exists for a live smoke test run deliberately by hand, and must never be set
 // in CI or for any other test.
-const AllowRealNetworkEnv = "CCSWAP_ALLOW_REAL_NETWORK"
+const AllowRealNetworkEnv = "AASWAP_ALLOW_REAL_NETWORK"
 
 // realHosts are the production endpoints a test must never reach.
 var realHosts = []string{"anthropic.com", "claude.com", "claude.ai"}
@@ -33,7 +33,7 @@ func guardRealEndpoint(u *url.URL) {
 	host := strings.ToLower(u.Hostname())
 	for _, real := range realHosts {
 		if host == real || strings.HasSuffix(host, "."+real) {
-			panic("ccswap test safety net: a test tried to reach " + u.String() +
+			panic("aaswap test safety net: a test tried to reach " + u.String() +
 				", which would spend the developer's own refresh token or usage budget.\n" +
 				"Point the Client's URLs at an httptest server, or — only for a test that " +
 				"genuinely needs the live endpoint — set " + AllowRealNetworkEnv + "=1 for that test alone.")

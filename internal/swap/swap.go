@@ -28,17 +28,19 @@
 package swap
 
 import (
+	"cmp"
 	"context"
 	"path/filepath"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/claudeapi"
-	"github.com/d0lim/ccswap/internal/credstore"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/lockfile"
-	"github.com/d0lim/ccswap/internal/paths"
-	"github.com/d0lim/ccswap/internal/settings"
-	"github.com/d0lim/ccswap/internal/usagestore"
+	"github.com/d0lim/aaswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/credstore"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/lockfile"
+	"github.com/d0lim/aaswap/internal/paths"
+	providerpkg "github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
 // BackupWritten announces a replaced backup credential, if anyone is listening.
@@ -56,7 +58,7 @@ const RosterFileName = paths.RosterFileName
 // operations that matter — adding, removing, relocating, switching — touch the
 // roster and the credential backups together, and a per-slot lock would let two
 // of them interleave into a roster that names credentials nobody wrote.
-const LockFileName = ".ccswap.lock"
+const LockFileName = ".aaswap.lock"
 
 // IdentityOracle resolves an access token to the account it belongs to.
 //
@@ -83,11 +85,24 @@ type UsageFetcher interface {
 // runtime audit hook: there is no ambient path into the developer's real store
 // to guard against, because every path in is a field.
 type Switcher struct {
+	// Provider names the auth domain this switcher operates on. Empty means
+	// Claude, which is what every store written before providers existed holds.
+	//
+	// One switcher per provider rather than a provider argument on every
+	// method: the active account is per provider, and a call that could be
+	// about either would have to be told which on every hop.
+	Provider string
+
 	// Paths answers every "where does that file live" question.
 	Paths *paths.Resolver
 
 	// Creds routes credentials between the Keychain and files.
 	Creds *credstore.Store
+
+	// Profiles is how this provider's tool keeps a credential inside a session
+	// profile. Held here so it is injected once, beside the credential store it
+	// is the profile-scoped counterpart of.
+	Profiles providerpkg.ProfileStore
 
 	// Usage is the shared measurement table.
 	Usage *usagestore.Store
@@ -142,14 +157,22 @@ type Switcher struct {
 	FetchStagger time.Duration
 }
 
-// New returns a Switcher wired to the given paths.
-func New(r *paths.Resolver) *Switcher {
+// NewForProvider returns a Switcher wired to one auth domain.
+//
+// The provider is chosen HERE rather than assigned afterwards, because the
+// credential store and the profile store are both scoped by it. Setting a field
+// on a built Switcher would leave those two pointed at the wrong provider's
+// files while the roster read the right one's section.
+func NewForProvider(r *paths.Resolver, provider string) *Switcher {
 	root := r.BackupRoot()
 	client := claudeapi.New()
-	return &Switcher{
+	spec := providerpkg.MustLookup(cmp.Or(provider, ProviderClaude))
+	s := &Switcher{
+		Provider:    provider,
 		Paths:       r,
-		Creds:       credstore.New(r, root, keychain.New()),
-		Usage:       usagestore.New(r.CacheDir()),
+		Creds:       credstore.NewForProvider(r, root, keychain.New(), provider, liveLayoutFor(r, spec)),
+		Profiles:    providerpkg.NewProfiles(spec, r.Platform, keychain.New()),
+		Usage:       usagestore.NewForProvider(r.CacheDir(), spec.Name),
 		Oracle:      client,
 		Fetcher:     client,
 		Refresher:   client,
@@ -157,6 +180,23 @@ func New(r *paths.Resolver) *Switcher {
 		Now:         time.Now,
 		LockTimeout: lockfile.DefaultTimeout,
 	}
+	// What the declaration says this provider can do decides what gets wired.
+	// Anthropic's oracle and refresher speak for Anthropic's tokens only, so a
+	// provider that does not declare itself refreshable gets neither: nil is
+	// the documented "do not check", and pointing them at another vendor's
+	// credential would ask the wrong server about the wrong token.
+	if !spec.Can(providerpkg.CapRefresh) {
+		s.Oracle, s.Refresher = nil, nil
+	}
+	if scope, ok := spec.UsageScope(); !ok {
+		// No declared usage source. An absent fetcher reports every account as
+		// unknown, which is the honest answer and reads as "not exhausted"
+		// everywhere it matters.
+		s.Fetcher = nil
+	} else if scope == providerpkg.UsageLiveOnly {
+		s.Fetcher = s.liveOnlyUsageFetcher()
+	}
+	return s
 }
 
 // SetClock points the Switcher and its usage store at one clock.
@@ -174,7 +214,7 @@ func (s *Switcher) now() time.Time {
 	return s.Now()
 }
 
-// BackupRoot is where ccswap keeps everything it owns.
+// BackupRoot is where aaswap keeps everything it owns.
 func (s *Switcher) BackupRoot() string { return s.Paths.BackupRoot() }
 
 // RosterPath is sequence.json's location.
@@ -187,9 +227,22 @@ func (s *Switcher) LockPath() string {
 	return filepath.Join(s.BackupRoot(), LockFileName)
 }
 
-// ConfigsDir holds each slot's captured ~/.claude.json.
+// configsDirName holds one directory per provider of captured configs.
+const configsDirName = "configs"
+
+// ConfigsDir holds each account's captured config, scoped to this provider.
+//
+// Scoped for the same reason the credentials are: two providers can hold one
+// person's account under one name, and a shared directory would give whichever
+// wrote last both accounts' configs.
 func (s *Switcher) ConfigsDir() string {
-	return filepath.Join(s.BackupRoot(), "configs")
+	return filepath.Join(s.BackupRoot(), configsDirName, s.provider())
+}
+
+// legacyConfigsDir is where a store written before providers existed kept
+// captured configs. Read by the upgrade, and by nothing else.
+func (s *Switcher) legacyConfigsDir() string {
+	return filepath.Join(s.BackupRoot(), configsDirName)
 }
 
 // withLock runs fn under the store lock.
@@ -203,4 +256,26 @@ func (s *Switcher) withLock(fn func() error) error {
 		timeout = lockfile.DefaultTimeout
 	}
 	return lockfile.With(s.LockPath(), timeout, fn)
+}
+
+// LiveLayout translates a provider's declaration into the two facts the
+// credential store needs about where its live login lives.
+//
+// The store sits below the provider package and cannot read a declaration
+// itself, so the translation happens here — the one place that has both.
+// Exported because anything assembling a Switcher by hand has to produce the
+// same layout production does, and deriving it a second way is how the two
+// drift.
+func LiveLayout(r *paths.Resolver, provider string) credstore.Layout {
+	return liveLayoutFor(r, providerpkg.MustLookup(cmp.Or(provider, ProviderClaude)))
+}
+
+func liveLayoutFor(r *paths.Resolver, spec providerpkg.Spec) credstore.Layout {
+	layout := credstore.Layout{Keychain: spec.Keychain}
+	if secrets := spec.SecretFiles(); len(secrets) > 0 {
+		layout.SecretName = secrets[0].Path
+		layout.LivePath = r.ProviderCredentialsPath(
+			spec.Home.Env, spec.Home.Default, secrets[0].Path)
+	}
+	return layout
 }

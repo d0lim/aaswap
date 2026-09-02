@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/d0lim/ccswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/apperr"
 )
 
 // InvalidateForSlot re-points a slot's session profile at a credential that has
@@ -19,7 +19,7 @@ import (
 // consumed refresh grant — that copy becomes a PREDECESSOR generation. It still
 // satisfies the local reuse check, because that check asks whether a credential
 // is well-formed and unexpired, not whether the server has since rotated it
-// out. So `ccswap run` would keep launching against a token that fails on its
+// out. So `aaswap run` would keep launching against a token that fails on its
 // first refresh.
 //
 // Two outcomes, decided by whether anything is running against the profile:
@@ -97,7 +97,7 @@ func dirExists(path string) bool {
 // else. Both stores, because macOS keeps one in the Keychain and a plaintext
 // file can shadow it.
 func (m *Manager) dropCredentialMaterial(sessionDir string) error {
-	m.DeleteKeychainEntry(sessionDir)
+	m.ClearProfileCredential(sessionDir)
 	path := filepath.Join(sessionDir, ".credentials.json")
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

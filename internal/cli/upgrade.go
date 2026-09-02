@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/d0lim/ccswap/internal/buildinfo"
-	"github.com/d0lim/ccswap/internal/updatecheck"
+	"github.com/d0lim/aaswap/internal/buildinfo"
+	"github.com/d0lim/aaswap/internal/updatecheck"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +56,7 @@ func (a *App) runUpgrade(cmd *cobra.Command) error {
 		a.printer.Println("  ", a.printer.Bold(command))
 	} else {
 		a.printer.Println(a.printer.Dimmed(
-			"  ccswap could not tell how it was installed. Install the build for your " +
+			"  aaswap could not tell how it was installed. Install the build for your " +
 				"platform from:"))
 		a.printer.Println("  ", url)
 	}

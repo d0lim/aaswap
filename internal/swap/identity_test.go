@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/claudeapi"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/claudeapi"
 )
 
 func TestLiveIdentity(t *testing.T) {
@@ -207,7 +207,7 @@ func TestRejectLiveAPIKeyCapture(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := RejectLiveAPIKeyCapture(tt.creds)
 			if tt.wantErr {
-				wantErr(t, err, "API-key account", "add-token")
+				wantErr(t, err, "API-key account", "login --token")
 				if !errors.Is(err, apperr.ErrValidation) {
 					t.Errorf("error is not a validation error: %v", err)
 				}
@@ -222,12 +222,12 @@ func TestRejectLiveAPIKeyCapture(t *testing.T) {
 // an email across kinds could not be told apart at switch time.
 func TestRejectCrossKindCollision(t *testing.T) {
 	f := newFixture(t)
-	roster := newRoster(f.now)
-	roster.Insert("1", &Account{Email: "oauth@example.com"}, f.now)
-	roster.Insert("2", &Account{Email: "key@example.com", Kind: KindAPIKey}, f.now)
+	roster := newRoster()
+	roster.Insert("1", &Account{Email: "oauth@example.com"})
+	roster.Insert("2", &Account{Email: "key@example.com", Kind: KindAPIKey})
 	// A slot under an organization does not collide with a personal token: the
 	// composite differs.
-	roster.Insert("3", &Account{Email: "org@example.com", OrganizationUUID: "org-3"}, f.now)
+	roster.Insert("3", &Account{Email: "org@example.com", OrganizationUUID: "org-3"})
 
 	tests := []struct {
 		name     string
@@ -256,13 +256,13 @@ func TestRejectCrossKindCollision(t *testing.T) {
 
 func TestResolveIdentifier(t *testing.T) {
 	f := newFixture(t)
-	roster := newRoster(f.now)
-	roster.Insert("1", &Account{Email: "a@example.com", Alias: "work"}, f.now)
-	roster.Insert("2", &Account{Email: "b@example.com"}, f.now)
-	roster.Insert("3", &Account{Email: "shared@example.com", OrganizationUUID: "org-3",
-		OrganizationName: "Three"}, f.now)
-	roster.Insert("4", &Account{Email: "shared@example.com", OrganizationUUID: "org-4",
-		OrganizationName: "Four"}, f.now)
+	roster := newRoster()
+	roster.Insert("work", &Account{Email: "a@example.com"})
+	roster.Insert("spare", &Account{Email: "b@example.com"})
+	roster.Insert("three", &Account{Email: "shared@example.com", OrganizationUUID: "org-3",
+		OrganizationName: "Three"})
+	roster.Insert("four", &Account{Email: "shared@example.com", OrganizationUUID: "org-4",
+		OrganizationName: "Four"})
 
 	tests := []struct {
 		name   string
@@ -270,15 +270,13 @@ func TestResolveIdentifier(t *testing.T) {
 		want   string
 		wantOK bool
 	}{
-		{"a slot number", "2", "2", true},
-		// Taken literally even when no such slot exists, so "switch 9" reports
-		// "no account 9" rather than hunting for an alias named "9".
-		{"a number with no slot", "9", "9", true},
-		{"an alias", "work", "1", true},
-		{"an alias, case-insensitively", "WORK", "1", true},
-		{"an email", "b@example.com", "2", true},
+		{"a name", "spare", "spare", true},
+		{"a name, case-insensitively", "WORK", "work", true},
+		{"an email", "b@example.com", "spare", true},
 		{"nothing that matches", "nobody@example.com", "", false},
-		// An aliasless account must not be matched by the empty string.
+		// A name that does not exist is not a hunt: reporting "no account"
+		// beats resolving to whatever else happens to match.
+		{"a name with no account", "ghost", "", false},
 		{"the empty string", "", "", false},
 	}
 	for _, tt := range tests {
@@ -298,48 +296,25 @@ func TestResolveIdentifier(t *testing.T) {
 	// not name.
 	t.Run("an ambiguous email is an error, not a guess", func(t *testing.T) {
 		_, _, err := f.ResolveIdentifier(roster, "shared@example.com")
-		wantErr(t, err, "ambiguous", "3 [Three]", "4 [Four]", "account number")
+		wantErr(t, err, "ambiguous", "three [Three]", "four [Four]", "account name")
 	})
 }
 
-// Number beats alias beats email, so a numeric-looking alias can never shadow a
-// slot and an address can never shadow an alias.
-func TestResolutionPrecedence(t *testing.T) {
+func TestResolutionPrefersTheNameOverTheEmail(t *testing.T) {
 	f := newFixture(t)
-	roster := newRoster(f.now)
-	// Slot 2's alias is the address of slot 1.
-	roster.Insert("1", &Account{Email: "a@example.com"}, f.now)
-	roster.Insert("2", &Account{Email: "b@example.com", Alias: "a@example.com"}, f.now)
+	roster := newRoster()
+	roster.Insert("a@example.com", &Account{Email: "b@example.com"})
+	roster.Insert("other", &Account{Email: "a@example.com"})
 
-	// The alias wins over the email, because aliases resolve first.
 	got, _, err := f.ResolveIdentifier(roster, "a@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "2" {
-		t.Errorf("ResolveIdentifier = %q, want the alias match", got)
+	if got != "a@example.com" {
+		t.Errorf("ResolveIdentifier = %q, want the name match", got)
 	}
 }
 
-func TestAliasInUse(t *testing.T) {
-	f := newFixture(t)
-	roster := newRoster(f.now)
-	roster.Insert("1", &Account{Email: "a@example.com", Alias: "work"}, f.now)
-
-	if num, inUse := AliasInUse(roster, "work", ""); !inUse || num != "1" {
-		t.Errorf("AliasInUse = (%q, %v), want slot 1", num, inUse)
-	}
-	// A slot does not conflict with itself.
-	if _, inUse := AliasInUse(roster, "work", "1"); inUse {
-		t.Error("a slot conflicted with its own alias")
-	}
-	if _, inUse := AliasInUse(roster, "home", ""); inUse {
-		t.Error("an unused alias reported as in use")
-	}
-}
-
-// The fingerprint is what binds a strike to a generation, so identity code and
-// the store must agree on what it means.
 func TestCredentialFingerprintIsLineageIdentity(t *testing.T) {
 	const gen1 = `{"claudeAiOauth":{"accessToken":"a1","refreshToken":"r1"}}`
 	const gen1Rotated = `{"claudeAiOauth":{"accessToken":"a2","refreshToken":"r1"}}`
@@ -350,5 +325,54 @@ func TestCredentialFingerprintIsLineageIdentity(t *testing.T) {
 	}
 	if claudeapi.Fingerprint(gen1) == claudeapi.Fingerprint(gen2) {
 		t.Error("a refresh-token rotation did not move the fingerprint")
+	}
+}
+
+// A token refresh is not an account change.
+//
+// The drift guard compares the whole identity that was read, and the fingerprint
+// in it names the credential generation rather than the account. Counting that
+// as drift refuses the re-login of the very account being captured — which is
+// exactly what `aaswap login` does when an account's token has expired.
+func TestATokenRefreshIsNotIdentityDrift(t *testing.T) {
+	before := LiveIdentity{
+		Email: "one@example.com", OrganizationUUID: "org-1",
+		OrganizationName: "S TF", AccountUUID: "acct-1",
+		Fingerprint: "a11111111",
+	}
+	after := before
+	after.Fingerprint = "a22222222"
+
+	if !before.SameAccount(after) {
+		t.Error("a new credential generation for the same account read as drift")
+	}
+}
+
+// A different account is still drift, however similar it looks.
+func TestADifferentAccountIsStillDrift(t *testing.T) {
+	base := LiveIdentity{Email: "one@example.com", OrganizationUUID: "org-1"}
+	for name, other := range map[string]LiveIdentity{
+		"another address":      {Email: "two@example.com", OrganizationUUID: "org-1"},
+		"another organization": {Email: "one@example.com", OrganizationUUID: "org-2"},
+	} {
+		if base.SameAccount(other) {
+			t.Errorf("%s compared equal to the original", name)
+		}
+	}
+}
+
+// With no address the fingerprint is the only identifying field, so a changed
+// one has to read as a different account. aaswap cannot tell a re-login from a
+// switch there, and refusing is the safe side of that.
+func TestWithNoAddressTheFingerprintIsTheIdentity(t *testing.T) {
+	before := LiveIdentity{Fingerprint: "a11111111"}
+	same := LiveIdentity{Fingerprint: "a11111111"}
+	other := LiveIdentity{Fingerprint: "a22222222"}
+
+	if !before.SameAccount(same) {
+		t.Error("an unchanged credential read as a different account")
+	}
+	if before.SameAccount(other) {
+		t.Error("a changed credential with no address read as the same account")
 	}
 }

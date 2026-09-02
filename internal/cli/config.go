@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/settings"
+	"github.com/d0lim/aaswap/internal/settings"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ import (
 func (a *App) configCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Show or change ccswap's settings",
+		Short: "Show or change aaswap's settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runConfigList()
@@ -56,15 +56,7 @@ func (a *App) configCommand() *cobra.Command {
 			return a.runConfigUnset(args[0])
 		},
 	}
-	path := &cobra.Command{
-		Use:   "path",
-		Short: "Print where settings.json lives",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.runConfigPath()
-		},
-	}
-	for _, sub := range []*cobra.Command{list, get, set, unset, path} {
+	for _, sub := range []*cobra.Command{list, get, set, unset} {
 		silenceUsage(sub)
 		cmd.AddCommand(sub)
 	}
@@ -79,6 +71,9 @@ func (a *App) runConfigList() error {
 	rows := settings.Effective(s.BackupRoot())
 
 	if a.json {
+		// The path rides along in the payload rather than in a command of its
+		// own: one line is not worth a verb, and a consumer reading the
+		// settings usually wants to know which file they came from.
 		type row struct {
 			Key       string `json:"key"`
 			Value     any    `json:"value"`
@@ -89,9 +84,14 @@ func (a *App) runConfigList() error {
 		for i, r := range rows {
 			out[i] = row{Key: r.Spec.Dotted(), Value: r.Value, IsDefault: !r.IsSet, Help: r.Spec.Help}
 		}
-		a.emitJSON(out)
+		a.emitJSON(struct {
+			Path     string `json:"path"`
+			Settings []row  `json:"settings"`
+		}{Path: settings.Path(s.BackupRoot()), Settings: out})
 		return nil
 	}
+
+	a.printer.Println(a.printer.Muted(settings.Path(s.BackupRoot())))
 
 	width := 0
 	for _, r := range rows {
@@ -156,15 +156,6 @@ func (a *App) runConfigUnset(key string) error {
 	}
 	a.printer.Println(a.printer.Accent("Unset"), " ", key, " → ",
 		settings.FormatValue(spec.Default()), a.printer.Dimmed(" (default)"))
-	return nil
-}
-
-func (a *App) runConfigPath() error {
-	s, err := a.switcher()
-	if err != nil {
-		return err
-	}
-	a.printer.Println(settings.Path(s.BackupRoot()))
 	return nil
 }
 

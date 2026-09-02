@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/testutil"
+	"github.com/d0lim/aaswap/internal/testutil"
 )
 
 var testNow = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
@@ -15,7 +15,7 @@ var testNow = time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 func newStore(t *testing.T) (*Store, string) {
 	t.Helper()
 	root := t.TempDir()
-	s := New(root)
+	s := NewForProvider(root, "claude")
 	s.Now = func() time.Time { return testNow }
 	return s, root
 }
@@ -171,7 +171,7 @@ func TestAnUncreatedDirectoryStillNormalizes(t *testing.T) {
 	}
 }
 
-// A mapping to an account that no longer exists would silently send `ccswap run`
+// A mapping to an account that no longer exists would silently send `aaswap run`
 // looking for it.
 func TestPruneAccount(t *testing.T) {
 	s, root := newStore(t)
@@ -289,4 +289,59 @@ func TestTheTableIsOwnerOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutil.AssertPerm(t, s.Path(), 0o600)
+}
+
+// A directory belongs to one account per TOOL. One table for all of them let a
+// second provider's `dir map` overwrite the first's, gave every provider the
+// same answer for a directory, and let removing an account prune another
+// provider's mapping for the same address.
+func TestEachProviderKeepsItsOwnTable(t *testing.T) {
+	root := t.TempDir()
+	dir := t.TempDir()
+
+	claude := NewForProvider(root, "claude")
+	claude.Now = func() time.Time { return testNow }
+	codex := NewForProvider(root, "codex")
+	codex.Now = func() time.Time { return testNow }
+
+	// The same address at both, which is the ordinary case and what made the
+	// crossing invisible: nothing in the entry itself would look wrong.
+	shared := Identity{Email: "me@example.com", OrganizationUUID: "org-1"}
+	if _, err := claude.Set(dir, shared); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := codex.Set(dir, Identity{Email: "me@example.com", OrganizationUUID: "acct-9"}); err != nil {
+		t.Fatal(err)
+	}
+
+	entry, found, err := claude.Get(dir)
+	if err != nil || !found {
+		t.Fatalf("the Claude mapping is gone: found = %v, err = %v", found, err)
+	}
+	if entry.Identity() != shared {
+		t.Errorf("the Claude mapping reads %+v, want %+v — the tables are crossed",
+			entry.Identity(), shared)
+	}
+
+	// And a prune stops at its own table.
+	if _, err := codex.PruneAccount(shared); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := claude.Get(dir); !found {
+		t.Error("pruning a Codex account removed the Claude mapping")
+	}
+}
+
+// The file already on disk was written before providers existed, and it is
+// Claude's. Renaming it would lose every mapping a user had.
+func TestClaudeKeepsTheUnsuffixedTable(t *testing.T) {
+	if got := FileNameFor("claude"); got != FileName {
+		t.Errorf("claude's table is %q, want the existing %q", got, FileName)
+	}
+	if got := FileNameFor(""); got != FileName {
+		t.Errorf("an unscoped store reads %q, want the existing %q", got, FileName)
+	}
+	if got := FileNameFor("codex"); got == FileName {
+		t.Errorf("codex shares claude's table at %q", got)
+	}
 }

@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 // AdoptReport says what an adoption did to the Keychain.
 type AdoptReport struct {
-	// Copied is how many slots now have a backup under ccswap's own service.
+	// Copied is how many slots now have a backup under aaswap's own service.
 	Copied int
 	// Missing names slots that had no claude-swap Keychain item at all. Not an
 	// error: off macOS there never was one, and on macOS a slot whose backup
@@ -21,8 +21,8 @@ type AdoptReport struct {
 	Failed []string
 }
 
-// AdoptClaudeSwapKeychain copies backup items from the claude-swap Keychain
-// service into ccswap's own, for the slots named.
+// AdoptKeychain copies backup items from a predecessor's Keychain service into
+// this tool's own, for the slots named.
 //
 // Copies rather than moves. The directory tree has already been moved by the
 // time this runs, so the originals are unreferenced — but leaving them is what
@@ -33,7 +33,12 @@ type AdoptReport struct {
 // Never fails outward on one slot. A partial adoption that reports exactly
 // which slots did not come across is more useful than an abort that leaves the
 // store half-owned and says nothing about which half.
-func (s *Store) AdoptClaudeSwapKeychain(slots map[string]string) (AdoptReport, error) {
+// The item names on BOTH sides are the pre-provider ones. A predecessor never
+// wrote a provider into its names, and what lands here is a version 1 store
+// that the upgrade has yet to walk — it will re-register these under their new
+// names when it does. Writing the scoped name here would file the item where
+// the upgrade does not look.
+func (s *Store) AdoptKeychain(fromService string, slots map[string]string) (AdoptReport, error) {
 	var report AdoptReport
 	if s.platform != platform.MacOS {
 		// Only macOS ever put a backup in the Keychain; everywhere else the
@@ -41,9 +46,10 @@ func (s *Store) AdoptClaudeSwapKeychain(slots map[string]string) (AdoptReport, e
 		return report, nil
 	}
 
+	unscoped := s.Unscoped()
 	for num, email := range slots {
-		username := backupUsername(num, email)
-		value, found, err := s.kc.Get(ClaudeSwapBackupService, username)
+		username := unscoped.backupUsername(num, email)
+		value, found, err := s.kc.Get(fromService, username)
 		switch {
 		case err != nil:
 			report.Failed = append(report.Failed, fmt.Sprintf("%s: reading: %v", num, err))
@@ -68,7 +74,8 @@ func (s *Store) AdoptClaudeSwapKeychain(slots map[string]string) (AdoptReport, e
 	}
 
 	if len(report.Failed) > 0 {
-		return report, fmt.Errorf("%w: %d slot(s) did not come across", apperr.ErrCredential, len(report.Failed))
+		return report, fmt.Errorf("%w: %d account(s) did not come across",
+			apperr.ErrCredential, len(report.Failed))
 	}
 	return report, nil
 }

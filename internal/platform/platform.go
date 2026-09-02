@@ -1,4 +1,4 @@
-// Package platform classifies the host OS into the four cases ccswap
+// Package platform classifies the host OS into the four cases aaswap
 // actually branches on.
 //
 // The distinction that matters is not GOOS alone: WSL is a Linux kernel that
@@ -13,7 +13,7 @@ import (
 	"runtime"
 )
 
-// Platform is the host operating system, as ccswap classifies it.
+// Platform is the host operating system, as aaswap classifies it.
 type Platform int
 
 const (
@@ -40,7 +40,7 @@ func (p Platform) String() string {
 	}
 }
 
-// UsesXDG reports whether this platform stores ccswap data under the XDG
+// UsesXDG reports whether this platform stores aaswap data under the XDG
 // Base Directory layout rather than the legacy ~/.claude-swap-backup.
 func (p Platform) UsesXDG() bool {
 	return p == Linux || p == WSL

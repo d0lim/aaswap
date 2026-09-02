@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/keychain"
-	"github.com/d0lim/ccswap/internal/platform"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/keychain"
+	"github.com/d0lim/aaswap/internal/platform"
 )
 
 func readGlobalConfigForTest(t *testing.T, s *Store) map[string]any {
@@ -67,7 +67,7 @@ func TestOAuthWriteRecordsItsBackend(t *testing.T) {
 }
 
 // Claude Code reads the Keychain before the plaintext file, so a stale item
-// would resurrect the old account over the file ccswap just wrote (#30337).
+// would resurrect the old account over the file aaswap just wrote (#30337).
 func TestAFileFallbackClearsTheStaleKeychainItem(t *testing.T) {
 	s, fake := newTestStore(t, platform.MacOS)
 	fake.items[ClaudeOAuthService+"\x00"+keychain.AccountName()] = `{"claudeAiOauth":{"accessToken":"OLD"}}`
@@ -267,7 +267,7 @@ func TestClearingTheManagedKeyLeavesTheApprovedList(t *testing.T) {
 
 // ---------------------------------------------------------------- Global config
 
-// Every key ccswap does not own must survive a write. Losing oauthAccount,
+// Every key aaswap does not own must survive a write. Losing oauthAccount,
 // projects or mcpServers would take the user's whole Claude Code state with it.
 func TestUpdateGlobalConfigPreservesForeignKeys(t *testing.T) {
 	s, _ := newTestStore(t, platform.Linux)

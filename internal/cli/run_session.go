@@ -1,16 +1,19 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/d0lim/ccswap/internal/apperr"
-	"github.com/d0lim/ccswap/internal/mappings"
-	"github.com/d0lim/ccswap/internal/session"
-	"github.com/d0lim/ccswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/mappings"
+	"github.com/d0lim/aaswap/internal/provider"
+	"github.com/d0lim/aaswap/internal/session"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/spf13/cobra"
 )
 
@@ -19,15 +22,18 @@ import (
 func (a *App) runCommand() *cobra.Command {
 	var share, shareHistory bool
 	cmd := &cobra.Command{
-		Use:   "run [NUM|EMAIL|ALIAS] [-- CLAUDE ARGS...]",
-		Short: "Launch Claude Code as one account, leaving the default login alone",
-		Long: "With no account, the working directory decides: `ccswap map` remembers which\n" +
-			"account a directory belongs to, and the nearest mapped ancestor wins.\n" +
-			"An unmapped directory launches Claude Code exactly as typing `claude` would.\n\n" +
-			"Everything after `--` is passed through to Claude Code.",
-		Example: "  ccswap run 2\n" +
-			"  ccswap run work -- --resume\n" +
-			"  ccswap run                      # whichever account this directory maps to",
+		Use:   "run [ACCOUNT] [-- TOOL ARGS...]",
+		Short: "Launch the provider's tool as one account, leaving the default login alone",
+		Long: "With no account, the working directory decides: `aaswap dir map` remembers\n" +
+			"which account a directory belongs to, and the nearest mapped ancestor wins.\n" +
+			"An unmapped directory launches the tool exactly as typing it would.\n\n" +
+			"Everything after `--` is passed through to the tool.\n\n" +
+			"Available for any provider that declares an isolated profile directory;\n" +
+			"`aaswap doctor` says which do.",
+		Example: "  aaswap run work\n" +
+			"  aaswap run work -- --resume\n" +
+			"  aaswap --provider codex run work\n" +
+			"  aaswap run                      # whichever account this directory maps to",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			identifier, claudeArgs := splitRunArgs(cmd, args)
@@ -46,7 +52,7 @@ func (a *App) runCommand() *cobra.Command {
 
 // splitRunArgs separates the account from the arguments meant for Claude Code.
 //
-// Cobra records where `--` appeared, so `ccswap run -- --resume` passes the flag
+// Cobra records where `--` appeared, so `aaswap run -- --resume` passes the flag
 // through instead of reading it as an account.
 func splitRunArgs(cmd *cobra.Command, args []string) (identifier string, claudeArgs []string) {
 	return splitRunArgsAt(args, cmd.ArgsLenAtDash())
@@ -69,11 +75,35 @@ func splitRunArgsAt(args []string, at int) (identifier string, claudeArgs []stri
 	return "", args
 }
 
+// requireCapability refuses a command the addressed provider cannot support.
+//
+// The refusal comes from the provider's own declaration rather than from a
+// hardcoded name, so a provider added later is refused for the right reason and
+// a capability added later cannot be forgotten for an existing one. Every
+// refusal names the provider, says what is missing, and points at the command
+// that does work — a refusal with no way forward is a dead end.
+//
+// The way forward comes from Why, which knows the capability. A single tail
+// appended to every refusal cannot: "use `switch` instead" is the answer for a
+// provider that cannot isolate a session and nonsense for one that cannot store
+// a pasted token.
+func (a *App) requireCapability(s *swap.Switcher, capability provider.Capability) error {
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
+	if spec.Can(capability) {
+		return nil
+	}
+	return fmt.Errorf("%w: %s", apperr.ErrConfig, spec.Why(capability))
+}
+
 func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []string, share session.ShareOptions) error {
 	s, err := a.switcher()
 	if err != nil {
 		return err
 	}
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
+		return err
+	}
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
 
 	if identifier == "" {
 		resolved, found, err := a.resolveFromDirectory(s)
@@ -83,9 +113,10 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 		if !found {
 			// No mapping: exactly what typing `claude` would do, with the
 			// environment untouched.
-			a.printer.Println(a.printer.Dimmed(
-				"This directory maps to no account — launching Claude Code as the default login."))
-			return a.execClaude(claudeArgs, os.Environ())
+			a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
+				"This directory maps to no account — launching %s as the default login.",
+				spec.Name)))
+			return a.execProvider(spec, claudeArgs, os.Environ())
 		}
 		identifier = resolved
 	}
@@ -95,8 +126,8 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 		return err
 	}
 	if account.AuthKind() == swap.KindAPIKey {
-		return fmt.Errorf("%w: account %s is an API-key account, which Claude Code cannot "+
-			"run in session mode", apperr.ErrSession, num)
+		return fmt.Errorf("%w: %s is an API-key account, which %s cannot "+
+			"run in session mode", apperr.ErrSession, num, spec.Name)
 	}
 
 	manager := a.sessionManager(s)
@@ -106,45 +137,66 @@ func (a *App) runSession(cmd *cobra.Command, identifier string, claudeArgs []str
 	// The same-account fast path: never make a second credential copy for the
 	// account that IS the default login. Two copies of one account drift apart
 	// the moment the server rotates the refresh token.
-	if os.Getenv("CLAUDE_CONFIG_DIR") == "" {
+	if os.Getenv(spec.Session.HomeEnv) == "" {
 		if live, ok := s.LiveIdentity(); ok && live.Identity() == account.Identity() {
 			a.printer.Println(a.printer.Dimmed(fmt.Sprintf(
-				"Account %s (%s) is already the default login — launching Claude Code directly.",
-				num, account.Email)))
-			return a.execClaude(claudeArgs, os.Environ())
+				"%s (%s) is already the default login — launching %s directly.",
+				num, account.Email, spec.Name)))
+			return a.execProvider(spec, claudeArgs, os.Environ())
 		}
 	} else {
-		a.printer.Warning("CLAUDE_CONFIG_DIR is already set; overriding it for this launch.")
+		a.printer.Warning(fmt.Sprintf(
+			"%s is already set; overriding it for this launch.", spec.Session.HomeEnv))
 	}
 
-	if err := a.prepareSession(manager, s, sessionDir, num, account, identity); err != nil {
+	if err := a.prepareSession(manager, s, sessionDir, num, account, identity, spec); err != nil {
 		return err
 	}
 	if err := manager.SyncSharing(sessionDir, defaultProfileDir(s), share); err != nil {
 		return err
 	}
-	if err := manager.SyncMCPServers(sessionDir, s.Paths.DefaultGlobalConfigPath(),
-		share.Customizations); err != nil {
-		return err
+	// Mirroring MCP definitions edits the profile's account-scoped config. A
+	// provider with none keeps its servers in a machine-scoped file, and
+	// writing there would rewrite the user's own settings for every account.
+	if _, hasConfig := spec.ConfigFile(); hasConfig {
+		if err := manager.SyncMCPServers(sessionDir, s.Paths.DefaultGlobalConfigPath(),
+			share.Customizations); err != nil {
+			return err
+		}
 	}
 
-	env, scrubbed := session.Environment(os.Environ(), sessionDir)
+	env, scrubbed := session.Environment(os.Environ(), sessionDir, spec)
 	if len(scrubbed) > 0 {
 		a.printer.Warning(fmt.Sprintf("Ignoring %s for this session — it would override "+
-			"the account inside Claude Code.", strings.Join(scrubbed, ", ")))
+			"the account inside %s.", strings.Join(scrubbed, ", "), spec.Name))
 	}
 	a.printer.Println(a.printer.Accent("Launching"), " ",
-		fmt.Sprintf("Account %s (%s)", num, account.Email),
-		a.printer.Muted(" [session mode]"))
-	return a.execClaude(claudeArgs, env)
+		fmt.Sprintf("%s (%s)", num, account.Email),
+		a.printer.Muted(" ["+spec.Name+" session mode]"))
+	return a.execProvider(spec, claudeArgs, env)
 }
 
 // prepareSession makes sure the profile is usable, seeding it when it is not.
-func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, sessionDir, num string, account *swap.Account, identity session.Identity) error {
+func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, sessionDir, num string, account *swap.Account, identity session.Identity, spec provider.Spec) error {
 	// A deferred invalidation is honored only when nothing is running: a second
 	// launch joining a live session must not re-seed under it. The marker
 	// survives for a later launch.
 	stale := session.IsStale(sessionDir) && manager.Quiescent(num, account.Email)
+
+	// A profile that wants refreshing but belongs to a provider whose running
+	// sessions aaswap cannot see. Quiescent already answered false — the safe
+	// direction — but silence would leave the user with a session on an old
+	// credential and no idea why. Naming it is the whole difference between a
+	// declared limitation and a bug.
+	if !manager.CanDetectSessions() &&
+		(session.IsStale(sessionDir) || manager.ProfileSuperseded(sessionDir, num, account.Email)) {
+		a.printer.Warning(fmt.Sprintf(
+			"This %s profile's credential is out of date, but aaswap cannot tell "+
+				"whether a %s session is running against it, so it will not replace "+
+				"it automatically. Close any running %s sessions and run "+
+				"`aaswap --provider %s login` to refresh it.",
+			spec.Name, spec.Name, spec.Name, spec.Name))
+	}
 
 	// Generation, not just identity. Usable asks whether the profile is logged
 	// in as the right ACCOUNT; it cannot ask whether the credential is the one
@@ -180,13 +232,24 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 		if manager.ArtifactsSayUsable(sessionDir, identity) {
 			return nil
 		}
-		return fmt.Errorf("%w: the session profile for account %s (%s) could not be "+
+		if !manager.CanProbe() {
+			// Nothing could be asked, which is a different statement from a
+			// question that went unanswered — and naming `claude auth status`
+			// to someone running Codex points at a binary they may not have.
+			return fmt.Errorf("%w: the session profile for %s (%s) was seeded but "+
+				"carries no usable credential, and %s publishes no way to ask which "+
+				"account a profile is logged in as. The profile is left in place; "+
+				"store the account again with `aaswap --provider %s login --capture "+
+				"--name %s`, then retry",
+				apperr.ErrSession, num, account.Email, spec.DisplayName(), spec.Name, num)
+		}
+		return fmt.Errorf("%w: the session profile for %s (%s) could not be "+
 			"verified — `claude auth status` did not answer. The profile is left in "+
 			"place; check that `claude` is on your PATH, then retry",
 			apperr.ErrSession, num, account.Email)
 	case session.Unreachable:
 		return fmt.Errorf("%w: `claude` could not be run, so the session profile for "+
-			"account %s could not be verified. Check that Claude Code is installed and "+
+			"%s could not be verified. Check that Claude Code is installed and "+
 			"on your PATH", apperr.ErrSession, num)
 	}
 
@@ -194,8 +257,8 @@ func (a *App) prepareSession(manager *session.Manager, s *swap.Switcher, session
 	if err := manager.Remove(sessionDir); err != nil {
 		return err
 	}
-	return fmt.Errorf("%w: the session profile for account %s (%s) failed validation. Log "+
-		"in with that account and re-add it: ccswap add --slot %s",
+	return fmt.Errorf("%w: the session profile for %s (%s) failed validation. Log "+
+		"in as that account, then run: aaswap login --capture --name %s",
 		apperr.ErrSession, num, account.Email, num)
 }
 
@@ -205,7 +268,7 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 	if err != nil {
 		return "", false, fmt.Errorf("%w: reading the working directory: %w", apperr.ErrConfig, err)
 	}
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	_, entry, found := store.Resolve(cwd)
 	if !found {
 		return "", false, nil
@@ -215,7 +278,7 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	num, exists := roster.FindSlot(swap.Identity{
+	num, exists := roster.FindName(swap.Identity{
 		Email:            entry.Email,
 		OrganizationUUID: entry.OrganizationUUID,
 	})
@@ -224,54 +287,82 @@ func (a *App) resolveFromDirectory(s *swap.Switcher) (string, bool, error) {
 		// user asked to run Claude Code, and the default login still can.
 		a.printer.Warning(fmt.Sprintf(
 			"This directory maps to %s, which is no longer managed. Remove the mapping "+
-				"with `ccswap unmap`, or re-add the account.", entry.Email))
+				"with `aaswap dir unmap`, or store the account again.", entry.Email))
 		return "", false, nil
 	}
 	return num, true, nil
 }
 
 func (a *App) sessionManager(s *swap.Switcher) *session.Manager {
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
 	return &session.Manager{
 		BackupRoot: s.BackupRoot(),
 		Platform:   s.Paths.Platform,
 		Creds:      s.Creds,
-		Probe:      session.ExecProber{},
+		Profiles:   s.Profiles,
+		Spec:       spec,
+		ConfigsDir: s.ConfigsDir(),
+		Probe:      proberFor(spec),
 		Now:        s.Now,
 	}
 }
 
-// defaultProfileDir is the default ~/.claude, which sharing always mirrors —
-// even when the invoking shell is itself inside a session.
-func defaultProfileDir(s *swap.Switcher) string {
-	return s.Paths.DefaultClaudeConfigHome()
+// proberFor is the authentication probe for a provider, nil when there is none.
+//
+// The probe runs `claude auth status --json`, which is Claude Code's own
+// command. Running it for another provider would ask the wrong binary a
+// question it does not answer — and a probe that always fails is worse than no
+// probe, because the manager resolves a nil one from local artifacts instead of
+// treating the profile as broken.
+func proberFor(spec provider.Spec) session.Prober {
+	if spec.Name != swap.ProviderClaude {
+		return nil
+	}
+	return session.ExecProber{Spec: spec}
 }
 
-// execClaude hands the terminal over to Claude Code.
+// defaultProfileDir is the provider's own default home, which sharing always
+// mirrors — even when the invoking shell is itself inside a session.
+//
+// The PROVIDER's, not Claude's: mirroring ~/.claude into a Codex profile would
+// link one tool's settings and history into another's home, where they mean
+// nothing and shadow the files that do.
+func defaultProfileDir(s *swap.Switcher) string {
+	spec := provider.MustLookup(cmp.Or(s.Provider, swap.ProviderClaude))
+	if spec.Name == swap.ProviderClaude {
+		// Claude's default home ignores CLAUDE_CONFIG_DIR by design: sharing
+		// mirrors the default profile even from inside a session.
+		return s.Paths.DefaultClaudeConfigHome()
+	}
+	return filepath.Join(s.Paths.Home, spec.Home.Default)
+}
+
+// execProvider hands the terminal over to the provider's own binary.
 //
 // On POSIX it does not return: see handOver.
-func (a *App) execClaude(claudeArgs []string, env []string) error {
-	binary, err := lookClaude()
+func (a *App) execProvider(spec provider.Spec, args []string, env []string) error {
+	argv := spec.Session.Argv
+	binary, err := exec.LookPath(argv[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: `%s` was not found on your PATH. Install %s first",
+			apperr.ErrSession, argv[0], spec.Name)
 	}
-	return handOver(binary, claudeArgs, env, a.Out, a.Err, a.In)
-}
-
-func lookClaude() (string, error) {
-	binary, err := exec.LookPath(session.ClaudeBinary)
-	if err != nil {
-		return "", fmt.Errorf("%w: `claude` was not found on your PATH. Install Claude "+
-			"Code first", apperr.ErrSession)
+	// Anything the declaration puts after the binary comes before the user's
+	// arguments, so a provider that needs a subcommand to start a session gets
+	// one without the caller knowing.
+	args = slices.Concat(argv[1:], args)
+	if a.HandOver != nil {
+		return a.HandOver(binary, args, env)
 	}
-	return binary, nil
+	return handOver(binary, args, env, a.Out, a.Err, a.In)
 }
 
 // mapCommand remembers which account a directory belongs to.
 func (a *App) mapCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "map NUM|EMAIL|ALIAS [DIRECTORY]",
+		Use:   "map ACCOUNT [DIRECTORY]",
 		Short: "Remember which account a directory belongs to",
-		Long: "`ccswap run` with no account resolves the working directory to its nearest\n" +
+		Long: "`aaswap run` with no account resolves the working directory to its nearest\n" +
 			"mapped ancestor, so a project always gets the same login.",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -310,7 +401,7 @@ func (a *App) unmapCommand() *cobra.Command {
 
 func (a *App) mappingsCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "mappings",
+		Use:   "list",
 		Short: "Show every directory mapping",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -326,12 +417,15 @@ func (a *App) runMap(identifier, dir string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
+		return err
+	}
 	num, account, err := s.ResolveAccount(identifier)
 	if err != nil {
 		return err
 	}
 
-	store := mappings.New(s.BackupRoot())
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	store.Now = s.Now
 	key, err := store.Set(dir, mappings.Identity{
 		Email:            account.Email,
@@ -341,7 +435,7 @@ func (a *App) runMap(identifier, dir string) error {
 		return err
 	}
 	a.printer.Println(a.printer.Accent("Mapped"), " ", key, " → ",
-		fmt.Sprintf("Account %s (%s)", num, account.Email))
+		fmt.Sprintf("%s (%s)", num, account.Email))
 	return nil
 }
 
@@ -350,7 +444,10 @@ func (a *App) runUnmap(dir string) error {
 	if err != nil {
 		return err
 	}
-	store := mappings.New(s.BackupRoot())
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
+		return err
+	}
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	removed, err := store.Remove(dir)
 	if err != nil {
 		return err
@@ -368,7 +465,10 @@ func (a *App) runMappings() error {
 	if err != nil {
 		return err
 	}
-	store := mappings.New(s.BackupRoot())
+	if err := a.requireCapability(s, provider.CapSession); err != nil {
+		return err
+	}
+	store := mappings.NewForProvider(s.BackupRoot(), s.Spec().Name)
 	table := store.Load()
 
 	if a.json {
@@ -392,7 +492,7 @@ func (a *App) runMappings() error {
 
 	if len(table) == 0 {
 		a.printer.Println(a.printer.Dimmed(
-			"No directories are mapped. Map one with: ccswap map <account> [directory]"))
+			"No directories are mapped. Map one with: aaswap dir map <account> [directory]"))
 		return nil
 	}
 	for _, dir := range sortedMapKeys(table) {
