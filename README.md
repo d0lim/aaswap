@@ -29,6 +29,15 @@ A cask rather than a formula because aaswap ships as a prebuilt binary, which is
 what casks are for — the distinction is source-versus-prebuilt, not app-versus-CLI.
 Linux needs Homebrew 4.5.0 or newer, which is where Linux cask support landed.
 
+If you installed **ccswap** from the same tap, that cask is deprecated and will
+not get another release. Swap it out, then take over its store:
+
+```bash
+brew uninstall --cask ccswap
+brew install --cask d0lim/tap/aaswap
+aaswap account adopt
+```
+
 ### Go
 
 ```bash
@@ -535,7 +544,7 @@ rm "$(command -v aaswap)"      # if installed any other way
 
 ## Requirements
 
-- Claude Code, installed and logged in
+- Claude Code or Codex, installed and logged in
 
 That is the whole list. aaswap is a static binary with no runtime dependency —
 on macOS it shells out to the system `security` command for Keychain access,
