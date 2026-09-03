@@ -130,10 +130,10 @@ aaswap account rename work dev
 ### Two providers
 
 No tool is the default. Where only one has accounts stored, every command
-addresses that one; where both do, or neither yet, a terminal asks which and
-the dashboard opens on the question (`p` re-asks). `login` asks every time in
-a terminal, since a new account may be for either tool. `--provider` or
-`AASWAP_PROVIDER` settles it up front, and is the only way from a script:
+addresses that one; where both do, or neither yet, a terminal asks which.
+`login` asks every time in a terminal, since a new account may be for either
+tool. The dashboard shows every tool at once and asks only for `n`. `--provider`
+or `AASWAP_PROVIDER` settles it up front, and is the only way from a script:
 
 ```bash
 aaswap --provider codex login          # store a Codex account
@@ -180,15 +180,18 @@ aaswap list
 
 ### The dashboard
 
-`aaswap tui` is the same information as an interactive screen: usage bars per
-account, reset times, and switching without retyping a name.
+`aaswap tui` is the same information as an interactive screen: every tool's
+accounts at once, with usage bars per account, reset times, and switching
+without retyping a name.
 
 ```bash
 aaswap tui
 ```
 
 ```
- aaswap                                                     watch on
+ aaswap                                              3 managed  live
+
+ Claude Code  2 accounts stored
 
  ▸ ● 1 work@example.com  (work)                                  Acme
      5h  ██████████████▉░░░░░░░░░  62%   resets 20:39
@@ -198,19 +201,31 @@ aaswap tui
      5h  ██▋░░░░░░░░░░░░░░░░░░░░░  11%   resets 18:02
      7d  ████▌░░░░░░░░░░░░░░░░░░░  19%   resets Jul 7 12:12
 
+ Codex  1 account stored
+
+   ● cx codex@example.com
+     5h  █████████▋░░░░░░░░░░░░░░  40%   resets 16:12
+     7d  █████████████▏░░░░░░░░░░  55%   resets Jul 8 08:12
+
    ↑↓ move  ·  enter switch  ·  n log in  ·  a add  ·  t token  ·  q quit  ·  ? help
 ```
+
+The screen is live. A login or a switch made anywhere — another terminal,
+the tool itself — shows within about a second, and usage is re-collected every
+fifteen seconds. Usage itself is still fetched on the store's own schedule (see
+[Usage numbers](#tips)), so an age note is not a stuck screen. `--provider`
+narrows the screen to one tool.
 
 Accounts can be added without leaving the dashboard:
 
 | Key | |
 |---|---|
-| `a` | add the account you are logged in as (or refresh it, if already stored) |
-| `n` | log in to add another account |
+| `a` | add the account the selected tool is logged in as (or refresh it, if already stored) |
+| `n` | log in to add another account — asks which tool it is for |
 | `t` | paste a setup token or managed API key |
 | `enter` | switch to the selected account |
 | `d` | hold an account out of rotation, or return it |
-| `r` / `w` | collect now / re-collect every 30 seconds |
+| `r` | collect now |
 | `?` | every key, including the ones the footer drops on a narrow terminal |
 
 `n` is the dashboard's form of `aaswap login`: it hands the terminal to the

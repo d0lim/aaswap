@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 
 	"github.com/d0lim/aaswap/internal/apperr"
+	"github.com/d0lim/aaswap/internal/swap"
 	"github.com/d0lim/aaswap/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -32,8 +34,9 @@ func (a *App) tuiCommand() *cobra.Command {
 		Use:     "tui",
 		Aliases: []string{"dashboard", "ui"},
 		Short:   "Open the interactive dashboard",
-		Long: "An interactive account list: usage bars, reset times, and switching\n" +
-			"without retyping a slot number.\n\n" +
+		Long: "An interactive account list: every tool's accounts on one screen, with\n" +
+			"usage bars, reset times, and switching without retyping a name. It\n" +
+			"refreshes on its own as logins and switches happen.\n\n" +
 			"Needs a terminal. With output redirected, use `aaswap list` instead —\n" +
 			"and `aaswap list --json` when a program is reading it.",
 		Args: cobra.NoArgs,
@@ -52,25 +55,27 @@ func (a *App) runTUI(cmd *cobra.Command) error {
 	if !isTerminal(a.Out) || !isTerminal(a.In) {
 		return errNotATerminal
 	}
-	// Where nothing says which tool, the dashboard asks on its own screen
-	// rather than at a prompt before it opens — and `p` re-asks later, so the
-	// whole census travels with it either way.
-	name, _, err := a.resolveProvider()
-	if err != nil {
-		return err
-	}
-	census, err := a.providerCensus()
-	if err != nil {
-		return err
-	}
-	opts := tui.Options{Theme: a.printer.Theme, Open: a.switcherFor}
-	for _, choice := range census {
-		opts.Providers = append(opts.Providers, tui.ProviderChoice(choice))
-	}
-	if name != "" {
-		if opts.Switcher, err = a.switcherFor(name); err != nil {
+	// Every tool the build manages, on one screen. --provider narrows it to
+	// one — the same flag that scopes every other command — but the store's
+	// own sole-provider rule does not apply: a dashboard is the one place where
+	// "which tool" has no good answer, because the point of it is to see all
+	// of them.
+	names := swap.Providers()
+	if name := cmp.Or(a.provider, providerFromEnv()); name != "" {
+		// Through the resolver for its check: a typo must not quietly create
+		// an empty section and show a tool with no accounts.
+		if _, _, err := a.resolveProvider(); err != nil {
 			return err
 		}
+		names = []string{name}
+	}
+	opts := tui.Options{Theme: a.printer.Theme}
+	for _, name := range names {
+		s, err := a.switcherFor(name)
+		if err != nil {
+			return err
+		}
+		opts.Switchers = append(opts.Switchers, s)
 	}
 	return tui.Run(cmd.Context(), opts)
 }

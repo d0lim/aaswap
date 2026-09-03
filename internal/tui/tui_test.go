@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -24,20 +26,21 @@ var testNow = time.Date(2026, 7, 4, 14, 12, 0, 0, time.UTC)
 func fixture(t *testing.T, views []swap.AccountView, entries map[string]usagestore.Entry) Model {
 	t.Helper()
 	m := Model{
-		// Claude's declaration, which is what these tests were written
-		// against. Leaving it zero would disable every key the declaration
-		// gates and the tests would pass by not reaching them.
-		spec:   provider.MustLookup(provider.Claude),
-		styles: newStyles(PaletteFor(render.Dark)),
-		clock:  func() time.Time { return testNow },
-		width:  76,
-		height: 24,
-		snapshot: &swap.Snapshot{
-			Views:   views,
-			Entries: entries,
-		},
+		styles:   newStyles(PaletteFor(render.Dark)),
+		clock:    func() time.Time { return testNow },
+		stat:     os.Stat,
+		execTool: execProcess,
+		width:    76,
+		height:   24,
+		panes: []pane{{
+			// Claude's declaration, which is what these tests were written
+			// against. Leaving it zero would disable every key the
+			// declaration gates and the tests would pass by not reaching them.
+			spec:     provider.MustLookup(provider.Claude),
+			snapshot: &swap.Snapshot{Views: views, Entries: entries},
+		}},
 	}
-	m.order = slotNumbers(m.snapshot)
+	m.rows = flatten(m.panes)
 	return m
 }
 
@@ -192,6 +195,29 @@ func TestTheCursorSurvivesAShrinkingList(t *testing.T) {
 	}
 }
 
+// The cursor follows its account, not its position. With the screen
+// refreshing on its own, an account added above the cursor by another
+// process would otherwise slide the neighbour under a finger already on
+// enter.
+func TestTheCursorFollowsItsAccountAcrossARefresh(t *testing.T) {
+	m := twoAccounts(t)
+	m.cursor = 1 // spare@example.com
+
+	next, _ := m.handleCollected(collectedMsg{snapshot: &swap.Snapshot{
+		Views: []swap.AccountView{
+			{Name: "0", Account: &swap.Account{Email: "first@example.com"}},
+			{Name: "1", Account: &swap.Account{Email: "work@example.com"}},
+			{Name: "2", Account: &swap.Account{Email: "spare@example.com"}},
+		},
+		Entries: map[string]usagestore.Entry{},
+	}})
+
+	_, view, ok := next.(Model).selected()
+	if !ok || view.Name != "2" {
+		t.Errorf("the cursor is on %q after an account was added above it, want it still on 2", view.Name)
+	}
+}
+
 // Switching replaces a live credential, so it asks first — and the modal it
 // opens must carry the command for the account the prompt actually names.
 func TestSwitchingAsksBeforeItActs(t *testing.T) {
@@ -259,15 +285,129 @@ func TestQuittingClearsTheScreen(t *testing.T) {
 	}
 }
 
-// Watch mode's clock is chained from the tick, not from the collect it starts.
-// A pass stuck on a contended lock must not silently end watch mode.
-func TestWatchKeepsTickingThroughABusyPass(t *testing.T) {
+// The refresh clock is chained from the tick, not from the scan or collect
+// it starts. A pass stuck on a contended lock must not silently end the
+// refresh — and while a credential is being written, no scan starts, since
+// the operation's own collect is about to redraw everything.
+func TestTheRefreshClockKeepsTickingThroughABusyOperation(t *testing.T) {
 	m := twoAccounts(t)
-	m.watch = true
-	m.busy = "collecting"
+	m.busy = "switching"
 
-	_, cmd := m.Update(tickMsg(testNow))
+	next, cmd := m.Update(scanTickMsg(testNow))
 	if cmd == nil {
-		t.Error("a tick that arrived mid-collect scheduled no successor, so watch mode stops")
+		t.Error("a tick that arrived mid-switch scheduled no successor, so the refresh stops")
+	}
+	if next.(Model).scanning {
+		t.Error("a scan started while a credential was being written")
+	}
+
+	m.busy = ""
+	next, cmd = m.Update(scanTickMsg(testNow))
+	if cmd == nil || !next.(Model).scanning {
+		t.Error("an idle tick started no scan")
+	}
+}
+
+// A change to one tool's files re-collects that tool and only that tool: the
+// other's pass would be a Keychain read and a store lock for nothing.
+func TestAChangedFileRecollectsOnlyThatTool(t *testing.T) {
+	m := bothTools(t)
+	m.lastCollect = testNow
+	m.panes[0].signature, m.panes[1].signature = "claude-v1", "codex-v1"
+
+	next, cmd := m.handleScanned(scannedMsg{signatures: []string{"claude-v1", "codex-v2"}})
+	model := next.(Model)
+	if model.panes[0].collecting {
+		t.Error("the unchanged tool was re-collected")
+	}
+	if !model.panes[1].collecting || cmd == nil {
+		t.Error("the changed tool was not re-collected")
+	}
+}
+
+// With nothing changed, the floor still re-collects everything on its
+// interval: a usage fetch that has come due is produced by a collect, and no
+// file changes until one runs.
+func TestTheRefreshFloorRecollectsEverything(t *testing.T) {
+	m := bothTools(t)
+	m.lastCollect = testNow.Add(-RefreshInterval)
+	m.panes[0].signature, m.panes[1].signature = "same", "same"
+
+	next, _ := m.handleScanned(scannedMsg{signatures: []string{"same", "same"}})
+	for i, p := range next.(Model).panes {
+		if !p.collecting {
+			t.Errorf("pane %d was not re-collected at the floor", i)
+		}
+	}
+
+	m.lastCollect = testNow
+	next, _ = m.handleScanned(scannedMsg{signatures: []string{"same", "same"}})
+	for i, p := range next.(Model).panes {
+		if p.collecting {
+			t.Errorf("pane %d was re-collected with nothing changed and the floor not due", i)
+		}
+	}
+}
+
+// A collect writes to the usage table itself. The fingerprint it reports
+// becomes the pane's baseline, so its own writes never read as a change that
+// calls for another collect — which would be a collect a second, forever.
+func TestACollectsOwnWritesAreNotAChange(t *testing.T) {
+	m := twoAccounts(t)
+	m.lastCollect = testNow
+	next, _ := m.handleCollected(collectedMsg{gen: 1, signature: "after-pass",
+		snapshot: m.panes[0].snapshot})
+	m = next.(Model)
+	if m.panes[0].signature != "after-pass" {
+		t.Fatalf("signature = %q after the pass, want the pass's own", m.panes[0].signature)
+	}
+	next, _ = m.handleScanned(scannedMsg{signatures: []string{"after-pass"}})
+	if next.(Model).panes[0].collecting {
+		t.Error("the pass's own writes triggered another pass")
+	}
+}
+
+// Passes overlap — one started by a switch, one by the clock — and the slower
+// must not overwrite the fresher picture.
+func TestAStalePassDoesNotOverwriteAFresherOne(t *testing.T) {
+	m := twoAccounts(t)
+	m.panes[0].gen = 5
+
+	next, _ := m.handleCollected(collectedMsg{gen: 3, snapshot: &swap.Snapshot{
+		Views: []swap.AccountView{{Name: "9", Account: &swap.Account{Email: "old@example.com"}}},
+	}})
+	if got := len(next.(Model).panes[0].snapshot.Views); got != 2 {
+		t.Errorf("an older pass replaced the snapshot: %d accounts, want the fresher 2", got)
+	}
+}
+
+// The fingerprint tracks what a stat can see, and a file that is not there
+// is its own state: a login file appearing is the change worth noticing.
+func TestTheSignatureFollowsTheFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "auth.json")
+	absent := signatureOf([]string{path}, os.Stat)
+
+	if err := os.WriteFile(path, []byte(`{"a":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	present := signatureOf([]string{path}, os.Stat)
+	if present == absent {
+		t.Error("a file appearing did not change the signature")
+	}
+	if err := os.WriteFile(path, []byte(`{"a":1,"b":2}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if grown := signatureOf([]string{path}, os.Stat); grown == present {
+		t.Error("a file growing did not change the signature")
+	}
+}
+
+// The header says the screen is live. A dashboard that refreshes on its own
+// and one that does not look the same until something changes, and the
+// difference decides whether a person waits or presses r.
+func TestTheHeaderSaysTheScreenIsLive(t *testing.T) {
+	if frame := twoAccounts(t).View().Content; !strings.Contains(frame, "live") {
+		t.Errorf("the header does not say the screen refreshes on its own:\n%s", frame)
 	}
 }

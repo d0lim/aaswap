@@ -3,7 +3,9 @@ package swap
 import (
 	"context"
 	json "encoding/json/v2"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -747,5 +749,21 @@ func TestUsageByAccount(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got["1"], snapshot.Entries["1"].LastGood) {
 		t.Error("the decision value and the stored measurement diverged")
+	}
+}
+
+// A dashboard re-collects when one of these files changes, so the set has to
+// cover every event that makes a snapshot stale: the roster, the usage table,
+// and the live login files. A file missing from it is a change the dashboard
+// shows half a minute late.
+func TestWatchedPathsCoverEverythingASnapshotReads(t *testing.T) {
+	f := newFixture(t)
+	paths := f.WatchedPaths()
+	live := f.liveFileLocations(f.spec())
+	want := append([]string{f.RosterPath(), f.Usage.Path()}, slices.Collect(maps.Values(live))...)
+	for _, path := range want {
+		if !slices.Contains(paths, path) {
+			t.Errorf("WatchedPaths omits %q:\n%v", path, paths)
+		}
 	}
 }
