@@ -19,6 +19,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
+	case startMsg:
+		next, cmd := m.collectAll()
+		return next, tea.Batch(cmd, next.scanTickCmd())
+
 	case collectedMsg:
 		return m.handleCollected(msg)
 
@@ -31,12 +35,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case liveProbedMsg:
 		return m.handleLiveProbed(msg)
 
-	case askProviderMsg:
-		return m.askProvider()
-
-	case providerOpenedMsg:
-		return m.handleProviderOpened(msg)
-
 	case addedMsg:
 		return m.handleAdded(msg)
 
@@ -46,24 +44,91 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loginRanMsg:
 		return m.handleLoginRan(msg)
 
-	case tickMsg:
-		if !m.watch {
-			return m, nil
-		}
-		// Chain the next tick from the tick itself, not from the collect: a
-		// collect that hangs on a lock must not stop the clock, or watch mode
-		// dies silently at the first contended pass.
-		if m.busy != "" {
-			return m, tickCmd()
-		}
-		m.busy = "collecting"
-		return m, tea.Batch(collectCmd(m.switcher), tickCmd())
+	case scanTickMsg:
+		return m.handleScanTick()
+
+	case scannedMsg:
+		return m.handleScanned(msg)
 
 	case clearStatusMsg:
 		m.status, m.statusErr = "", false
 		return m, nil
 	}
 	return m, nil
+}
+
+// handleScanTick is one beat of the live refresh.
+//
+// The next beat is chained from this one, never from the scan or the collect
+// it starts: a pass stuck on a contended lock must not stop the clock, or the
+// refresh dies silently at the first contended pass. A tick also redraws,
+// which is what keeps "6m ago" and "resets 20:12" honest between collects.
+func (m Model) handleScanTick() (tea.Model, tea.Cmd) {
+	next := m.scanTickCmd()
+	// Not while the terminal belongs to a tool's login, or while a credential
+	// is being written: the picture is about to change by our own hand, and
+	// the collect that follows the operation will draw it.
+	if m.busy != "" || m.scanning {
+		return m, next
+	}
+	m.scanning = true
+	switchers := make([]*swap.Switcher, len(m.panes))
+	for i, p := range m.panes {
+		switchers[i] = p.switcher
+	}
+	return m, tea.Batch(scanCmd(switchers, m.stat), next)
+}
+
+// handleScanned re-collects what changed, or everything when the floor is due.
+func (m Model) handleScanned(msg scannedMsg) (tea.Model, tea.Cmd) {
+	m.scanning = false
+	if m.busy != "" {
+		return m, nil
+	}
+	if m.now().Sub(m.lastCollect) >= RefreshInterval {
+		return m.collectAll()
+	}
+	var cmds []tea.Cmd
+	for i := range m.panes {
+		if i >= len(msg.signatures) || m.panes[i].collecting {
+			continue
+		}
+		if msg.signatures[i] != m.panes[i].signature {
+			var cmd tea.Cmd
+			m, cmd = m.collectPane(i)
+			cmds = append(cmds, cmd)
+		}
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// collectAll starts a pass for every pane that is not already in one.
+func (m Model) collectAll() (Model, tea.Cmd) {
+	m.lastCollect = m.now()
+	var cmds []tea.Cmd
+	for i := range m.panes {
+		if m.panes[i].collecting {
+			continue
+		}
+		var cmd tea.Cmd
+		m, cmd = m.collectPane(i)
+		cmds = append(cmds, cmd)
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// collectPane starts one pane's pass.
+//
+// The panes are cloned before the mark is set. The model is a value, and a
+// slice shared between two copies of it would let a mark made on one show
+// through the other — a test's fixture, or a model Bubble Tea has already
+// replaced — as if it had been made on both.
+func (m Model) collectPane(index int) (Model, tea.Cmd) {
+	m.panes = slices.Clone(m.panes)
+	m.gen++
+	p := &m.panes[index]
+	p.collecting = true
+	return m, collectCmd(p.switcher, index, m.gen, m.stat)
 }
 
 // handleKey routes a keypress, giving whatever overlay is open first refusal.
@@ -107,28 +172,16 @@ func (m Model) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.askAdd()
 
 	case "n":
-		return m.startLogin()
+		return m.askLogin()
 
 	case "t":
 		return m.askAddToken()
-
-	case "p":
-		return m.askProvider()
 
 	case "r":
 		if m.busy != "" {
 			return m, nil
 		}
-		m.busy = "collecting"
-		m.err = nil
-		return m, collectCmd(m.switcher)
-
-	case "w":
-		m.watch = !m.watch
-		if m.watch {
-			return m, tickCmd()
-		}
-		return m, nil
+		return m.collectAll()
 	}
 	return m, nil
 }
@@ -169,16 +222,16 @@ func (m Model) handleModalKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // credentials is not a carousel, and wrapping past the end is how someone
 // switches to the wrong account by holding a key down.
 func (m Model) moveCursor(delta int) Model {
-	if m.snapshot == nil || len(m.snapshot.Views) == 0 {
+	if len(m.rows) == 0 {
 		return m
 	}
-	m.cursor = min(max(m.cursor+delta, 0), len(m.snapshot.Views)-1)
+	m.cursor = min(max(m.cursor+delta, 0), len(m.rows)-1)
 	return m
 }
 
 // askSwitch opens the confirmation for activating the selected slot.
 func (m Model) askSwitch() (tea.Model, tea.Cmd) {
-	view, ok := m.selected()
+	p, view, ok := m.selected()
 	if !ok || m.busy != "" {
 		return m, nil
 	}
@@ -190,9 +243,9 @@ func (m Model) askSwitch() (tea.Model, tea.Cmd) {
 	body := []string{
 		"",
 		m.styles.muted.Render(fmt.Sprintf(
-			"This replaces the live %s credential.", m.spec.DisplayName())),
+			"This replaces the live %s credential.", p.spec.DisplayName())),
 	}
-	if m.hasManagedLiveLogin() {
+	if hasManagedLiveLogin(p.snapshot) {
 		body = append(body,
 			m.styles.muted.Render("The account you are on now is backed up first."))
 	}
@@ -201,23 +254,23 @@ func (m Model) askSwitch() (tea.Model, tea.Cmd) {
 		title:     fmt.Sprintf("Switch to Account %s — %s?", view.Name, view.Account.Email),
 		body:      body,
 		busyLabel: "switching",
-		run:       switchCmd(m.switcher, view.Name, view.Account.Email),
+		run:       switchCmd(p.switcher, view.Name, view.Account.Email),
 	}
 	return m, nil
 }
 
-// hasManagedLiveLogin reports whether one of the managed slots is the live
-// login.
+// hasManagedLiveLogin reports whether one of a pane's managed slots is the
+// live login.
 //
 // Read off the snapshot rather than by asking the switcher, which would open
 // the live config — a disk read, on the UI loop, inside a key handler. The
 // collect pass already answered this question; asking twice can only produce a
 // second, differing answer.
-func (m Model) hasManagedLiveLogin() bool {
-	if m.snapshot == nil {
+func hasManagedLiveLogin(snapshot *swap.Snapshot) bool {
+	if snapshot == nil {
 		return false
 	}
-	return slices.ContainsFunc(m.snapshot.Views, func(v swap.AccountView) bool {
+	return slices.ContainsFunc(snapshot.Views, func(v swap.AccountView) bool {
 		return v.IsActive
 	})
 }
@@ -228,30 +281,66 @@ func (m Model) hasManagedLiveLogin() bool {
 // key again. Reserving the modal for operations that touch a credential keeps
 // the prompt meaningful.
 func (m Model) toggleSelected() (tea.Model, tea.Cmd) {
-	view, ok := m.selected()
+	p, view, ok := m.selected()
 	if !ok || m.busy != "" {
 		return m, nil
 	}
 	m.busy = "updating"
-	return m, toggleCmd(m.switcher, view.Name, !view.Account.Disabled)
+	return m, toggleCmd(p.switcher, view.Name, !view.Account.Disabled)
 }
 
 // --- result handling --------------------------------------------------------
 
 func (m Model) handleCollected(msg collectedMsg) (tea.Model, tea.Cmd) {
-	m.busy = ""
-	if msg.err != nil {
-		m.err = msg.err
+	if msg.pane < 0 || msg.pane >= len(m.panes) {
 		return m, nil
 	}
-	m.err = nil
-	m.snapshot = msg.snapshot
-	m.order = slotNumbers(msg.snapshot)
+	m.panes = slices.Clone(m.panes)
+	p := &m.panes[msg.pane]
+	if msg.gen < p.gen {
+		// An older pass finishing after a newer one. Its picture is already
+		// superseded; a pane still marked collecting is waiting on the newer.
+		return m, nil
+	}
+	p.gen = msg.gen
+	p.collecting = false
+	p.signature = msg.signature
+	if msg.err != nil {
+		p.err = msg.err
+		return m, nil
+	}
+	p.err = nil
+	p.snapshot = msg.snapshot
+	return m.relayout(), nil
+}
 
-	// Keep the cursor inside a list that may have shrunk under it — a removal
-	// from another process is entirely possible between passes.
-	m.cursor = min(m.cursor, max(len(msg.snapshot.Views)-1, 0))
-	return m, nil
+// relayout rebuilds the cursor rows after a pane changed, keeping the cursor
+// on the account it was on when that account is still there.
+//
+// By name rather than by position: a removal from another process is entirely
+// possible between passes, and a cursor that kept its index would then sit on
+// the neighbour — and switch to it on the enter that was meant for the account
+// that vanished. An account that is gone leaves the cursor clamped inside the
+// list, on whatever now holds its position.
+func (m Model) relayout() Model {
+	var was *row
+	if m.cursor >= 0 && m.cursor < len(m.rows) {
+		was = new(m.rows[m.cursor])
+	}
+	m.rows = flatten(m.panes)
+	m.cursor = min(m.cursor, max(len(m.rows)-1, 0))
+	if was == nil || was.view < 0 {
+		return m
+	}
+	// The account's name, from the rows as they were laid out. The pane's
+	// snapshot has been replaced by now, so the old index cannot be resolved
+	// through it — the name was captured onto the row for this purpose.
+	if i := slices.IndexFunc(m.rows, func(r row) bool {
+		return r.pane == was.pane && r.view >= 0 && r.name == was.name
+	}); i >= 0 {
+		m.cursor = i
+	}
+	return m
 }
 
 func (m Model) handleSwitched(msg switchedMsg) (tea.Model, tea.Cmd) {
@@ -269,8 +358,8 @@ func (m Model) handleSwitched(msg switchedMsg) (tea.Model, tea.Cmd) {
 	m.statusErr = false
 	// Re-collect: the active marker, and every sentinel derived from the live
 	// credential, are now stale.
-	m.busy = "collecting"
-	return m, tea.Batch(collectCmd(m.switcher), clearStatusCmd())
+	next, cmd := m.collectAll()
+	return next, tea.Batch(cmd, clearStatusCmd())
 }
 
 func (m Model) handleToggled(msg toggledMsg) (tea.Model, tea.Cmd) {
@@ -286,8 +375,8 @@ func (m Model) handleToggled(msg toggledMsg) (tea.Model, tea.Cmd) {
 		m.status = fmt.Sprintf("Account %s (%s) is now %s", msg.num, msg.email, rotationWord(msg.disabled))
 	}
 	m.statusErr = false
-	m.busy = "collecting"
-	return m, tea.Batch(collectCmd(m.switcher), clearStatusCmd())
+	next, cmd := m.collectAll()
+	return next, tea.Batch(cmd, clearStatusCmd())
 }
 
 func rotationWord(disabled bool) string {
@@ -295,15 +384,4 @@ func rotationWord(disabled bool) string {
 		return "out of rotation"
 	}
 	return "in rotation"
-}
-
-func slotNumbers(snapshot *swap.Snapshot) []string {
-	if snapshot == nil {
-		return nil
-	}
-	out := make([]string, 0, len(snapshot.Views))
-	for _, view := range snapshot.Views {
-		out = append(out, view.Name)
-	}
-	return out
 }
