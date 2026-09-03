@@ -333,3 +333,31 @@ func UsageByAccount(entries map[string]usagestore.Entry) map[string]*usage.Resul
 func sortedKeys[T any](m map[string]T) []string {
 	return slices.Sorted(maps.Keys(m))
 }
+
+// WatchedPaths is every file a snapshot is read from, for a surface that wants
+// to know when to take another one.
+//
+// A dashboard that re-collects on a fixed clock is either wasteful or late:
+// fast enough to notice a `/login` in another terminal within a second, it
+// runs a Keychain read and a store lock every second; slow enough to be cheap,
+// it shows the previous account as live for half a minute. Watching these
+// files' metadata is the cheap end of both — a stat per file per second — and
+// a change to any of them is exactly the set of events that makes the last
+// snapshot wrong: the roster (an add, a remove, a rename), the usage table
+// (another collector's measurement), and the live login files (a switch or a
+// login, by aaswap or by the tool itself).
+//
+// Paths, not a signature: how to fingerprint a file and how often to look are
+// the surface's decisions, and a test of the surface wants to touch the files
+// itself.
+func (s *Switcher) WatchedPaths() []string {
+	out := []string{s.RosterPath()}
+	if s.Usage != nil {
+		out = append(out, s.Usage.Path())
+	}
+	locations := s.liveFileLocations(s.spec())
+	for _, path := range slices.Sorted(maps.Keys(locations)) {
+		out = append(out, locations[path])
+	}
+	return out
+}

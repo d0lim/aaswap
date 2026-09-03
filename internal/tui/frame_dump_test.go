@@ -38,7 +38,6 @@ func TestDumpFrame(t *testing.T) {
 			"4": {Sentinel: swap.SentinelReloginRequired},
 			"5": {Sentinel: swap.SentinelAPIKey},
 		})
-	m.watch = true
 	m.status = "Activated Account 1 (work@example.com)"
 	t.Log("\n" + m.View().Content + "\n")
 

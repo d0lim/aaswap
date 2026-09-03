@@ -52,13 +52,11 @@ type modal struct {
 	hint func(string) string
 
 	// options are a modalPick's rows, pick the marked one, and onPick turns
-	// the accepted index into the command to run. cancelQuits makes esc leave
-	// the program rather than the modal, for a question the dashboard cannot
-	// show anything without an answer to.
-	options     []pickOption
-	pick        int
-	onPick      func(int) tea.Cmd
-	cancelQuits bool
+	// the accepted index into the command to run; busyLabel names it while it
+	// runs, as for a confirm.
+	options []pickOption
+	pick    int
+	onPick  func(int) tea.Cmd
 }
 
 // visibleInput is what the field shows for what has been typed.
@@ -107,13 +105,9 @@ func (m Model) renderModal(md *modal) string {
 	b.WriteString("\n\n")
 	switch md.kind {
 	case modalPick:
-		leave := " quit"
-		if !md.cancelQuits {
-			leave = " cancel"
-		}
 		b.WriteString(st.helpKey.Render("↑↓") + st.help.Render(" move    ") +
 			st.helpKey.Render("enter") + st.help.Render(" choose    ") +
-			st.helpKey.Render("esc") + st.help.Render(leave))
+			st.helpKey.Render("esc") + st.help.Render(" cancel"))
 	case modalConfirm:
 		b.WriteString(st.helpKey.Render("y") + st.help.Render(" confirm    ") +
 			st.helpKey.Render("n/esc") + st.help.Render(" cancel"))
