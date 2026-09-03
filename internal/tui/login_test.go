@@ -41,7 +41,7 @@ func loginFixture(t *testing.T) (Model, *exec.Cmd, *func(error) tea.Msg) {
 	stubOnPath(t, "claude")
 	s := swap.NewForProvider(paths.New(t.TempDir(), platform.Linux), provider.Claude)
 	m := twoAccounts(t)
-	m.switcher = s
+	m.panes[0].switcher = s
 	var recorded *exec.Cmd
 	var done func(error) tea.Msg
 	m.execTool = func(c *exec.Cmd, fn func(error) tea.Msg) tea.Cmd {
@@ -103,7 +103,7 @@ func TestNRunsTheToolsLoginIntoASandbox(t *testing.T) {
 // that may hold a half-finished credential — is removed.
 func TestAFailedToolLoginIsReportedAndTheSandboxRemoved(t *testing.T) {
 	m, _, _ := loginFixture(t)
-	sandbox, err := m.switcher.BeginLogin()
+	sandbox, err := m.panes[0].switcher.BeginLogin()
 	if err != nil {
 		t.Fatal(err)
 	}

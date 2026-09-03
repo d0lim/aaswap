@@ -6,18 +6,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/d0lim/aaswap/internal/swap"
 )
-
-// ProviderChoice is one tool the dashboard can be pointed at.
-type ProviderChoice struct {
-	Name  string
-	Label string
-	// Accounts is how many are stored for it — the fact that tells the
-	// choices apart on a machine where several tools are managed.
-	Accounts int
-}
 
 // pickOption is one row of a pick modal.
 type pickOption struct {
@@ -25,59 +14,38 @@ type pickOption struct {
 	note  string
 }
 
-// providerOpenedMsg carries a switcher built for the chosen provider.
-type providerOpenedMsg struct {
-	name string
-	s    *swap.Switcher
-	err  error
-}
-
-func openProviderCmd(open func(string) (*swap.Switcher, error), name string) tea.Cmd {
-	return func() tea.Msg {
-		s, err := open(name)
-		return providerOpenedMsg{name: name, s: s, err: err}
-	}
-}
-
-// pointed reports whether the dashboard is showing some tool yet. Before the
-// first pick is answered it is not, and there is nothing to draw.
-func (m Model) pointed() bool { return m.spec.Name != "" }
-
-// canPickProvider reports whether there is a choice to make at all.
-func (m Model) canPickProvider() bool {
-	return m.open != nil && len(m.providers) > 1
-}
-
-// askProvider opens the picker.
+// askLogin starts a login, asking which tool it is for first.
 //
-// This is how the dashboard is pointed at a tool: nothing is the default, so
-// where the store cannot say which one is meant, the person is asked here
-// rather than at a prompt before the screen even opens. The same picker
-// serves `p`, which turns one dashboard into every tool's.
-func (m Model) askProvider() (tea.Model, tea.Cmd) {
-	if m.busy != "" || !m.canPickProvider() {
+// Asked rather than read off the cursor, for the same reason `aaswap login`
+// asks at a terminal whatever the store holds: nothing on screen says which
+// tool the NEXT account is for. The cursor is on some tool's section, but the
+// person adding their first Codex account has it wherever it was left — on a
+// Claude Code account, usually — and a login that opened Claude Code's on
+// them would be the failure the question exists to prevent. The cursor's
+// tool is the row marked, so the usual answer is one keypress.
+func (m Model) askLogin() (tea.Model, tea.Cmd) {
+	if m.busy != "" {
 		return m, nil
 	}
-	options := make([]pickOption, 0, len(m.providers))
-	pick := 0
-	for i, choice := range m.providers {
-		note := accountsWord(choice.Accounts)
-		if choice.Name == m.spec.Name {
-			note += ", shown now"
-			pick = i
+	if len(m.panes) == 1 {
+		return m.startLogin(0)
+	}
+	options := make([]pickOption, 0, len(m.panes))
+	for _, p := range m.panes {
+		n := 0
+		if p.snapshot != nil {
+			n = len(p.snapshot.Views)
 		}
-		options = append(options, pickOption{label: choice.Label, note: note})
+		options = append(options, pickOption{label: p.spec.DisplayName(), note: accountsWord(n)})
 	}
 	m.modal = &modal{
-		kind:    modalPick,
-		title:   "Which tool?",
-		options: options,
-		pick:    pick,
-		// Before any tool is shown there is nothing to go back to, so the
-		// way out of the question is the way out of the program.
-		cancelQuits: !m.pointed(),
+		kind:      modalPick,
+		title:     "Which tool is this login for?",
+		options:   options,
+		pick:      m.paneIndex(),
+		busyLabel: "opening a login",
 		onPick: func(index int) tea.Cmd {
-			return openProviderCmd(m.open, m.providers[index].Name)
+			return beginLoginCmd(m.panes[index].switcher, index)
 		},
 	}
 	return m, nil
@@ -94,9 +62,6 @@ func (m Model) handlePickKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		md.pick = min(md.pick+1, len(md.options)-1)
 		return m, nil
 	case "esc", "q":
-		if md.cancelQuits {
-			return m.quit()
-		}
 		m.modal = nil
 		return m, nil
 	case "enter":
@@ -111,28 +76,9 @@ func (m Model) handlePickKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) acceptPick(index int) (tea.Model, tea.Cmd) {
 	cmd := m.modal.onPick(index)
+	m.busy = m.modal.busyLabel
 	m.modal = nil
-	m.busy = "opening"
 	return m, cmd
-}
-
-// handleProviderOpened points the dashboard at the chosen tool.
-func (m Model) handleProviderOpened(msg providerOpenedMsg) (tea.Model, tea.Cmd) {
-	m.busy = ""
-	if msg.err != nil {
-		// Back to the question, with the reason on the status line: a
-		// dashboard with no tool behind it has nothing else to show.
-		m.status, m.statusErr = msg.err.Error(), true
-		next, cmd := m.askProvider()
-		return next, tea.Batch(cmd, clearStatusCmd())
-	}
-	m.switcher = msg.s
-	m.spec = msg.s.Spec()
-	m.clock = msg.s.Now
-	// Everything on screen described the previous tool.
-	m.snapshot, m.order, m.cursor, m.err = nil, nil, 0, nil
-	m.busy = "collecting"
-	return m, collectCmd(m.switcher)
 }
 
 // renderPick is the body of a pick modal: numbered rows, one marked.

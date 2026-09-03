@@ -65,13 +65,13 @@ func TestTheAddPromptNamesWhatWillHappen(t *testing.T) {
 			name: "an account with no slot is a new registration",
 			state: swap.LiveState{LoggedIn: true, Identity: swap.LiveIdentity{
 				Email: "new@example.com", OrganizationName: "Acme"}},
-			want: []string{"Add the account", "new@example.com", "Acme", "new account"},
+			want: []string{"Add the Claude Code account", "new@example.com", "Acme", "new account"},
 		},
 		{
 			name: "an account already in a slot is a refresh of that slot",
 			state: swap.LiveState{LoggedIn: true, Slot: "2", Identity: swap.LiveIdentity{
 				Email: "spare@example.com"}},
-			want: []string{"Refresh Account 2", "spare@example.com", "stored credential"},
+			want: []string{"Refresh Claude Code Account 2", "spare@example.com", "stored credential"},
 		},
 	}
 	for _, tt := range tests {

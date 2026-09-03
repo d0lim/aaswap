@@ -17,7 +17,7 @@ import (
 // A provider that declares no token format has no such key.
 func TestTheTokenKeyIsAbsentWhereATokenCannotBeStored(t *testing.T) {
 	m := twoAccounts(t)
-	m.spec = provider.MustLookup(provider.Codex)
+	m.panes[0].spec = provider.MustLookup(provider.Codex)
 
 	next, cmd := m.handleKey(press("t"))
 	model := next.(Model)
@@ -45,7 +45,7 @@ func TestTheTokenKeyIsAbsentWhereATokenCannotBeStored(t *testing.T) {
 // from the declaration rather than being written into the dashboard.
 func TestTheTokenFieldDescribesTheProvidersOwnFormat(t *testing.T) {
 	m := twoAccounts(t)
-	m.spec = provider.MustLookup(provider.Claude)
+	m.panes[0].spec = provider.MustLookup(provider.Claude)
 
 	next, _ := m.handleKey(press("t"))
 	model := next.(Model)
@@ -63,15 +63,17 @@ func TestTheTokenFieldDescribesTheProvidersOwnFormat(t *testing.T) {
 }
 
 // The dashboard's prose named Claude Code whichever provider it was showing.
-func TestTheHelpScreenNamesTheProviderItIsShowing(t *testing.T) {
+// With every tool on one screen the prose names none, and each section names
+// its own.
+func TestTheScreenNamesTheProviderItIsShowing(t *testing.T) {
 	m := twoAccounts(t)
-	m.spec = provider.MustLookup(provider.Codex)
+	m.panes[0].spec = provider.MustLookup(provider.Codex)
 
-	help := m.renderHelp()
-	if strings.Contains(help, "Claude Code") {
-		t.Errorf("a Codex dashboard's help talks about Claude Code:\n%s", help)
+	if help := m.renderHelp(); strings.Contains(help, "Claude Code") {
+		t.Errorf("a Codex-only dashboard's help talks about Claude Code:\n%s", help)
 	}
-	if !strings.Contains(help, "Codex") {
-		t.Errorf("the help does not name the tool it is showing:\n%s", help)
+	frame := m.View().Content
+	if strings.Contains(frame, "Claude Code") || !strings.Contains(frame, "Codex") {
+		t.Errorf("the section does not name the tool it is showing:\n%s", frame)
 	}
 }

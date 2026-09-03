@@ -54,60 +54,85 @@ func (m Model) View() tea.View {
 	return view
 }
 
-// dashboard is the account list with its header and footer.
+// dashboard is every tool's account list with its header and footer.
 func (m Model) dashboard() string {
 	sections := []string{m.header()}
-
-	switch {
-	case !m.pointed():
-		sections = append(sections, m.styles.muted.Render("  choosing a tool…"))
-	case m.err != nil:
-		sections = append(sections, m.styles.red.Render("  "+m.err.Error()))
-	case m.snapshot == nil:
-		sections = append(sections, m.styles.muted.Render("  collecting…"))
-	case len(m.snapshot.Views) == 0:
-		sections = append(sections,
-			m.styles.muted.Render("  No accounts are managed yet."),
-			m.styles.muted.Render("  Press ")+m.styles.accent.Render("n")+
-				m.styles.muted.Render(" to log in, or ")+
-				m.styles.accent.Render("a")+m.styles.muted.Render(" to add the account you are logged in as."))
-	default:
-		sections = append(sections, m.accountList())
+	for i := range m.panes {
+		sections = append(sections, m.paneSection(i))
 	}
-
 	sections = append(sections, m.footer())
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// header carries the identity of the screen and the two facts that are true of
+// header carries the identity of the screen and the facts that are true of
 // the whole store rather than of any one account.
 func (m Model) header() string {
 	st := m.styles
 	left := st.title.Render(" aaswap")
-	if m.pointed() {
-		left += st.muted.Render(" · ") + st.accent.Render(m.spec.DisplayName())
-	}
 
 	var right []string
-	if m.watch {
-		right = append(right, st.green.Render("watch on"))
-	}
-	if m.busy != "" {
+	switch {
+	case m.busy != "":
 		right = append(right, st.accent.Render(m.busy+"…"))
+	case m.anyCollecting():
+		right = append(right, st.accent.Render("collecting…"))
+	default:
+		right = append(right, st.muted.Render(fmt.Sprintf("%d managed", m.managed())))
 	}
-	if len(right) == 0 && m.snapshot != nil {
-		right = append(right, st.muted.Render(fmt.Sprintf("%d managed", len(m.snapshot.Views))))
-	}
+	// Said on every frame: a dashboard that refreshes on its own and a
+	// dashboard that does not look the same until something changes, and the
+	// difference decides whether a person waits or presses r.
+	right = append(right, st.green.Render("live"))
 
 	gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(strings.Join(right, "  "))-1, 1)
 	return left + strings.Repeat(" ", gap) + strings.Join(right, "  ") + "\n"
 }
 
+// paneSection is one tool: its name, then its accounts or the one reason
+// there are none.
+func (m Model) paneSection(index int) string {
+	st := m.styles
+	p := m.panes[index]
+	title := " " + st.accent.Render(p.spec.DisplayName())
+	if p.snapshot != nil {
+		title += st.muted.Render("  " + accountsWord(len(p.snapshot.Views)))
+	}
+	lines := []string{title, ""}
+
+	switch {
+	case p.err != nil:
+		lines = append(lines, st.red.Render("  "+p.err.Error()))
+	case p.snapshot == nil:
+		lines = append(lines, st.muted.Render("  collecting…"))
+	case len(p.snapshot.Views) == 0:
+		lines = append(lines, m.placeholderRow(index))
+	default:
+		lines = append(lines, m.accountList(index))
+	}
+	// A blank line after the section, so the next tool's name does not read
+	// as another account of this one.
+	lines = append(lines, "")
+	return strings.Join(lines, "\n")
+}
+
+// placeholderRow is where the cursor lands in a tool with nothing stored: the
+// keys still need somewhere to point, and the row says which ones apply.
+func (m Model) placeholderRow(index int) string {
+	st := m.styles
+	cursor := "  "
+	if m.cursor < len(m.rows) && m.rows[m.cursor].pane == index && m.rows[m.cursor].view < 0 {
+		cursor = st.accent.Render("▸ ")
+	}
+	return cursor + st.muted.Render("No accounts yet. Press ") + st.accent.Render("n") +
+		st.muted.Render(" to log in, or ") + st.accent.Render("a") +
+		st.muted.Render(" to add the account you are logged in as.")
+}
+
 // accountList is one block per slot.
-func (m Model) accountList() string {
+func (m Model) accountList(index int) string {
 	var blocks []string
-	for i, view := range m.snapshot.Views {
-		blocks = append(blocks, m.accountBlock(i, view))
+	for i, view := range m.panes[index].snapshot.Views {
+		blocks = append(blocks, m.accountBlock(index, i, view))
 	}
 	// A blank line between blocks. Each account is three or four lines that
 	// mean nothing to each other across the boundary, and run together they
@@ -117,12 +142,12 @@ func (m Model) accountList() string {
 
 // accountBlock renders one account: its identity line, then either its usage
 // windows or the single reason it has none.
-func (m Model) accountBlock(index int, view swap.AccountView) string {
+func (m Model) accountBlock(paneIndex, index int, view swap.AccountView) string {
 	st := m.styles
-	entry := m.snapshot.Entries[view.Name]
+	entry := m.panes[paneIndex].snapshot.Entries[view.Name]
 
 	cursor := "  "
-	if index == m.cursor {
+	if m.cursor < len(m.rows) && m.rows[m.cursor] == (row{pane: paneIndex, view: index, name: view.Name}) {
 		cursor = st.accent.Render("▸ ")
 	}
 
@@ -230,7 +255,7 @@ func (m Model) footer() string {
 // screen — it drops hints until what is left fits.
 var footerHints = [][2]string{
 	{"↑↓", "move"}, {"enter", "switch"}, {"n", "log in"}, {"a", "add"},
-	{"t", "token"}, {"d", "disable"}, {"r", "refresh"}, {"w", "watch"},
+	{"t", "token"}, {"d", "disable"}, {"r", "refresh"},
 }
 
 // pinnedHints survive any width.
@@ -254,11 +279,6 @@ func (m Model) hintBar() string {
 	}
 
 	hints := footerHints
-	if m.canPickProvider() {
-		// Ahead of the rest: which tool the screen is about comes before
-		// anything done on it.
-		hints = slices.Concat([][2]string{{"p", "tool"}}, hints)
-	}
 	bar := render(hints)
 	for shown := len(hints); shown > 0 && lipgloss.Width(bar) > m.width-1; shown-- {
 		bar = render(hints[:shown-1])
@@ -269,27 +289,22 @@ func (m Model) hintBar() string {
 // renderHelp is the full key reference, which the footer only samples.
 func (m Model) renderHelp() string {
 	st := m.styles
-	tool := m.spec.DisplayName()
 	rows := [][2]string{
 		{"↑ / k", "move up"},
 		{"↓ / j", "move down"},
 		{"enter / s", "switch to the selected account"},
-		{"n", "log in to add another account"},
-		{"a", "add the account you are logged in as"},
+		{"n", "log in to add another account (asks which tool)"},
+		{"a", "add the account the selected tool is logged in as"},
 	}
 	// Listed only where it works. A key on the reference that reports
 	// "unsupported" when pressed is worse than an absent one: the reference is
 	// where someone looks to find out what the dashboard can do.
-	if m.spec.Can(provider.CapToken) {
+	if slices.ContainsFunc(m.panes, func(p pane) bool { return p.spec.Can(provider.CapToken) }) {
 		rows = append(rows, [2]string{"t", "add a setup token or managed API key"})
-	}
-	if m.canPickProvider() {
-		rows = append(rows, [2]string{"p", "show another tool's accounts"})
 	}
 	rows = append(rows,
 		[2]string{"d", "disable or enable the selected account"},
 		[2]string{"r", "collect now"},
-		[2]string{"w", "toggle watch mode (re-collect every 30s)"},
 		[2]string{"?", "close this help"},
 		[2]string{"q / esc", "quit"},
 	)
@@ -299,9 +314,13 @@ func (m Model) renderHelp() string {
 		b.WriteString("\n" + st.helpKey.Render(fmt.Sprintf("%-10s", row[0])) + st.help.Render(row[1]))
 	}
 	b.WriteString("\n\n" + st.muted.Render(fmt.Sprintf(
-		"Switching writes a live credential. It takes the store lock, so it may\n"+
-			"pause while another aaswap or a running %s holds it.\n\n"+
-			"`n` runs %s's own login into a sandbox and stores what lands there.\n"+
-			"The login you have now is not touched.", tool, tool)))
+		"Every tool's accounts are on this screen, and it refreshes on its own:\n"+
+			"a login or a switch made anywhere shows within a second, and usage is\n"+
+			"re-collected every %d seconds. Usage itself is fetched on the store's\n"+
+			"own schedule, so an age note is not a stuck screen.\n\n"+
+			"Switching writes a live credential. It takes the store lock, so it may\n"+
+			"pause while another aaswap or a running tool holds it.\n\n"+
+			"`n` runs the tool's own login into a sandbox and stores what lands\n"+
+			"there. The login you have now is not touched.", int(RefreshInterval.Seconds()))))
 	return st.modal.Render(b.String())
 }

@@ -30,13 +30,9 @@ import (
 
 // Options configures one dashboard run.
 type Options struct {
-	// Switcher is the store the dashboard opens on. Nil opens on the
-	// provider picker instead, which needs Providers and Open.
-	Switcher *swap.Switcher
-	// Providers is every tool the dashboard can be pointed at, and Open
-	// builds the switcher for one of them.
-	Providers []ProviderChoice
-	Open      func(name string) (*swap.Switcher, error)
+	// Switchers is one store per tool to show, in the order they appear. The
+	// dashboard shows all of them on one screen.
+	Switchers []*swap.Switcher
 	// Theme selects the palette. Defaults to dark.
 	Theme render.Theme
 	// In and Out are the terminal. Both nil uses the process's own, which is
@@ -51,8 +47,8 @@ type Options struct {
 // own shutdown — restoring the terminal — instead of leaving a raw-mode
 // terminal behind for the shell.
 func Run(ctx context.Context, opts Options) error {
-	if opts.Switcher == nil && (opts.Open == nil || len(opts.Providers) < 2) {
-		return fmt.Errorf("%w: the dashboard needs a switcher, or providers to choose from", apperr.ErrConfig)
+	if len(opts.Switchers) == 0 {
+		return fmt.Errorf("%w: the dashboard needs at least one tool to show", apperr.ErrConfig)
 	}
 
 	programOpts := []tea.ProgramOption{tea.WithContext(ctx)}
