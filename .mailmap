@@ -1,0 +1,4 @@
+# One person, two spellings: commits made from a local clone carry the
+# noreply address, and merges made on GitHub carry the profile's display name
+# and primary address. git shortlog and blame read this and report one author.
+d0lim <23608029+d0lim@users.noreply.github.com> D0Lim <limdongyoung0@gmail.com>
