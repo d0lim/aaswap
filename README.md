@@ -14,6 +14,19 @@ guess at.
 
 A single static binary — no runtime to install, on macOS, Linux or Windows.
 
+## Origins
+
+aaswap began as a port of [claude-swap](https://github.com/realiti4/claude-swap)
+by Onur Cetinkol, a Python tool for switching between Claude Code accounts.
+It was rewritten in Go, renamed (first ccswap, then aaswap), and grew its own
+store format and its own provider model. No source is shared with the original
+any more, but the idea, the approach to Claude Code's credential handling, and
+the store this tool knows how to migrate from are its. The original's license
+and copyright are kept in [LICENSE](LICENSE).
+
+If you have a claude-swap or ccswap store, see
+[Coming from ccswap or claude-swap](#coming-from-ccswap-or-claude-swap).
+
 ## Installation
 
 aaswap is a single static binary. It needs no runtime, no interpreter, and no
