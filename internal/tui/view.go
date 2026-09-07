@@ -11,6 +11,7 @@ import (
 	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/render"
 	"github.com/d0lim/aaswap/internal/swap"
+	"github.com/d0lim/aaswap/internal/usage"
 	"github.com/d0lim/aaswap/internal/usagestore"
 )
 
@@ -30,6 +31,9 @@ const (
 	chromeCols  = 38
 	// noteIndent is how far a usage or sentinel line sits under its account.
 	noteIndent = 5
+	// minLabelWidth is the label column chromeCols budgets for: "5h" and "7d"
+	// padded to three. A per-model name widens it, and the bar pays.
+	minLabelWidth = 3
 )
 
 // View renders one frame.
@@ -173,7 +177,7 @@ func (m Model) accountBlock(paneIndex, index int, view swap.AccountView) string 
 	}
 
 	lines := []string{head}
-	for _, line := range m.usageLines(entry) {
+	for _, line := range m.usageLines(entry, m.labelWidth(paneIndex)) {
 		lines = append(lines, strings.Repeat(" ", noteIndent)+line)
 	}
 	return strings.Join(lines, "\n")
@@ -195,7 +199,7 @@ func (m Model) padTo(head, tag string) string {
 // slot has no quota to report" and "this slot's quota is X" are different
 // claims, and showing an empty bar next to "api key" invites reading it as
 // zero usage.
-func (m Model) usageLines(entry usagestore.Entry) []string {
+func (m Model) usageLines(entry usagestore.Entry, labelWidth int) []string {
 	st := m.styles
 	if entry.Sentinel != "" {
 		style := st.muted
@@ -213,10 +217,22 @@ func (m Model) usageLines(entry usagestore.Entry) []string {
 		return []string{st.muted.Render("no measurement yet")}
 	}
 
-	width := min(max(m.width-chromeCols, minBarWidth), maxBarWidth)
+	// The bar gives up what a longer label takes, so the reset note stays
+	// inside the frame on a narrow terminal.
+	width := min(max(m.width-chromeCols-(labelWidth-minLabelWidth), minBarWidth), maxBarWidth)
 	lines := []string{
-		m.windowRow("5h", entry.LastGood.FiveHour, width),
-		m.windowRow("7d", entry.LastGood.SevenDay, width),
+		m.windowRow("5h", entry.LastGood.FiveHour, labelWidth, width),
+		m.windowRow("7d", entry.LastGood.SevenDay, labelWidth, width),
+	}
+	// Per-model weekly windows follow the account-wide pair, in the order
+	// `aaswap list` prints them, so the two surfaces read alike. A model at
+	// its limit blocks that model's work with five-hour and seven-day headroom
+	// to spare, which is exactly the case a dashboard exists to show.
+	for _, s := range entry.LastGood.Scoped {
+		if s.Name == "" {
+			continue
+		}
+		lines = append(lines, m.windowRow(s.Name, &usage.Window{Pct: s.Pct, ResetsAt: s.ResetsAt}, labelWidth, width))
 	}
 	// The age note only when the reading is old enough to caveat. On fresh
 	// data it restates the percentage the bar just drew, and a line that says
@@ -227,6 +243,30 @@ func (m Model) usageLines(entry usagestore.Entry) []string {
 		}
 	}
 	return lines
+}
+
+// labelWidth is the label column for one tool's pane: the widest per-model
+// name any of its accounts reports, or the "5h"/"7d" minimum.
+//
+// Computed per pane rather than per account so every bar in the pane starts in
+// the same column. The dashboard exists to compare one account's bar against
+// the one above it, and an account without a model window sitting beside one
+// with would otherwise shear the column.
+func (m Model) labelWidth(paneIndex int) int {
+	width := minLabelWidth
+	p := m.panes[paneIndex]
+	if p.snapshot == nil {
+		return width
+	}
+	for _, entry := range p.snapshot.Entries {
+		if entry.LastGood == nil {
+			continue
+		}
+		for _, s := range entry.LastGood.Scoped {
+			width = max(width, lipgloss.Width(s.Name))
+		}
+	}
+	return width
 }
 
 // footer is the status line and the key hints.

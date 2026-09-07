@@ -71,17 +71,18 @@ func (s styles) barStyle(pct float64) lipglossStyle {
 
 // windowRow is one rendered rate-limit window: "5h ███░░░ 62%  resets 20:39".
 //
-// The label is padded to a fixed width so the bars of the 5-hour and 7-day
-// rows start in the same column — an eye scanning a list compares bar lengths,
-// which only works if they share an origin.
-func (m Model) windowRow(label string, window *usage.Window, width int) string {
+// The label is padded to labelWidth — the widest label in the account's block —
+// so the bars of the 5-hour, 7-day and per-model rows start in the same column.
+// An eye scanning a list compares bar lengths, which only works if they share
+// an origin, and a model name like "Fable" is longer than "5h".
+func (m Model) windowRow(label string, window *usage.Window, labelWidth, barWidth int) string {
 	st := m.styles
 	if window == nil {
-		return st.muted.Render(fmt.Sprintf("%-3s %s", label, "—"))
+		return st.muted.Render(fmt.Sprintf("%-*s %s", labelWidth, label, "—"))
 	}
-	bar := renderBar(window.Pct, width)
-	row := fmt.Sprintf("%-3s %s %3.0f%%",
-		label, st.barStyle(window.Pct).Render(bar), window.Pct)
+	bar := renderBar(window.Pct, barWidth)
+	row := fmt.Sprintf("%-*s %s %3.0f%%",
+		labelWidth, label, st.barStyle(window.Pct).Render(bar), window.Pct)
 
 	if reset, ok := window.ResetTime(); ok {
 		if note := resetNote(reset, m.now()); note != "" {

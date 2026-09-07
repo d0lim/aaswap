@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/d0lim/aaswap/internal/provider"
 	"github.com/d0lim/aaswap/internal/render"
@@ -139,6 +140,79 @@ func TestTheDashboardShowsEveryAccount(t *testing.T) {
 	}
 	if got := strings.Count(frame, "●"); got != 1 {
 		t.Errorf("%d active markers, want exactly one", got)
+	}
+}
+
+// A per-model weekly window is a row of its own, in the same column as the
+// account-wide bars — including the bars of an account in the same pane that
+// has no such window. A model at its limit blocks that model's work with
+// five-hour and seven-day headroom to spare, and a dashboard that hid it would
+// show a green account that cannot actually be used.
+func TestAModelWindowGetsItsOwnBar(t *testing.T) {
+	m := fixture(t,
+		[]swap.AccountView{
+			{Name: "1", IsActive: true, Account: &swap.Account{Email: "work@example.com"}},
+			{Name: "2", Account: &swap.Account{Email: "spare@example.com"}},
+		},
+		map[string]usagestore.Entry{
+			"1": {FetchedAt: testNow, LastGood: &usage.Result{
+				FiveHour: window(62, 6*time.Hour),
+				SevenDay: window(31, 32*time.Hour),
+				Scoped: []usage.Scoped{
+					{Name: "Fable", Pct: 55, ResetsAt: testNow.Add(32 * time.Hour).Format(time.RFC3339)},
+					{Name: "", Pct: 99}, // unnamed: nothing to label the row with
+				},
+			}},
+			"2": {FetchedAt: testNow, LastGood: &usage.Result{
+				FiveHour: window(11, 3*time.Hour),
+				SevenDay: window(19, 70*time.Hour),
+			}},
+		})
+
+	frame := m.View().Content
+	if !strings.Contains(frame, "Fable") || !strings.Contains(frame, "55%") {
+		t.Fatalf("the model window is not shown:\n%s", frame)
+	}
+	if strings.Contains(frame, "99%") {
+		t.Errorf("an unnamed window drew a row:\n%s", frame)
+	}
+
+	// Every bar starts in the same column, or the lengths cannot be compared.
+	// Measured on the visible text: the color escapes differ in length between
+	// a green bar and a yellow one.
+	var starts []int
+	for line := range strings.SplitSeq(ansi.Strip(frame), "\n") {
+		if i := strings.IndexAny(line, string(barFull)+string(barEmpty)); i >= 0 {
+			starts = append(starts, len([]rune(line[:i])))
+		}
+	}
+	if len(starts) != 5 {
+		t.Fatalf("%d bar rows, want 5 (5h, 7d, Fable; 5h, 7d):\n%s", len(starts), frame)
+	}
+	for _, start := range starts[1:] {
+		if start != starts[0] {
+			t.Errorf("bars start at columns %v, want one column:\n%s", starts, frame)
+			break
+		}
+	}
+}
+
+// Without per-model windows the block is the two rows it has always been: a
+// padded label column would shift every account's bars for a row that is not
+// there.
+func TestAnAccountWithoutModelWindowsKeepsTwoRows(t *testing.T) {
+	frame := twoAccounts(t).View().Content
+	bars := 0
+	for line := range strings.SplitSeq(frame, "\n") {
+		if strings.ContainsAny(line, string(barFull)+string(barEmpty)) {
+			bars++
+			if !strings.HasPrefix(strings.TrimLeft(line, " "), "5h ") && !strings.HasPrefix(strings.TrimLeft(line, " "), "7d ") {
+				t.Errorf("label is padded past three cells: %q", line)
+			}
+		}
+	}
+	if bars != 4 {
+		t.Errorf("%d bar rows for two accounts, want 4:\n%s", bars, frame)
 	}
 }
 
