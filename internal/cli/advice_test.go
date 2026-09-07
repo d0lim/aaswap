@@ -186,9 +186,9 @@ func scanStringLiterals(t *testing.T) []reference {
 
 // scanDocs finds every command named in the English documentation.
 //
-// Only the files that TEACH the commands. docs/ is a design record written
-// against the code at a moment in time, and holding it to the current surface
-// would turn every design note into a maintenance obligation.
+// Only the files that TEACH the commands: a design note written against the
+// code at a moment in time is not held to the current surface, or every such
+// note becomes a maintenance obligation.
 func scanDocs(t *testing.T) []reference {
 	t.Helper()
 	var out []reference

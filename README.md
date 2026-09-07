@@ -523,8 +523,6 @@ the account — a model choice or an MCP server list. Machine-scoped files are
 never swapped, because carrying one account's onto another is a silent
 misconfiguration rather than a visible failure.
 
-The design and its reasoning are in [docs/PROVIDERS.md](docs/PROVIDERS.md).
-
 ### Add an account from a raw token or API key
 
 If you only have a long-lived setup-token (e.g., produced by `claude setup-token`)

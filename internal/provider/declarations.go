@@ -6,7 +6,7 @@ import "github.com/d0lim/aaswap/internal/procdetect"
 //
 // Adding a provider means adding a function here. The required part is three
 // fields; everything below them is a capability whose absence is reported
-// rather than worked around. See docs/PROVIDERS.md.
+// rather than worked around. See spec.go for what each field means.
 
 // claudeSpec declares Claude Code.
 //

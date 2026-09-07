@@ -267,7 +267,7 @@ func (a *App) chooseTarget(s *swap.Switcher, roster *swap.Roster) (string, error
 	//
 	// Deliberately not by headroom. Choosing the account with the most quota
 	// left is rate-limit rotation, which is the thing this tool stopped doing —
-	// see docs/PROVIDERS.md.
+	// see the README's "What aaswap does not do".
 	current, _ := s.CurrentNumber(roster)
 	return rotate(switchable, current), nil
 }
