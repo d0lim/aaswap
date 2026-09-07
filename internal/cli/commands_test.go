@@ -421,7 +421,8 @@ func TestConfigListNamesTheFile(t *testing.T) {
 // The model setting decides which per-model weekly windows a listing counts.
 //
 // Display only. It used to steer the headroom comparison a rotation strategy
-// made, and that comparison is gone — see docs/PROVIDERS.md.
+// made, and that comparison went with automatic rotation (see the README's
+// "What aaswap does not do").
 func TestTheModelSettingReachesTheListing(t *testing.T) {
 	h := newHarness(t)
 	h.seed(map[string]string{"1": "one@example.com", "2": "two@example.com"})
