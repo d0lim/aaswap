@@ -28,7 +28,9 @@ func TestDumpFrame(t *testing.T) {
 		map[string]usagestore.Entry{
 			"1": {FetchedAt: testNow, LastGood: &usage.Result{
 				FiveHour: window(62, 6*time.Hour+27*time.Minute),
-				SevenDay: window(31, 32*time.Hour)}},
+				SevenDay: window(31, 32*time.Hour),
+				Scoped: []usage.Scoped{{Name: "Fable", Pct: 55,
+					ResetsAt: testNow.Add(32 * time.Hour).Format(time.RFC3339)}}}},
 			"2": {FetchedAt: testNow, LastGood: &usage.Result{
 				FiveHour: window(11, 3*time.Hour+50*time.Minute),
 				SevenDay: window(19, 70*time.Hour)}},

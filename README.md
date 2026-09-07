@@ -195,7 +195,8 @@ aaswap list
 
 `aaswap tui` is the same information as an interactive screen: every tool's
 accounts at once, with usage bars per account, reset times, and switching
-without retyping a name.
+without retyping a name. An account whose plan carries a per-model weekly
+limit gets a bar for that model too, under the 5-hour and 7-day pair.
 
 ```bash
 aaswap tui
@@ -207,12 +208,13 @@ aaswap tui
  Claude Code  2 accounts stored
 
  ▸ ● 1 work@example.com  (work)                                  Acme
-     5h  ██████████████▉░░░░░░░░░  62%   resets 20:39
-     7d  ███████▍░░░░░░░░░░░░░░░░  31%   resets Jul 5 22:12
+     5h    ██████████████▉░░░░░░░░░  62%   resets 20:39
+     7d    ███████▍░░░░░░░░░░░░░░░░  31%   resets Jul 5 22:12
+     Fable █████████████▏░░░░░░░░░░  55%   resets Jul 5 22:12
 
    ○ 2 spare@example.com                                     personal
-     5h  ██▋░░░░░░░░░░░░░░░░░░░░░  11%   resets 18:02
-     7d  ████▌░░░░░░░░░░░░░░░░░░░  19%   resets Jul 7 12:12
+     5h    ██▋░░░░░░░░░░░░░░░░░░░░░  11%   resets 18:02
+     7d    ████▌░░░░░░░░░░░░░░░░░░░  19%   resets Jul 7 12:12
 
  Codex  1 account stored
 
